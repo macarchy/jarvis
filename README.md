@@ -1,0 +1,23 @@
+# Jarvis
+
+The voice of this machine — a bilingual (français/English) voice assistant
+for macarchy, with Claude as the brain and the whole Omarchy CLI as its
+hands.
+
+    SUPER + ALT + J     press to listen, press again to answer
+    omarchy-jarvis ask "mets le thème clair"
+    omarchy-jarvis say "bonjour"
+
+Pipeline: pw-record → voxtype (multilingual whisper-small, own config) →
+`claude -p --continue` in this directory (CLAUDE.md persona,
+.claude/settings.json permission allowlist) → Piper TTS
+(fr_FR-tom / en_GB-alan, picked by reply language).
+
+Layout: `bin/jarvis` (installed as `~/.local/bin/omarchy-jarvis`, symlink),
+`piper/` (upstream aarch64 build), `models/` (voices, not committed),
+`voxtype.toml` (STT config). Whisper model lives in
+`~/.local/share/voxtype/models/ggml-small.bin`.
+
+Phase 2: glass pill overlay in the shell. Phase 3: "hey jarvis" wake word
+(openWakeWord ships the model), agent dispatch over Claude Code sessions,
+Touch Bar key.
