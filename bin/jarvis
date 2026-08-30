@@ -35,6 +35,9 @@ RECORD_PID="$RUN_DIR/record.pid"
 PLAY_PID="$RUN_DIR/play.pid"
 STATE_FILE="$RUN_DIR/state"
 CONV_FLAG="$STATE_DIR/conversation"
+LAST_ASK="$RUN_DIR/last-ask"
+MEMORY_DIR="$JARVIS_DIR/memory"
+FAILURES="$MEMORY_DIR/FAILURES.md"
 
 PIPER="$JARVIS_DIR/piper/piper"
 VOICE_FR="$JARVIS_DIR/models/fr_FR-tom-medium.onnx"
@@ -50,6 +53,15 @@ notify() { notify-send -a "Jarvis" -t 5000 "$1" "${2-}" 2>/dev/null || true; }
 
 # Animate the Babel fish; harmless when the shell or plugin is not running.
 mascot() { omarchy-shell macarchy.jarvis "$@" >/dev/null 2>&1 || true; }
+
+# Append one failure line to the memory journal. Jarvis calls this himself
+# (allowlisted) when he cannot satisfy a request; the pipeline calls it for
+# mechanical failures (empty transcript, unreachable brain, barge-in).
+note_failure() {
+	mkdir -p "$MEMORY_DIR"
+	printf -- '- [%s] %s\n' "$(date +%FT%H:%M)" "$1" >>"$FAILURES"
+	log "note: $1"
+}
 
 # ------------------------------------------------------------ the machine
 
@@ -111,9 +123,11 @@ brain() {
 run_exchange() {
 	local text="$1" reply
 	log "ask: $text"
+	printf '%s' "$text" >"$LAST_ASK"
 	set_state thinking
 	reply=$(brain "$text")
 	if [[ -z $reply ]]; then
+		note_failure "cerveau injoignable pour : « $text »"
 		reply="Je n'ai pas pu joindre mon cerveau. Voyez le journal."
 	fi
 	log "reply: $reply"
@@ -150,6 +164,7 @@ do_finish() {
 	text=$(voxtype -c "$STT_CONFIG" transcribe "$WAV" 2>>"$LOG" | tail -1)
 	log "heard: $text"
 	if [[ -z ${text// /} ]]; then
+		note_failure "transcript vide : la reconnaissance vocale n'a rien produit"
 		do_speak "Je n'ai rien entendu."
 		return 1
 	fi
@@ -176,7 +191,9 @@ on_press() {
 		;;
 	speaking)
 		# Barge-in: cut the voice and listen. The speaking invocation's
-		# wait returns and leaves the state alone since it moved on.
+		# wait returns and leaves the state alone since it moved on. An
+		# interrupted reply often means it missed the mark — remember it.
+		note_failure "réponse interrompue (barge-in) après : « $(cat "$LAST_ASK" 2>/dev/null) »"
 		stop_everything
 		do_listen
 		;;
@@ -206,6 +223,25 @@ ask)
 say)
 	shift
 	do_speak "$*"
+	;;
+note)
+	shift
+	note_failure "$*"
+	;;
+dream)
+	# Consolidate memory: a dedicated Claude session reads the failure
+	# journal, distills lessons into LEARNED.md, files suggestions, and
+	# reports in one spoken sentence. The fish sleeps through it.
+	set_state sleeping
+	notify "Jarvis" "Jarvis rêve — consolidation de la mémoire…"
+	cd "$JARVIS_DIR" || exit 1
+	summary=$(claude -p --model "${JARVIS_DREAM_MODEL:-sonnet}" -- "$(cat "$MEMORY_DIR/DREAM_PROMPT.md")" 2>>"$LOG")
+	log "dream: $summary"
+	notify "Jarvis" "${summary:-Le rêve a tourné court. Voyez le journal.}"
+	if [[ -n ${summary:-} ]]; then
+		do_speak "$summary"
+	fi
+	[[ $(state) == sleeping || $(state) == speaking ]] && set_state idle
 	;;
 state)
 	state

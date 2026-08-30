@@ -23,7 +23,10 @@
       "Bash(df:*)",
       "Bash(pgrep:*)",
       "Bash(ls:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(omarchy-jarvis note:*)",
+      "Edit(memory/**)",
+      "Write(memory/**)"
     ],
     "deny": [
       "Bash(omarchy system:*)",
