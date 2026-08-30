@@ -34,6 +34,12 @@ notify() { # title, body
 	notify-send -a "Jarvis" -t 5000 "$1" "${2-}" 2>/dev/null || true
 }
 
+# Animate the Babel fish (macarchy.jarvis shell plugin); harmless when the
+# shell or plugin is not running.
+mascot() {
+	omarchy-shell macarchy.jarvis "$@" >/dev/null 2>&1 || true
+}
+
 # Crude but effective: French replies carry accents or French function words.
 voice_for() {
 	local text=${1,,}
@@ -47,8 +53,10 @@ voice_for() {
 speak() {
 	local text="$1" wav="$RUN_DIR/reply.wav"
 	[[ -n $text ]] || return 0
-	printf '%s' "$text" | "$PIPER" --model "$(voice_for "$text")" --output_file "$wav" 2>>"$LOG" &&
-		pw-play "$wav" 2>>"$LOG"
+	printf '%s' "$text" | "$PIPER" --model "$(voice_for "$text")" --output_file "$wav" 2>>"$LOG" || return 1
+	mascot setState speaking
+	pw-play "$wav" 2>>"$LOG"
+	mascot setState idle
 }
 
 ask() {
@@ -66,6 +74,7 @@ ask() {
 	fi
 	log "reply: $reply"
 	notify "$text" "$reply"
+	mascot reply "$reply"
 	speak "$reply"
 }
 
@@ -73,6 +82,7 @@ start_listening() {
 	rm -f "$WAV"
 	pw-record --rate 16000 --channels 1 --format s16 "$WAV" 2>>"$LOG" &
 	echo $! >"$RECORD_PID"
+	mascot setState listening
 	notify "Listening…" "Press again when you're done."
 }
 
@@ -86,7 +96,8 @@ stop_listening() {
 		kill -0 "$pid" 2>/dev/null || break
 		sleep 0.1
 	done
-	[[ -s $WAV ]] || { notify "Jarvis" "No audio captured."; return 1; }
+	[[ -s $WAV ]] || { mascot setState idle; notify "Jarvis" "No audio captured."; return 1; }
+	mascot setState thinking
 	notify "Thinking…"
 	text=$(voxtype -c "$STT_CONFIG" transcribe "$WAV" 2>>"$LOG" | tail -1)
 	log "heard: $text"
@@ -94,6 +105,7 @@ stop_listening() {
 		speak "Je n'ai rien entendu."
 		return 1
 	fi
+	mascot heard "$text"
 	ask "$text"
 }
 
@@ -105,6 +117,7 @@ cancel)
 	pid=$(cat "$RECORD_PID" 2>/dev/null)
 	rm -f "$RECORD_PID"
 	[[ -n ${pid:-} ]] && kill -INT "$pid" 2>/dev/null
+	mascot setState idle
 	notify "Jarvis" "Cancelled."
 	;;
 ask)
