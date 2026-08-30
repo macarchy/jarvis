@@ -24,14 +24,22 @@ import openwakeword
 from openwakeword.model import Model
 
 JARVIS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+# The French-accent verifier (wake/train-verifier) and its shim.
+sys.path.insert(0, os.path.join(JARVIS_DIR, "wake"))
+VERIFIER = os.path.join(JARVIS_DIR, "wake", "verifier-hey-jarvis.joblib")
 RUN_DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "jarvis")
 STATE_FILE = os.path.join(RUN_DIR, "state")
 MIC_TARGET = os.environ.get("JARVIS_MIC", "effect_output.j493-mic")
 
 CHUNK = 1280                    # 80 ms at 16 kHz
-# 0.5 is the reference threshold for native English; a French accent lands
-# lower. Tune with the score trace in $XDG_RUNTIME_DIR/jarvis/wake-score.
-WAKE_THRESHOLD = float(os.environ.get("JARVIS_WAKE_THRESHOLD", "0.30"))
+# With the accent verifier the score IS the verifier's probability
+# (positives saturate near 1.0, phonetic twins stay under ~0.75), so the
+# threshold sits high. Without it, the base model's English-native scores
+# apply and 0.30 barely catches an effortful French attempt.
+# Tune with the score trace in $XDG_RUNTIME_DIR/jarvis/wake-score.
+HAS_VERIFIER = os.path.exists(VERIFIER)
+WAKE_THRESHOLD = float(os.environ.get(
+    "JARVIS_WAKE_THRESHOLD", "0.8" if HAS_VERIFIER else "0.30"))
 WAKE_COOLDOWN = 3.0             # s between wake triggers
 SILENCE_HOLD = 1.2              # s of quiet that ends an utterance
 LISTEN_CAP = 20.0               # s hard cap on a listening window
@@ -61,8 +69,13 @@ def mic_args():
 
 
 def main():
+    kwargs = {}
+    if HAS_VERIFIER:
+        import verifier_shim  # noqa: F401 — the pickle resolves its class here
+        kwargs = dict(custom_verifier_models={"hey_jarvis_v0.1": VERIFIER},
+                      custom_verifier_threshold=0.005)
     model = Model(wakeword_model_paths=[
-        openwakeword.models["hey_jarvis"]["model_path"]])
+        openwakeword.models["hey_jarvis"]["model_path"]], **kwargs)
 
     noise_floor = 60.0          # RMS in int16 units, adapts continuously
     last_wake = 0.0

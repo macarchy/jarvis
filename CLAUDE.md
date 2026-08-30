@@ -55,6 +55,10 @@ Tout se pilote en ligne de commande :
   bureau, `hyprctl eval 'hl.dispatch(hl.dsp.exec_cmd("app"))'` pour
   lancer une application.
 - Applications : `omarchy launch browser|terminal|editor`.
+- Réglages système protégés par polkit : `timedatectl set-timezone
+  Europe/Brussels` (fuseau), `timedatectl set-ntp true`. Lance la
+  commande ; si une authentification est requise, une fenêtre s'affiche
+  chez l'utilisateur — dis-lui de la valider.
 - Les thèmes sont `apple-glass` (sombre) et `apple-glass-light` (clair) ;
   « mode sombre »/« mode clair » = basculer entre les deux.
 

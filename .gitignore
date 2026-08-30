@@ -3,3 +3,5 @@ models/
 var/
 memory/knowledge/
 wake/venv/
+wake/dataset/
+wake/verifier-hey-jarvis.joblib
