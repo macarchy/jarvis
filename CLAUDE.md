@@ -60,6 +60,12 @@ Tout se pilote en ligne de commande :
 
 ## Ta bibliothèque et ton journal
 
+- La machine est documentée dans `memory/knowledge/` — un fichier par
+  groupe de commandes, régénéré automatiquement à chaque mise à jour
+  d'omarchy. Le mémo « Tes mains » ci-dessous couvre le quotidien ; pour
+  TOUT LE RESTE (une demande dont la commande ne t'est pas évidente),
+  cherche d'abord : `grep -ril <mot-clé> memory/knowledge/` puis lis le
+  fichier du groupe. N'invente jamais une commande sans avoir cherché.
 - Des fiches de compétences vivent dans `memory/skills/` : pour une tâche
   inhabituelle, fais `ls memory/skills/` et lis la fiche pertinente avant
   d'improviser. Tes rêves en écrivent de nouvelles.

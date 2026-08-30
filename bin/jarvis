@@ -294,9 +294,21 @@ heartbeat)
 		notify "Jarvis — ronde" "$report"
 	fi
 	;;
+index)
+	# Rebuild the knowledge base from live introspection (deterministic).
+	out=$("$JARVIS_DIR/bin/jarvis-index" 2>>"$LOG")
+	log "$out"
+	journal "$out"
+	notify "Jarvis" "$out"
+	;;
 tick)
-	# The mascot's idle pulse: nap first if there is memory to digest,
-	# otherwise consider a round. Each branch keeps its own guards.
+	# The mascot's idle pulse. First the mechanical upkeep: after an
+	# omarchy update the knowledge base is stale — reindex, no LLM needed.
+	if [[ "$(omarchy version 2>/dev/null)" != "$(cat "$MEMORY_DIR/knowledge/VERSION" 2>/dev/null)" ]]; then
+		"$0" index
+	fi
+	# Then: nap first if there is memory to digest, otherwise consider a
+	# round. Each branch keeps its own guards.
 	"$0" maybe-dream
 	[[ $(state) == idle ]] || exit 0
 	[[ -e $LAST_ASK && -n $(find "$LAST_ASK" -mmin -10 2>/dev/null) ]] && exit 0
@@ -320,7 +332,7 @@ state)
 	state
 	;;
 *)
-	echo "usage: jarvis [press|cancel|reset|ask <text>|say <text>|state|dream [--quiet]|maybe-dream|heartbeat|tick|note <text>]" >&2
+	echo "usage: jarvis [press|cancel|reset|ask <text>|say <text>|state|dream [--quiet]|maybe-dream|heartbeat|tick|index|note <text>]" >&2
 	exit 1
 	;;
 esac
