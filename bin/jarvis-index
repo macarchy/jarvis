@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+"""jarvis-index — build Jarvis's knowledge base from live introspection.
+
+Context7-style, without the vectors: the machine already documents itself
+(`omarchy commands --json`, `omarchy-shell shell listPlugins`), so this
+renders that truth into memory/knowledge/ as one topical markdown file per
+command group. Jarvis retrieves lazily (grep by topic, read one file), and
+the version stamp lets his tick re-run this after every omarchy update.
+
+Deterministic, no LLM, safe to run at any time.
+"""
+
+import json
+import os
+import subprocess
+import sys
+
+JARVIS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+KNOWLEDGE = os.path.join(JARVIS_DIR, "memory", "knowledge")
+
+
+def run(cmd):
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=30).stdout
+
+
+def write(path, text):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        f.write(text)
+
+
+def command_pages():
+    data = json.loads(run(["omarchy", "commands", "--json", "--all"]))
+    commands = data.get("commands", [])
+    groups = {}
+    for entry in commands:
+        groups.setdefault(entry.get("group") or "racine", []).append(entry)
+
+    toc = []
+    for group in sorted(groups):
+        entries = sorted(groups[group], key=lambda e: e.get("route", ""))
+        lines = [f"# omarchy {group}", ""]
+        for entry in entries:
+            route = entry.get("route", "")
+            args = entry.get("args", "")
+            summary = entry.get("summary", "")
+            flags = []
+            if entry.get("requires_sudo"):
+                flags.append("sudo")
+            if entry.get("hidden"):
+                flags.append("caché")
+            suffix = f" ({', '.join(flags)})" if flags else ""
+            lines.append(f"- `{route}{' ' + args if args else ''}` — {summary}{suffix}")
+            for example in entry.get("examples", []) or []:
+                lines.append(f"  - ex. `{example}`")
+        write(os.path.join(KNOWLEDGE, "omarchy", f"{group}.md"),
+              "\n".join(lines) + "\n")
+        summaries = ", ".join(e.get("name") or "-" for e in entries[:6])
+        toc.append(f"- `omarchy/{group}.md` — {len(entries)} commandes : {summaries}…")
+    return len(commands), toc
+
+
+def plugin_page():
+    raw = run(["omarchy-shell", "shell", "listPlugins"])
+    try:
+        plugins = json.loads(raw)
+    except ValueError:
+        return 0, []
+    lines = [
+        "# Plugins du shell (cibles IPC)",
+        "",
+        "Chaque plugin actif répond à `omarchy-shell <id> <fonction>` ;",
+        "les panneaux acceptent au moins open, close et toggle.",
+        "",
+    ]
+    for plugin in sorted(plugins, key=lambda p: p.get("id", "")):
+        state = "actif" if plugin.get("enabled") else "inactif"
+        kinds = ", ".join(plugin.get("kinds", []))
+        lines.append(f"- `{plugin.get('id')}` — {plugin.get('name')} ({kinds}; {state})")
+    write(os.path.join(KNOWLEDGE, "shell-plugins.md"), "\n".join(lines) + "\n")
+    return len(plugins), ["- `shell-plugins.md` — cibles IPC du shell"]
+
+
+def main():
+    version = run(["omarchy", "version"]).strip() or "inconnue"
+    command_count, toc = command_pages()
+    plugin_count, plugin_toc = plugin_page()
+
+    write(os.path.join(KNOWLEDGE, "VERSION"), version + "\n")
+    write(os.path.join(KNOWLEDGE, "INDEX.md"), "\n".join(
+        [f"# Connaissances de la machine — omarchy {version}", "",
+         f"{command_count} commandes, {plugin_count} plugins. Cherche par",
+         "sujet (`grep -ril <mot> memory/knowledge/`), puis lis le fichier",
+         "du groupe touché.", ""] + toc + plugin_toc) + "\n")
+
+    print(f"index : {command_count} commandes, {plugin_count} plugins, "
+          f"version {version}")
+
+
+if __name__ == "__main__":
+    sys.exit(main())
