@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Launcher for the wake-word daemon: venv python, single instance.
+set -uo pipefail
+JARVIS_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+RUN_DIR="${XDG_RUNTIME_DIR:-/tmp}/jarvis"
+mkdir -p "$RUN_DIR"
+exec 9>"$RUN_DIR/wake.lock"
+flock -n 9 || { echo "jarvis-wake: already running" >&2; exit 1; }
+exec "$JARVIS_DIR/wake/venv/bin/python" "$JARVIS_DIR/bin/jarvis-wake.py"

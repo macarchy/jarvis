@@ -2,3 +2,4 @@ piper/
 models/
 var/
 memory/knowledge/
+wake/venv/
