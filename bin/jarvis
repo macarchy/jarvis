@@ -44,6 +44,10 @@ VOICE_FR="$JARVIS_DIR/models/fr_FR-tom-medium.onnx"
 VOICE_EN="$JARVIS_DIR/models/en_GB-alan-medium.onnx"
 STT_CONFIG="$JARVIS_DIR/voxtype.toml"
 MODEL="${JARVIS_MODEL:-haiku}"
+# The internal microphone, via asahi-audio's effect chain. The system
+# default source has been seen wandering off to the FaceTime camera, so
+# recording always targets this node when it exists.
+MIC_TARGET="${JARVIS_MIC:-effect_output.j493-mic}"
 
 mkdir -p "$RUN_DIR" "$STATE_DIR"
 
@@ -138,7 +142,9 @@ run_exchange() {
 
 do_listen() {
 	rm -f "$WAV"
-	pw-record --rate 16000 --channels 1 --format s16 "$WAV" 2>>"$LOG" &
+	local target=()
+	pactl list sources short 2>/dev/null | grep -q "$MIC_TARGET" && target=(--target "$MIC_TARGET")
+	pw-record "${target[@]}" --rate 16000 --channels 1 --format s16 "$WAV" 2>>"$LOG" &
 	echo $! >"$RECORD_PID"
 	set_state listening
 	notify "Listening…" "Press again when you're done."
@@ -161,7 +167,13 @@ do_finish() {
 	fi
 	set_state transcribing
 	notify "Thinking…"
-	text=$(voxtype -c "$STT_CONFIG" transcribe "$WAV" 2>>"$LOG" | tail -1)
+	# The soul's `langue` setting pins the STT language (fr | en | auto):
+	# whisper's auto-detection is unreliable on short clips. The effective
+	# config is derived fresh so a settings change applies immediately.
+	lang=$(grep -m1 '^- langue:' "$JARVIS_DIR/SOUL.md" 2>/dev/null | sed 's/^- langue: *//; s/ *$//')
+	case "$lang" in fr | en) ;; *) lang=auto ;; esac
+	sed "s/^language = .*/language = \"$lang\"/" "$STT_CONFIG" >"$RUN_DIR/voxtype.toml"
+	text=$(voxtype -c "$RUN_DIR/voxtype.toml" transcribe "$WAV" 2>>"$LOG" | tail -1)
 	log "heard: $text"
 	if [[ -z ${text// /} ]]; then
 		note_failure "transcript vide : la reconnaissance vocale n'a rien produit"
@@ -195,6 +207,11 @@ on_press() {
 		# interrupted reply often means it missed the mark — remember it.
 		note_failure "réponse interrompue (barge-in) après : « $(cat "$LAST_ASK" 2>/dev/null) »"
 		stop_everything
+		do_listen
+		;;
+	sleeping)
+		# Waking him mid-dream: the dream finishes quietly in its own
+		# invocation and leaves any newer state alone.
 		do_listen
 		;;
 	transcribing | thinking)
@@ -231,23 +248,42 @@ note)
 dream)
 	# Consolidate memory: a dedicated Claude session reads the failure
 	# journal, distills lessons into LEARNED.md, files suggestions, and
-	# reports in one spoken sentence. The fish sleeps through it.
+	# reports in one sentence. The fish sleeps through it. With --quiet
+	# (the opportunistic idle dream) the summary goes to the bubble and a
+	# notification only — he does not talk in his sleep.
+	quiet=0
+	[[ ${2:-} == --quiet ]] && quiet=1
+	touch "$STATE_DIR/last-dream"
 	set_state sleeping
 	notify "Jarvis" "Jarvis rêve — consolidation de la mémoire…"
 	cd "$JARVIS_DIR" || exit 1
 	summary=$(claude -p --model "${JARVIS_DREAM_MODEL:-sonnet}" -- "$(cat "$MEMORY_DIR/DREAM_PROMPT.md")" 2>>"$LOG")
-	log "dream: $summary"
+	log "dream(quiet=$quiet): $summary"
 	notify "Jarvis" "${summary:-Le rêve a tourné court. Voyez le journal.}"
 	if [[ -n ${summary:-} ]]; then
-		do_speak "$summary"
+		mascot reply "$summary"
+		(( quiet )) || do_speak "$summary"
 	fi
 	[[ $(state) == sleeping || $(state) == speaking ]] && set_state idle
+	;;
+maybe-dream)
+	# The opportunistic nap, ticked by the mascot whenever Jarvis idles:
+	# dream only when there is something to digest, no conversation is
+	# fresh (last exchange over 10 minutes ago), and the previous dream is
+	# more than 30 minutes old.
+	[[ $(state) == idle ]] || exit 0
+	# grep -c prints the count AND exits nonzero on zero matches.
+	entries=$(grep -c '^- \[' "$FAILURES" 2>/dev/null)
+	(( ${entries:-0} > 0 )) || exit 0
+	[[ -e $LAST_ASK && -n $(find "$LAST_ASK" -mmin -10 2>/dev/null) ]] && exit 0
+	[[ -e $STATE_DIR/last-dream && -n $(find "$STATE_DIR/last-dream" -mmin -30 2>/dev/null) ]] && exit 0
+	exec "$0" dream --quiet
 	;;
 state)
 	state
 	;;
 *)
-	echo "usage: jarvis [press|cancel|reset|ask <text>|say <text>|state]" >&2
+	echo "usage: jarvis [press|cancel|reset|ask <text>|say <text>|state|dream [--quiet]|maybe-dream|note <text>]" >&2
 	exit 1
 	;;
 esac
