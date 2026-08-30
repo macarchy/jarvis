@@ -60,6 +60,11 @@ PALETTE = {
     "B": (120, 190, 255, 200),   # sound waves / bubbles, soft blue
     "b": (120, 190, 255, 120),   # fainter blue
     ".": (0, 0, 0, 0),           # transparent
+    "1": (255, 99, 99, 235),     # confetti red
+    "2": (99, 200, 120, 235),    # confetti green
+    "3": (255, 214, 90, 235),    # confetti gold
+    "4": (120, 190, 255, 235),   # confetti blue
+    "G": (70, 70, 80, 255),      # headphone plastic
 }
 
 # ---------------------------------------------------------------- the fish
@@ -219,6 +224,52 @@ speaking = [
     compose(plain, 0),
 ]
 
+def half_eyes(rows):
+    # Heavy lids: the top of the eye closes, the lower half stays.
+    for x, c in enumerate(FISH[5]):
+        if c in "WP":
+            rows[5][x] = "Y"
+    for x, c in enumerate(FISH[6]):
+        if c in "WP":
+            rows[6][x] = "K"
+    return rows
+
+
+def worried_brow(rows):
+    # A thick oblique brow floating just above the eye: unmistakable worry.
+    cols = [x for x, c in enumerate(FISH[5]) if c in "WP"]
+    if cols:
+        x0 = cols[0]
+        rows[3][x0] = "K"
+        rows[3][x0 + 1] = "K"
+        rows[2][x0 + 2] = "K"
+        rows[2][x0 + 3] = "K"
+    return rows
+
+
+def headphones(rows):
+    # A clean headband floating one pixel clear of the crown, dropping to a
+    # round ear cup on the visible cheek — reads as headphones at a glance.
+    for y in range(3):
+        rows[y] = list("." * len(FISH[y]))
+    for x in range(5, 13):
+        rows[0][x] = "G"
+    rows[1][4] = "G"
+    rows[1][13] = "G"
+    rows[2][3] = "G"
+    rows[2][13] = "G"
+    # Ear cup over the cheek, plastic ring with a dark center.
+    for y, xs in ((7, (7, 8, 9)), (8, (6, 7, 8, 9, 10)), (9, (7, 8, 9))):
+        for x in xs:
+            rows[y][x] = "G"
+    rows[8][8] = "K"
+    # Strut from band to cup.
+    for y in (3, 4, 5, 6):
+        rows[y][3] = "G"
+    rows[6][4] = "G"
+    return rows
+
+
 # sleeping: eyes closed, slow bob, zZz drifting up — the dream state.
 sleep_rows = close_eye([r[:] for r in plain])
 
@@ -235,8 +286,43 @@ sleeping = [
     compose(sleep_rows, 0, zee(33, 1, True)),
 ]
 
+# tired: heavy lids, low in the water, a sweat drop.
+tired_rows = half_eyes([r[:] for r in plain])
+tired = [
+    compose(tired_rows, 2, [(9, 8, "b")]),
+    compose(sway_tail(tired_rows), 3, [(9, 9, "b"), (9, 7, "b")]),
+]
+
+# dnd: headphones on, do not disturb — the calm bob with ear cups.
+dnd_rows = headphones([r[:] for r in plain])
+dnd = [
+    compose(dnd_rows, 0),
+    compose(sway_tail(dnd_rows), 1),
+]
+
+# worried: oblique brow, a nervous drop, slight tremble.
+worried_rows = worried_brow([r[:] for r in plain])
+worried = [
+    compose(worried_rows, 0, [(8, 7, "b")]),
+    compose(worried_rows, 1, [(8, 9, "b")]),
+]
+
+# celebrate: leaping with confetti.
+confetti1 = [(6, 4, "1"), (14, 2, "3"), (22, 5, "2"), (28, 3, "4"), (18, 7, "1")]
+confetti2 = [(8, 6, "3"), (12, 4, "4"), (20, 2, "1"), (26, 6, "2"), (31, 4, "3")]
+confetti3 = [(5, 3, "2"), (16, 5, "1"), (24, 4, "3"), (30, 7, "4"), (10, 2, "2")]
+celebrate = [
+    compose(plain, -2, confetti1),
+    compose(sway_tail(plain), -4, confetti2),
+    compose(plain, -3, confetti3),
+]
+
 sheet("idle", idle)
 sheet("sleeping", sleeping)
+sheet("tired", tired)
+sheet("dnd", dnd)
+sheet("worried", worried)
+sheet("celebrate", celebrate)
 sheet("listening", listening)
 sheet("thinking", thinking)
 sheet("speaking", speaking)

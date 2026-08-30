@@ -290,6 +290,7 @@ heartbeat)
 	log "heartbeat: $report"
 	if [[ -n ${report:-} && $report != "RAS" && ${report:0:4} != "RAS." ]]; then
 		journal "ronde : $report"
+		mascot emote worried
 		mascot reply "$report"
 		notify "Jarvis — ronde" "$report"
 	fi

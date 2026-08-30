@@ -16,6 +16,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Services.UPower
 import qs.Commons
 
 import "components"
@@ -26,10 +27,56 @@ Item {
   property var shell: null
   property var manifest: null
 
-  // idle | listening | thinking | speaking
+  // idle | listening | thinking | speaking | sleeping
   property string mood: "idle"
   property string bubbleText: ""
   property bool shown: true
+
+  // ------------------------------------------------------------ emotions
+  //
+  // The pipeline mood always wins. At rest, the body wears the system's
+  // state: a punctual emote (celebrate, worried…) first, then headphones
+  // under DND, then exhaustion on a low discharging battery.
+  property string emote: ""
+
+  readonly property var notificationService: shell ? shell.serviceFor("omarchy.notifications") : null
+  readonly property bool dnd: notificationService ? notificationService.doNotDisturb : false
+  readonly property var batteryDevice: UPower.displayDevice
+  readonly property bool batteryLow: batteryDevice
+    ? Number(batteryDevice.percentage || 1) < 0.2
+      && batteryDevice.state === UPowerDeviceState.Discharging
+    : false
+
+  readonly property string sprite: mood !== "idle" ? mood
+    : (emote !== "" ? emote
+    : (dnd ? "dnd"
+    : (batteryLow ? "tired" : "idle")))
+
+  // [frameCount, fps] per sheet.
+  readonly property var sheets: ({
+    idle: [6, 2.2],
+    listening: [2, 4],
+    thinking: [3, 3],
+    speaking: [4, 8],
+    sleeping: [4, 1.4],
+    tired: [2, 1.6],
+    dnd: [2, 2.2],
+    worried: [2, 2.5],
+    celebrate: [3, 6]
+  })
+
+  Timer {
+    id: emoteTimer
+    interval: 6000
+    repeat: false
+    onTriggered: service.emote = ""
+  }
+
+  function playEmote(name) {
+    if (!sheets[name]) return
+    emote = name
+    emoteTimer.restart()
+  }
 
   readonly property url assetsDir: Qt.resolvedUrl("assets/")
 
@@ -80,6 +127,9 @@ Item {
     function hide(): void { service.shown = false }
     function toggle(): void { service.shown = !service.shown }
     function isShown(): string { return service.shown ? "on" : "off" }
+
+    // Punctual emotion over the idle body (celebrate, worried, tired, dnd).
+    function emote(name: string): void { service.playEmote(String(name)) }
     function ping(): string { return "ok" }
   }
 
@@ -165,15 +215,9 @@ Item {
       anchors.right: parent.right
       anchors.bottom: parent.bottom
       pixelScale: 4
-      sheet: service.assetsDir + service.mood + ".png"
-      frameCount: service.mood === "idle" ? 6
-        : (service.mood === "listening" ? 2
-        : (service.mood === "thinking" ? 3
-        : (service.mood === "sleeping" ? 4 : 4)))
-      fps: service.mood === "idle" ? 2.2
-        : (service.mood === "listening" ? 4
-        : (service.mood === "thinking" ? 3
-        : (service.mood === "sleeping" ? 1.4 : 8)))
+      sheet: service.assetsDir + service.sprite + ".png"
+      frameCount: service.sheets[service.sprite][0]
+      fps: service.sheets[service.sprite][1]
 
       // Swim in from below when shown, dive away when hidden.
       transform: Translate {
