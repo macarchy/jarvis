@@ -34,7 +34,7 @@ Item {
   readonly property url assetsDir: Qt.resolvedUrl("assets/")
 
   function setMood(next) {
-    var valid = ["idle", "listening", "thinking", "speaking"]
+    var valid = ["idle", "listening", "thinking", "speaking", "sleeping"]
     if (valid.indexOf(next) === -1) return
     mood = next
     if (next === "idle") bubbleLinger.restart()
@@ -158,10 +158,12 @@ Item {
       sheet: service.assetsDir + service.mood + ".png"
       frameCount: service.mood === "idle" ? 6
         : (service.mood === "listening" ? 2
-        : (service.mood === "thinking" ? 3 : 4))
+        : (service.mood === "thinking" ? 3
+        : (service.mood === "sleeping" ? 4 : 4)))
       fps: service.mood === "idle" ? 2.2
         : (service.mood === "listening" ? 4
-        : (service.mood === "thinking" ? 3 : 8))
+        : (service.mood === "thinking" ? 3
+        : (service.mood === "sleeping" ? 1.4 : 8)))
 
       // Swim in from below when shown, dive away when hidden.
       transform: Translate {

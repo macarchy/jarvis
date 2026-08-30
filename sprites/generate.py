@@ -219,7 +219,24 @@ speaking = [
     compose(plain, 0),
 ]
 
+# sleeping: eyes closed, slow bob, zZz drifting up — the dream state.
+sleep_rows = close_eye([r[:] for r in plain])
+
+def zee(x, y, faint=False):
+    c = "b" if faint else "B"
+    return [(x, y, c), (x + 1, y, c), (x + 2, y, c),
+            (x + 1, y + 1, c),
+            (x, y + 2, c), (x + 1, y + 2, c), (x + 2, y + 2, c)]
+
+sleeping = [
+    compose(sleep_rows, 1, zee(27, 9)),
+    compose(sleep_rows, 1, zee(27, 9, True) + zee(30, 5)),
+    compose(sleep_rows, 0, zee(30, 5, True) + zee(33, 1)),
+    compose(sleep_rows, 0, zee(33, 1, True)),
+]
+
 sheet("idle", idle)
+sheet("sleeping", sleeping)
 sheet("listening", listening)
 sheet("thinking", thinking)
 sheet("speaking", speaking)
