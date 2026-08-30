@@ -4,8 +4,10 @@
 Streams the internal microphone through openWakeWord and drives the
 jarvis state machine:
 
-- "Hey Jarvis" (score > threshold) while he is idle, speaking or sleeping
-  fires `omarchy-jarvis press` — summon, barge-in, or wake from a dream.
+- "Hey Jarvis" (score > threshold) while he is idle or sleeping fires
+  `omarchy-jarvis press` — summon, or wake from a dream. Never while he
+  speaks: the accent verifier is trained on his own Piper voices, so his
+  replies would wake him (barge-in stays on the key and the fish).
 - While he is LISTENING, the same audio stream does endpointing: once
   speech has been heard, ~1.2 s of silence (or a 20 s cap) presses again
   to stop the recording — so a wake-word exchange needs no key at all,
@@ -144,7 +146,11 @@ def main():
                 followup_since = None
                 noise_floor = 0.995 * noise_floor + 0.005 * max(rms, 1.0)
 
-                if mode in ("idle", "speaking", "sleeping"):
+                # Not while speaking: the accent verifier was trained on
+                # the very Piper voices Jarvis speaks with, so his own
+                # replies score as wake words (0.84+ seen in the trace).
+                # Barge-in stays available by key or click.
+                if mode in ("idle", "sleeping"):
                     score = max(model.predict(audio).values())
                     # Trace anything voice-like so a real attempt that lands
                     # under the threshold is visible and tunable.
