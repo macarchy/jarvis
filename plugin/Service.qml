@@ -50,15 +50,14 @@ Item {
     onTriggered: service.bubbleText = ""
   }
 
-  // The body clock: whenever Jarvis idles, periodically offer him a nap.
-  // The script owns every guard (pending failures to digest, no fresh
-  // conversation, 30-minute dream cooldown); this timer is only the
-  // heartbeat, and it stops the moment he has something to do.
+  // The body clock: whenever Jarvis idles, tick him — the script decides
+  // between a nap (memory to digest) and a round (system health check),
+  // and owns every guard: conversation freshness and both cooldowns.
   Timer {
     interval: 5 * 60 * 1000
     repeat: true
     running: service.mood === "idle"
-    onTriggered: Quickshell.execDetached(["omarchy-jarvis", "maybe-dream"])
+    onTriggered: Quickshell.execDetached(["omarchy-jarvis", "tick"])
   }
 
   IpcHandler {
