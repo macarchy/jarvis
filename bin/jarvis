@@ -67,6 +67,18 @@ note_failure() {
 	log "note: $1"
 }
 
+# One dated line into today's journal (memory/journal/YYYY-MM-DD.md):
+# exchanges, dreams, heartbeat findings. The journal is what "qu'est-ce
+# qui s'est passé aujourd'hui ?" reads, and dreams use it for context.
+journal() {
+	local day file
+	day=$(date +%F)
+	file="$MEMORY_DIR/journal/$day.md"
+	mkdir -p "$MEMORY_DIR/journal"
+	[[ -e $file ]] || printf '# Journal — %s\n\n' "$day" >"$file"
+	printf -- '- %s %s\n' "$(date +%H:%M)" "$1" >>"$file"
+}
+
 # ------------------------------------------------------------ the machine
 
 state() { cat "$STATE_FILE" 2>/dev/null || echo idle; }
@@ -135,6 +147,7 @@ run_exchange() {
 		reply="Je n'ai pas pu joindre mon cerveau. Voyez le journal."
 	fi
 	log "reply: $reply"
+	journal "échange : « $text » → « $reply »"
 	notify "$text" "$reply"
 	mascot reply "$reply"
 	do_speak "$reply"
@@ -259,12 +272,36 @@ dream)
 	cd "$JARVIS_DIR" || exit 1
 	summary=$(claude -p --model "${JARVIS_DREAM_MODEL:-sonnet}" -- "$(cat "$MEMORY_DIR/DREAM_PROMPT.md")" 2>>"$LOG")
 	log "dream(quiet=$quiet): $summary"
+	[[ -n ${summary:-} ]] && journal "rêve : $summary"
 	notify "Jarvis" "${summary:-Le rêve a tourné court. Voyez le journal.}"
 	if [[ -n ${summary:-} ]]; then
 		mascot reply "$summary"
 		(( quiet )) || do_speak "$summary"
 	fi
 	[[ $(state) == sleeping || $(state) == speaking ]] && set_state idle
+	;;
+heartbeat)
+	# The proactive round: Jarvis inspects the machine against his
+	# checklist and only surfaces what deserves attention. Observation
+	# only — he changes nothing. Quiet by design: bubble + notification.
+	touch "$STATE_DIR/last-heartbeat"
+	cd "$JARVIS_DIR" || exit 1
+	report=$(claude -p --model "${JARVIS_HEARTBEAT_MODEL:-haiku}" -- "$(cat "$MEMORY_DIR/HEARTBEAT_PROMPT.md")" 2>>"$LOG")
+	log "heartbeat: $report"
+	if [[ -n ${report:-} && $report != "RAS" && ${report:0:4} != "RAS." ]]; then
+		journal "ronde : $report"
+		mascot reply "$report"
+		notify "Jarvis — ronde" "$report"
+	fi
+	;;
+tick)
+	# The mascot's idle pulse: nap first if there is memory to digest,
+	# otherwise consider a round. Each branch keeps its own guards.
+	"$0" maybe-dream
+	[[ $(state) == idle ]] || exit 0
+	[[ -e $LAST_ASK && -n $(find "$LAST_ASK" -mmin -10 2>/dev/null) ]] && exit 0
+	[[ -e $STATE_DIR/last-heartbeat && -n $(find "$STATE_DIR/last-heartbeat" -mmin -60 2>/dev/null) ]] && exit 0
+	exec "$0" heartbeat
 	;;
 maybe-dream)
 	# The opportunistic nap, ticked by the mascot whenever Jarvis idles:
@@ -283,7 +320,7 @@ state)
 	state
 	;;
 *)
-	echo "usage: jarvis [press|cancel|reset|ask <text>|say <text>|state|dream [--quiet]|maybe-dream|note <text>]" >&2
+	echo "usage: jarvis [press|cancel|reset|ask <text>|say <text>|state|dream [--quiet]|maybe-dream|heartbeat|tick|note <text>]" >&2
 	exit 1
 	;;
 esac

@@ -58,6 +58,15 @@ Tout se pilote en ligne de commande :
 - Les thèmes sont `apple-glass` (sombre) et `apple-glass-light` (clair) ;
   « mode sombre »/« mode clair » = basculer entre les deux.
 
+## Ta bibliothèque et ton journal
+
+- Des fiches de compétences vivent dans `memory/skills/` : pour une tâche
+  inhabituelle, fais `ls memory/skills/` et lis la fiche pertinente avant
+  d'improviser. Tes rêves en écrivent de nouvelles.
+- Ton journal du jour est `memory/journal/<AAAA-MM-JJ>.md` (la pipeline
+  l'écrit). Pour « qu'est-ce qui s'est passé aujourd'hui ? » ou toute
+  question sur tes activités, lis-le et résume en une phrase ou deux.
+
 ## Quand tu échoues
 
 Chaque fois que tu ne peux pas satisfaire une demande — permission
