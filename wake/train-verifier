@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+# Train the French-accent verifier for "Hey Jarvis".
+#
+# The pretrained openWakeWord model barely reacts to a French-accented
+# "Hey Jarvis" (~0.07 where native English scores ~1.0). This script
+# synthesizes an accented dataset with the local French Piper voices —
+# positives are spelling variants that force the French pronunciation,
+# negatives are everyday French commands plus phonetic near-misses — and
+# trains openWakeWord's custom verifier (logistic regression on the
+# embedding features). At runtime the verifier's probability replaces the
+# base score whenever it clears a tiny floor, so the accent becomes
+# first-class.
+#
+# Deterministic and self-contained; rerun freely. Output:
+#   wake/verifier-hey-jarvis.joblib
+
+set -euo pipefail
+JARVIS_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+PIPER="$JARVIS_DIR/piper/piper"
+MODELS="$JARVIS_DIR/models"
+WORK="$JARVIS_DIR/wake/dataset"
+OUT="$JARVIS_DIR/wake/verifier-hey-jarvis.joblib"
+
+rm -rf "$WORK"
+mkdir -p "$WORK/positive" "$WORK/negative"
+
+# voice_file[:speaker_id]
+VOICES=(
+	"fr_FR-tom-medium.onnx"
+	"fr_FR-siwis-medium.onnx"
+	"fr_FR-upmc-medium.onnx:0"
+	"fr_FR-upmc-medium.onnx:1"
+)
+
+POSITIVES=(
+	"Hey Jarvis."
+	"Hé Jarvis."
+	"Hey Djarvis."
+	"Hé Djarvis !"
+)
+
+NEGATIVES=(
+	"Mets le thème clair s'il te plaît."
+	"Quelle heure est-il ?"
+	"Ouvre le centre de notifications."
+	"La batterie est presque vide."
+	"Active le mode ne pas déranger."
+	"Hé, regarde ça un instant."
+	"C'est un travail pour Gervais."
+	"Le jardin est magnifique ce soir."
+	"J'arrive dans cinq minutes."
+	"Le service est excellent ici."
+	"Baisse un peu le volume."
+	"Il est déjà vingt-deux heures."
+	"Ferme la fenêtre du navigateur."
+	"Hier avait été une longue journée."
+	"Ce gervais-là ne répond jamais."
+	"Passe à l'espace de travail suivant."
+	# Phonetic twins — "Hé + name" patterns that must NOT wake him:
+	"Hé, Gervais est arrivé."
+	"Hé, gare aux jars, vise un peu."
+	"Hé Clovis, viens voir ça."
+	"Hé Travis, ça roule ?"
+	"Hé, Mathis arrive bientôt."
+	"Hé, service impeccable ici."
+)
+
+synth() { # text voice speaker scale outfile
+	local text=$1 voice=$2 speaker=$3 scale=$4 raw=$5
+	local args=(--model "$MODELS/$voice" --length_scale "$scale" --output_file "$raw.22k.wav")
+	[[ -n $speaker ]] && args+=(--speaker "$speaker")
+	printf '%s' "$text" | "$PIPER" "${args[@]}" >/dev/null 2>&1
+	ffmpeg -y -loglevel error -i "$raw.22k.wav" -ar 16000 -ac 1 "$raw"
+	rm -f "$raw.22k.wav"
+}
+
+n=0
+for entry in "${VOICES[@]}"; do
+	voice=${entry%%:*}
+	speaker=${entry#*:}
+	[[ $speaker == "$entry" ]] && speaker=""
+	for text in "${POSITIVES[@]}"; do
+		for scale in 0.85 1.0 1.2; do
+			synth "$text" "$voice" "$speaker" "$scale" "$WORK/positive/p$((n++)).wav"
+		done
+	done
+	for text in "${NEGATIVES[@]}"; do
+		synth "$text" "$voice" "$speaker" "1.0" "$WORK/negative/n$((n++)).wav"
+	done
+done
+echo "dataset: $(ls "$WORK/positive" | wc -l) positifs, $(ls "$WORK/negative" | wc -l) négatifs"
+
+"$JARVIS_DIR/wake/venv/bin/python" - "$WORK" "$OUT" <<'EOF'
+# Custom feature extraction + training. openWakeWord's own
+# train_custom_verifier picks positive windows at the BASE model's score
+# peak — which is exactly what does not exist for a French accent the base
+# model cannot see, so it learns noise. Instead: a positive clip is short
+# and IS the phrase, so its informative windows are the ones at the end of
+# the utterance (the streaming features then span the whole phrase);
+# negatives sample their entire duration.
+import glob
+import os
+import sys
+import wave
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(sys.argv[1])), "..", "wake"))
+
+import pickle
+import numpy as np
+import openwakeword
+from openwakeword.model import Model
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from verifier_shim import FlatVerifier
+
+work, out = sys.argv[1], sys.argv[2]
+CHUNK = 1280
+model = Model(wakeword_model_paths=[openwakeword.models["hey_jarvis"]["model_path"]])
+n_input = model.model_inputs["hey_jarvis_v0.1"]
+
+
+def clip_features(path):
+    with wave.open(path) as w:
+        audio = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
+    model.reset()
+    feats = []
+    for i in range(0, len(audio) - CHUNK, CHUNK):
+        model.predict(audio[i:i + CHUNK])
+        arr = np.asarray(model.preprocessor.get_features(n_input))
+        feats.append(arr.reshape(-1, arr.shape[-1]))
+    return feats
+
+
+# Runtime convention (openWakeWord's verifier call): predict_proba gets the
+# raw feature window — 16 embedding rows of 96 dims — and reads the first
+# row's probability. So each embedding ROW is one training sample.
+X, y = [], []
+for path in sorted(glob.glob(f"{work}/positive/*.wav")):
+    feats = clip_features(path)
+    # The last windows of a short clip span the full phrase.
+    for window in feats[-5:]:
+        for row in window:
+            X.append(row)
+            y.append(1)
+for path in sorted(glob.glob(f"{work}/negative/*.wav")):
+    for window in clip_features(path)[::3]:
+        for row in window:
+            X.append(row)
+            y.append(0)
+
+X = np.vstack(X)
+y = np.asarray(y)
+print(f"features: {X.shape}, positifs={int(y.sum())}, négatifs={int((1 - y).sum())}")
+
+clf = Pipeline([
+    ("scale", StandardScaler()),
+    ("lr", LogisticRegression(max_iter=2000, C=1.0, class_weight="balanced")),
+])
+clf.fit(X, y)
+print(f"train accuracy: {clf.score(X, y):.3f}")
+pickle.dump(FlatVerifier(clf), open(out, "wb"))
+print("verifier:", out)
+EOF

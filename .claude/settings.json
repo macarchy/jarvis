@@ -26,7 +26,8 @@
       "Bash(grep:*)",
       "Bash(omarchy-jarvis note:*)",
       "Edit(memory/**)",
-      "Write(memory/**)"
+      "Write(memory/**)",
+      "Bash(timedatectl:*)"
     ],
     "deny": [
       "Bash(omarchy system:*)",
