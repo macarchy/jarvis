@@ -29,7 +29,9 @@ STATE_FILE = os.path.join(RUN_DIR, "state")
 MIC_TARGET = os.environ.get("JARVIS_MIC", "effect_output.j493-mic")
 
 CHUNK = 1280                    # 80 ms at 16 kHz
-WAKE_THRESHOLD = 0.5
+# 0.5 is the reference threshold for native English; a French accent lands
+# lower. Tune with the score trace in $XDG_RUNTIME_DIR/jarvis/wake-score.
+WAKE_THRESHOLD = float(os.environ.get("JARVIS_WAKE_THRESHOLD", "0.30"))
 WAKE_COOLDOWN = 3.0             # s between wake triggers
 SILENCE_HOLD = 1.2              # s of quiet that ends an utterance
 LISTEN_CAP = 20.0               # s hard cap on a listening window
@@ -105,6 +107,11 @@ def main():
 
                 if mode in ("idle", "speaking", "sleeping"):
                     score = max(model.predict(audio).values())
+                    # Trace anything voice-like so a real attempt that lands
+                    # under the threshold is visible and tunable.
+                    if score > 0.08:
+                        with open(os.path.join(RUN_DIR, "wake-score"), "a") as f:
+                            f.write(f"{time.strftime('%H:%M:%S')} {score:.3f}\n")
                     if score > WAKE_THRESHOLD and now - last_wake > WAKE_COOLDOWN:
                         last_wake = now
                         model.reset()
