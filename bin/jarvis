@@ -1,15 +1,28 @@
 #!/usr/bin/env bash
-# omarchy-jarvis — the voice of this machine (phase 1: the loop, no UI).
+# omarchy-jarvis — the voice of this machine.
 #
-#   jarvis listen        toggle: start recording / stop + transcribe + answer
-#   jarvis cancel        drop an in-progress recording
-#   jarvis ask "text"    skip the microphone, ask in text
-#   jarvis say "text"    just speak (voice picked by language heuristic)
+# An explicit state machine. The state lives in one file and every entry
+# point is an event against it:
 #
-# Pipeline: pw-record → voxtype transcribe (multilingual whisper, its own
-# config so the daemon's typing setup is untouched) → claude -p --continue
-# in this directory (CLAUDE.md persona + .claude/settings.json allowlist)
-# → piper TTS (French or English voice by reply language) + notification.
+#     idle ── press ──▶ listening ── press ──▶ transcribing ─▶ thinking
+#       ▲                   │ cancel                              │
+#       └──── done ──── speaking ◀────────── reply ready ─────────┘
+#                           │ press (barge-in: stop the voice, listen)
+#
+# Long stages (transcribe, brain, speak) run inside the invocation that
+# entered them; a concurrent invocation only touches the state file and the
+# recorded pids, so a press while speaking can barge in safely. The mascot
+# (macarchy.jarvis shell plugin) mirrors every state over IPC.
+#
+#   jarvis press          the one button: advance the machine
+#   jarvis cancel         back to idle, discard everything in flight
+#   jarvis reset          forget the conversation (new soul applies here)
+#   jarvis ask "text"     text in, spoken reply out
+#   jarvis say "text"     just speak
+#   jarvis state          print the current state
+#
+# The persona is CLAUDE.md (operational) + SOUL.md (identity, editable from
+# the Control Center); both live next to this script's parent directory.
 
 set -uo pipefail
 
@@ -19,6 +32,9 @@ STATE_DIR="$HOME/.local/state/jarvis"
 LOG="$STATE_DIR/jarvis.log"
 WAV="$RUN_DIR/utterance.wav"
 RECORD_PID="$RUN_DIR/record.pid"
+PLAY_PID="$RUN_DIR/play.pid"
+STATE_FILE="$RUN_DIR/state"
+CONV_FLAG="$STATE_DIR/conversation"
 
 PIPER="$JARVIS_DIR/piper/piper"
 VOICE_FR="$JARVIS_DIR/models/fr_FR-tom-medium.onnx"
@@ -30,15 +46,25 @@ mkdir -p "$RUN_DIR" "$STATE_DIR"
 
 log() { printf '%s %s\n' "$(date +%FT%T)" "$*" >>"$LOG"; }
 
-notify() { # title, body
-	notify-send -a "Jarvis" -t 5000 "$1" "${2-}" 2>/dev/null || true
+notify() { notify-send -a "Jarvis" -t 5000 "$1" "${2-}" 2>/dev/null || true; }
+
+# Animate the Babel fish; harmless when the shell or plugin is not running.
+mascot() { omarchy-shell macarchy.jarvis "$@" >/dev/null 2>&1 || true; }
+
+# ------------------------------------------------------------ the machine
+
+state() { cat "$STATE_FILE" 2>/dev/null || echo idle; }
+
+set_state() {
+	printf '%s' "$1" >"$STATE_FILE"
+	# The mascot has no transcribing sprite; it ponders through it.
+	local sprite=$1
+	[[ $1 == transcribing ]] && sprite=thinking
+	mascot setState "$sprite"
+	log "state: $1"
 }
 
-# Animate the Babel fish (macarchy.jarvis shell plugin); harmless when the
-# shell or plugin is not running.
-mascot() {
-	omarchy-shell macarchy.jarvis "$@" >/dev/null 2>&1 || true
-}
+# ------------------------------------------------------------- the organs
 
 # Crude but effective: French replies carry accents or French function words.
 voice_for() {
@@ -50,43 +76,61 @@ voice_for() {
 	fi
 }
 
-speak() {
-	local text="$1" wav="$RUN_DIR/reply.wav"
+# Speak, interruptibly: the player pid is on disk so a barge-in press can
+# stop it. Only fall back to idle if nothing barged in meanwhile.
+do_speak() {
+	local text="$1" wav="$RUN_DIR/reply.wav" pid
 	[[ -n $text ]] || return 0
 	printf '%s' "$text" | "$PIPER" --model "$(voice_for "$text")" --output_file "$wav" 2>>"$LOG" || return 1
-	mascot setState speaking
-	pw-play "$wav" 2>>"$LOG"
-	mascot setState idle
+	set_state speaking
+	pw-play "$wav" 2>>"$LOG" &
+	pid=$!
+	echo "$pid" >"$PLAY_PID"
+	wait "$pid" 2>/dev/null
+	rm -f "$PLAY_PID"
+	[[ $(state) == speaking ]] && set_state idle
 }
 
-ask() {
+# One question to the brain. --continue keeps the ongoing conversation;
+# `reset` clears the flag so the next exchange starts fresh (that is when a
+# new SOUL.md takes effect).
+brain() {
 	local text="$1" reply
-	log "ask: $text"
-	cd "$JARVIS_DIR" || exit 1
-	# --continue keeps one ongoing conversation; the first ever call has
-	# nothing to continue, so fall back to starting one.
-	reply=$(claude -p --continue --model "$MODEL" -- "$text" 2>>"$LOG")
-	if [[ -z $reply ]]; then
+	cd "$JARVIS_DIR" || return 1
+	if [[ -e $CONV_FLAG ]]; then
+		reply=$(claude -p --continue --model "$MODEL" -- "$text" 2>>"$LOG")
+	fi
+	if [[ -z ${reply:-} ]]; then
 		reply=$(claude -p --model "$MODEL" -- "$text" 2>>"$LOG")
 	fi
+	[[ -n ${reply:-} ]] && touch "$CONV_FLAG"
+	printf '%s' "${reply:-}"
+}
+
+# transcribing → thinking → speaking → idle, from a captured utterance.
+run_exchange() {
+	local text="$1" reply
+	log "ask: $text"
+	set_state thinking
+	reply=$(brain "$text")
 	if [[ -z $reply ]]; then
 		reply="Je n'ai pas pu joindre mon cerveau. Voyez le journal."
 	fi
 	log "reply: $reply"
 	notify "$text" "$reply"
 	mascot reply "$reply"
-	speak "$reply"
+	do_speak "$reply"
 }
 
-start_listening() {
+do_listen() {
 	rm -f "$WAV"
 	pw-record --rate 16000 --channels 1 --format s16 "$WAV" 2>>"$LOG" &
 	echo $! >"$RECORD_PID"
-	mascot setState listening
+	set_state listening
 	notify "Listening…" "Press again when you're done."
 }
 
-stop_listening() {
+do_finish() {
 	local pid text
 	pid=$(cat "$RECORD_PID" 2>/dev/null)
 	rm -f "$RECORD_PID"
@@ -96,40 +140,78 @@ stop_listening() {
 		kill -0 "$pid" 2>/dev/null || break
 		sleep 0.1
 	done
-	[[ -s $WAV ]] || { mascot setState idle; notify "Jarvis" "No audio captured."; return 1; }
-	mascot setState thinking
+	if [[ ! -s $WAV ]]; then
+		set_state idle
+		notify "Jarvis" "No audio captured."
+		return 1
+	fi
+	set_state transcribing
 	notify "Thinking…"
 	text=$(voxtype -c "$STT_CONFIG" transcribe "$WAV" 2>>"$LOG" | tail -1)
 	log "heard: $text"
 	if [[ -z ${text// /} ]]; then
-		speak "Je n'ai rien entendu."
+		do_speak "Je n'ai rien entendu."
 		return 1
 	fi
 	mascot heard "$text"
-	ask "$text"
+	run_exchange "$text"
 }
 
-case "${1:-listen}" in
-listen)
-	if [[ -f $RECORD_PID ]]; then stop_listening; else start_listening; fi
+stop_everything() {
+	local pid
+	pid=$(cat "$RECORD_PID" 2>/dev/null) && kill -INT "$pid" 2>/dev/null
+	pid=$(cat "$PLAY_PID" 2>/dev/null) && kill "$pid" 2>/dev/null
+	rm -f "$RECORD_PID" "$PLAY_PID"
+}
+
+# -------------------------------------------------------------- the events
+
+on_press() {
+	case "$(state)" in
+	idle)
+		do_listen
+		;;
+	listening)
+		do_finish
+		;;
+	speaking)
+		# Barge-in: cut the voice and listen. The speaking invocation's
+		# wait returns and leaves the state alone since it moved on.
+		stop_everything
+		do_listen
+		;;
+	transcribing | thinking)
+		log "press ignored while $(state)"
+		;;
+	esac
+}
+
+case "${1:-press}" in
+press | listen)
+	on_press
 	;;
 cancel)
-	pid=$(cat "$RECORD_PID" 2>/dev/null)
-	rm -f "$RECORD_PID"
-	[[ -n ${pid:-} ]] && kill -INT "$pid" 2>/dev/null
-	mascot setState idle
+	stop_everything
+	set_state idle
 	notify "Jarvis" "Cancelled."
+	;;
+reset)
+	rm -f "$CONV_FLAG"
+	notify "Jarvis" "Nouvelle conversation — l'âme a été relue."
 	;;
 ask)
 	shift
-	ask "$*"
+	run_exchange "$*"
 	;;
 say)
 	shift
-	speak "$*"
+	do_speak "$*"
+	;;
+state)
+	state
 	;;
 *)
-	echo "usage: jarvis [listen|cancel|ask <text>|say <text>]" >&2
+	echo "usage: jarvis [press|cancel|reset|ask <text>|say <text>|state]" >&2
 	exit 1
 	;;
 esac

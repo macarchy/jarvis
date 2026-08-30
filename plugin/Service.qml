@@ -69,6 +69,7 @@ Item {
     function show(): void { service.shown = true }
     function hide(): void { service.shown = false }
     function toggle(): void { service.shown = !service.shown }
+    function isShown(): string { return service.shown ? "on" : "off" }
     function ping(): string { return "ok" }
   }
 
