@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(omarchy:*)",
+      "Bash(omarchy-shell:*)",
+      "Bash(omarchy-battery-limit:*)",
+      "Bash(omarchy-als:*)",
+      "Bash(omarchy-aquarium-toggle:*)",
+      "Bash(omarchy-theme-set:*)",
+      "Bash(omarchy-notification-send:*)",
+      "Bash(omarchy-launch:*)",
+      "Bash(omarchy-capture-screenshot:*)",
+      "Bash(brightnessctl:*)",
+      "Bash(wpctl:*)",
+      "Bash(nmcli:*)",
+      "Bash(bluetoothctl:*)",
+      "Bash(hyprctl:*)",
+      "Bash(playerctl:*)",
+      "Bash(cat:*)",
+      "Bash(date:*)",
+      "Bash(uptime:*)",
+      "Bash(free:*)",
+      "Bash(df:*)",
+      "Bash(pgrep:*)",
+      "Bash(ls:*)",
+      "Bash(grep:*)"
+    ],
+    "deny": [
+      "Bash(omarchy system:*)",
+      "Bash(omarchy update:*)",
+      "Bash(omarchy reinstall:*)",
+      "Bash(rm:*)",
+      "Bash(sudo:*)",
+      "Bash(pkexec:*)"
+    ]
+  }
+}

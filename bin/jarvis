@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# omarchy-jarvis — the voice of this machine (phase 1: the loop, no UI).
+#
+#   jarvis listen        toggle: start recording / stop + transcribe + answer
+#   jarvis cancel        drop an in-progress recording
+#   jarvis ask "text"    skip the microphone, ask in text
+#   jarvis say "text"    just speak (voice picked by language heuristic)
+#
+# Pipeline: pw-record → voxtype transcribe (multilingual whisper, its own
+# config so the daemon's typing setup is untouched) → claude -p --continue
+# in this directory (CLAUDE.md persona + .claude/settings.json allowlist)
+# → piper TTS (French or English voice by reply language) + notification.
+
+set -uo pipefail
+
+JARVIS_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+RUN_DIR="${XDG_RUNTIME_DIR:-/tmp}/jarvis"
+STATE_DIR="$HOME/.local/state/jarvis"
+LOG="$STATE_DIR/jarvis.log"
+WAV="$RUN_DIR/utterance.wav"
+RECORD_PID="$RUN_DIR/record.pid"
+
+PIPER="$JARVIS_DIR/piper/piper"
+VOICE_FR="$JARVIS_DIR/models/fr_FR-tom-medium.onnx"
+VOICE_EN="$JARVIS_DIR/models/en_GB-alan-medium.onnx"
+STT_CONFIG="$JARVIS_DIR/voxtype.toml"
+MODEL="${JARVIS_MODEL:-haiku}"
+
+mkdir -p "$RUN_DIR" "$STATE_DIR"
+
+log() { printf '%s %s\n' "$(date +%FT%T)" "$*" >>"$LOG"; }
+
+notify() { # title, body
+	notify-send -a "Jarvis" -t 5000 "$1" "${2-}" 2>/dev/null || true
+}
+
+# Crude but effective: French replies carry accents or French function words.
+voice_for() {
+	local text=${1,,}
+	if [[ $text == *[éèêàçùôîû]* || $text =~ (^|[[:space:]])(le|la|les|est|c\'est|voilà|activé|activée|fait|batterie|monsieur)([[:space:]]|[.,!]|$) ]]; then
+		echo "$VOICE_FR"
+	else
+		echo "$VOICE_EN"
+	fi
+}
+
+speak() {
+	local text="$1" wav="$RUN_DIR/reply.wav"
+	[[ -n $text ]] || return 0
+	printf '%s' "$text" | "$PIPER" --model "$(voice_for "$text")" --output_file "$wav" 2>>"$LOG" &&
+		pw-play "$wav" 2>>"$LOG"
+}
+
+ask() {
+	local text="$1" reply
+	log "ask: $text"
+	cd "$JARVIS_DIR" || exit 1
+	# --continue keeps one ongoing conversation; the first ever call has
+	# nothing to continue, so fall back to starting one.
+	reply=$(claude -p --continue --model "$MODEL" -- "$text" 2>>"$LOG")
+	if [[ -z $reply ]]; then
+		reply=$(claude -p --model "$MODEL" -- "$text" 2>>"$LOG")
+	fi
+	if [[ -z $reply ]]; then
+		reply="Je n'ai pas pu joindre mon cerveau. Voyez le journal."
+	fi
+	log "reply: $reply"
+	notify "$text" "$reply"
+	speak "$reply"
+}
+
+start_listening() {
+	rm -f "$WAV"
+	pw-record --rate 16000 --channels 1 --format s16 "$WAV" 2>>"$LOG" &
+	echo $! >"$RECORD_PID"
+	notify "Listening…" "Press again when you're done."
+}
+
+stop_listening() {
+	local pid text
+	pid=$(cat "$RECORD_PID" 2>/dev/null)
+	rm -f "$RECORD_PID"
+	[[ -n $pid ]] && kill -INT "$pid" 2>/dev/null
+	# Give pw-record a beat to finalize the WAV header.
+	for _ in 1 2 3 4 5 6 7 8 9 10; do
+		kill -0 "$pid" 2>/dev/null || break
+		sleep 0.1
+	done
+	[[ -s $WAV ]] || { notify "Jarvis" "No audio captured."; return 1; }
+	notify "Thinking…"
+	text=$(voxtype -c "$STT_CONFIG" transcribe "$WAV" 2>>"$LOG" | tail -1)
+	log "heard: $text"
+	if [[ -z ${text// /} ]]; then
+		speak "Je n'ai rien entendu."
+		return 1
+	fi
+	ask "$text"
+}
+
+case "${1:-listen}" in
+listen)
+	if [[ -f $RECORD_PID ]]; then stop_listening; else start_listening; fi
+	;;
+cancel)
+	pid=$(cat "$RECORD_PID" 2>/dev/null)
+	rm -f "$RECORD_PID"
+	[[ -n ${pid:-} ]] && kill -INT "$pid" 2>/dev/null
+	notify "Jarvis" "Cancelled."
+	;;
+ask)
+	shift
+	ask "$*"
+	;;
+say)
+	shift
+	speak "$*"
+	;;
+*)
+	echo "usage: jarvis [listen|cancel|ask <text>|say <text>]" >&2
+	exit 1
+	;;
+esac
