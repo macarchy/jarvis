@@ -307,6 +307,33 @@ worried = [
     compose(worried_rows, 1, [(8, 9, "b")]),
 ]
 
+# proud: chest high, eyes closed in contentment, gold sparkles.
+def sparkle(x, y):
+    return [(x, y - 1, "3"), (x - 1, y, "3"), (x, y, "3"),
+            (x + 1, y, "3"), (x, y + 1, "3")]
+
+proud_rows = close_eye([r[:] for r in plain])
+proud = [
+    compose(proud_rows, -1, sparkle(8, 5) + sparkle(30, 8)),
+    compose(sway_tail(proud_rows), -2, sparkle(12, 3) + sparkle(27, 11)),
+]
+
+# curious: pupil up toward a floating question mark, head cocked.
+def qmark(x, y, faint=False):
+    c = "b" if faint else "B"
+    return [(x + 1, y, c), (x + 2, y, c),
+            (x, y + 1, c), (x + 3, y + 1, c),
+            (x + 3, y + 2, c),
+            (x + 2, y + 3, c),
+            (x + 2, y + 4, c),
+            (x + 2, y + 6, c)]
+
+curious_rows = eye_up([r[:] for r in plain])
+curious = [
+    compose(curious_rows, 0, qmark(29, 1)),
+    compose(sway_tail(curious_rows), 1, qmark(29, 1, True)),
+]
+
 # celebrate: leaping with confetti.
 confetti1 = [(6, 4, "1"), (14, 2, "3"), (22, 5, "2"), (28, 3, "4"), (18, 7, "1")]
 confetti2 = [(8, 6, "3"), (12, 4, "4"), (20, 2, "1"), (26, 6, "2"), (31, 4, "3")]
@@ -322,6 +349,8 @@ sheet("sleeping", sleeping)
 sheet("tired", tired)
 sheet("dnd", dnd)
 sheet("worried", worried)
+sheet("proud", proud)
+sheet("curious", curious)
 sheet("celebrate", celebrate)
 sheet("listening", listening)
 sheet("thinking", thinking)

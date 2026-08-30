@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+"""jarvis-sentences — turn a claude stream into speakable sentences,
+and trace everything the brain does along the way.
+
+Reads `claude -p --output-format stream-json --include-partial-messages`
+on stdin and emits one complete sentence per line, unbuffered, as soon as
+each boundary arrives — so the voice can start on sentence one while the
+brain still writes sentence two. The full reply is written to argv[1]
+when the stream ends (the pipeline journals and notifies from it).
+
+Usage: jarvis-sentences [--quiet] <reply-file>
+  --quiet   no sentence output (dreams, heartbeats, missions: the caller
+            only wants the full text and the trace).
+
+The black box: every tool call the brain makes (and its outcome) is
+appended to memory/trace/YYYY-MM-DD.log — one compact line per event.
+That file is how Jarvis can answer "pourquoi as-tu fait ça ?" and how his
+dreams find the root cause behind a noted failure.
+
+Thinking deltas are ignored; text from intermediate assistant turns (the
+words spoken before a tool runs) flows through like any other — Jarvis
+narrating what he's doing mid-action is a feature.
+"""
+
+import json
+import os
+import re
+import sys
+import time
+
+args = sys.argv[1:]
+quiet = "--quiet" in args
+out_path = [a for a in args if not a.startswith("--")][0]
+
+JARVIS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+TRACE_DIR = os.path.join(JARVIS_DIR, "memory", "trace")
+TRACE = os.path.join(TRACE_DIR, time.strftime("%Y-%m-%d") + ".log")
+
+# A sentence ends at . ! ? … or : (optionally inside quotes/brackets)
+# followed by whitespace. Newlines count as whitespace; markdown never
+# reaches the voice anyway (the soul forbids it).
+BOUNDARY = re.compile(r'[.!?…:]["»)\]]?[ \t]*\n|[.!?…]["»)\]]?[ \t]+')
+
+buf = ""
+full = ""
+got_delta = False
+tool_names = {}                 # tool_use_id -> "Bash: omarchy ..."
+
+
+def trace(line):
+    os.makedirs(TRACE_DIR, exist_ok=True)
+    with open(TRACE, "a") as f:
+        f.write(f"{time.strftime('%H:%M:%S')} {line}\n")
+
+
+def squash(value, limit=200):
+    text = " ".join(str(value).split())
+    return text[:limit] + "…" if len(text) > limit else text
+
+
+def describe_tool(block):
+    name = block.get("name", "?")
+    inp = block.get("input", {}) or {}
+    if name == "Bash":
+        detail = inp.get("command", "")
+    elif name in ("Read", "Edit", "Write"):
+        detail = inp.get("file_path", "")
+    elif name == "WebSearch":
+        detail = inp.get("query", "")
+    else:
+        detail = json.dumps(inp, ensure_ascii=False)
+    return f"{name}: {squash(detail)}"
+
+
+def emit(text):
+    text = " ".join(text.split())
+    if text and not quiet:
+        print(text, flush=True)
+
+
+def drain(force=False):
+    global buf
+    while True:
+        m = BOUNDARY.search(buf)
+        if not m:
+            break
+        emit(buf[:m.end()])
+        buf = buf[m.end():]
+    if force:
+        emit(buf)
+        buf = ""
+
+
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    try:
+        ev = json.loads(line)
+    except ValueError:
+        continue
+    kind = ev.get("type")
+    if kind == "stream_event":
+        delta = ev.get("event", {}).get("delta", {})
+        if delta.get("type") == "text_delta":
+            got_delta = True
+            buf += delta.get("text", "")
+            full += delta.get("text", "")
+            drain()
+    elif kind == "assistant":
+        for block in ev.get("message", {}).get("content", []):
+            btype = block.get("type")
+            if btype == "text" and not got_delta:
+                buf += block["text"]
+                full += block["text"]
+            elif btype == "tool_use":
+                desc = describe_tool(block)
+                tool_names[block.get("id")] = desc
+                trace(f"→ {desc}")
+        if not got_delta:
+            drain()
+    elif kind == "user":
+        content = ev.get("message", {}).get("content", [])
+        if isinstance(content, list):
+            for block in content:
+                if block.get("type") != "tool_result":
+                    continue
+                desc = tool_names.get(block.get("tool_use_id"), "?")
+                body = block.get("content")
+                if isinstance(body, list):
+                    body = " ".join(b.get("text", "")
+                                    for b in body if isinstance(b, dict))
+                mark = "✗" if block.get("is_error") else "←"
+                trace(f"{mark} [{desc.split(':')[0]}] {squash(body)}")
+    elif kind == "result":
+        if ev.get("is_error") or ev.get("subtype", "") != "success":
+            trace(f"✗ session: {squash(ev.get('result') or ev.get('subtype'))}")
+        if not full:
+            buf = ev.get("result") or ""
+            full = buf
+drain(force=True)
+
+with open(out_path, "w") as f:
+    f.write(" ".join(full.split()))

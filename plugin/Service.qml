@@ -47,10 +47,23 @@ Item {
       && batteryDevice.state === UPowerDeviceState.Discharging
     : false
 
+  // Circadian rest: late at night an idle fish sleeps on his own. Waking
+  // interactions (mood, emotes) still win — he is asleep, not gone.
+  property int hourNow: new Date().getHours()
+  readonly property bool night: hourNow >= 23 || hourNow < 7
+
+  Timer {
+    interval: 60 * 1000
+    repeat: true
+    running: true
+    onTriggered: service.hourNow = new Date().getHours()
+  }
+
   readonly property string sprite: mood !== "idle" ? mood
     : (emote !== "" ? emote
     : (dnd ? "dnd"
-    : (batteryLow ? "tired" : "idle")))
+    : (batteryLow ? "tired"
+    : (night ? "sleeping" : "idle"))))
 
   // [frameCount, fps] per sheet.
   readonly property var sheets: ({
@@ -62,6 +75,8 @@ Item {
     tired: [2, 1.6],
     dnd: [2, 2.2],
     worried: [2, 2.5],
+    proud: [2, 2.2],
+    curious: [2, 2.5],
     celebrate: [3, 6]
   })
 

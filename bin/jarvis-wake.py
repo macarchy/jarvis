@@ -10,6 +10,9 @@ jarvis state machine:
   speech has been heard, ~1.2 s of silence (or a 20 s cap) presses again
   to stop the recording — so a wake-word exchange needs no key at all,
   and a manual press-to-talk auto-stops too.
+- While he is in FOLLOWUP (just finished speaking), a speech onset within
+  the window presses — the rejoinder needs no wake word — and silence
+  settles him back to idle quietly.
 
 Runs from the venv under wake/venv (see bin/jarvis-wake launcher).
 """
@@ -43,6 +46,7 @@ WAKE_THRESHOLD = float(os.environ.get(
 WAKE_COOLDOWN = 3.0             # s between wake triggers
 SILENCE_HOLD = 1.2              # s of quiet that ends an utterance
 LISTEN_CAP = 20.0               # s hard cap on a listening window
+FOLLOWUP_WINDOW = 6.0           # s to start a rejoinder after a reply
 SPEECH_FACTOR = 5.0             # speech = noise floor × this
 QUIET_FACTOR = 2.5              # silence = below noise floor × this
 
@@ -57,6 +61,11 @@ def state():
 
 def press():
     subprocess.Popen(["omarchy-jarvis", "press"],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def settle():
+    subprocess.Popen(["omarchy-jarvis", "settle"],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
@@ -82,6 +91,7 @@ def main():
     listen_since = None
     speech_heard = False
     quiet_since = None
+    followup_since = None
 
     while True:
         proc = subprocess.Popen(mic_args(), stdout=subprocess.PIPE)
@@ -96,6 +106,7 @@ def main():
                 mode = state()
 
                 if mode == "listening":
+                    followup_since = None
                     if listen_since is None:
                         listen_since = now
                         speech_heard = False
@@ -113,9 +124,24 @@ def main():
                         listen_since = None
                     continue
 
+                if mode == "followup":
+                    # The reply just ended: a few seconds where speaking
+                    # again needs no wake word. A speech onset presses (the
+                    # endpointing above takes over); silence settles him.
+                    if followup_since is None:
+                        followup_since = now
+                    if rms > noise_floor * SPEECH_FACTOR:
+                        followup_since = None
+                        press()
+                    elif now - followup_since >= FOLLOWUP_WINDOW:
+                        followup_since = None
+                        settle()
+                    continue
+
                 # Out of listening: track the room's noise floor slowly and
                 # watch for the wake word.
                 listen_since = None
+                followup_since = None
                 noise_floor = 0.995 * noise_floor + 0.005 * max(rms, 1.0)
 
                 if mode in ("idle", "speaking", "sleeping"):

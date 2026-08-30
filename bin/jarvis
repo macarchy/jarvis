@@ -6,8 +6,10 @@
 #
 #     idle ── press ──▶ listening ── press ──▶ transcribing ─▶ thinking
 #       ▲                   │ cancel                              │
-#       └──── done ──── speaking ◀────────── reply ready ─────────┘
-#                           │ press (barge-in: stop the voice, listen)
+#       │                                     streamed sentences  │
+#       ├─ settle ── followup ◀──── done ── speaking ◀────────────┘
+#       │  (silence)     │ speech onset ──▶ listening (no wake word)
+#       └────────────────┴── press (barge-in: stop the voice, listen)
 #
 # Long stages (transcribe, brain, speak) run inside the invocation that
 # entered them; a concurrent invocation only touches the state file and the
@@ -43,7 +45,7 @@ PIPER="$JARVIS_DIR/piper/piper"
 VOICE_FR="$JARVIS_DIR/models/fr_FR-tom-medium.onnx"
 VOICE_EN="$JARVIS_DIR/models/en_GB-alan-medium.onnx"
 STT_CONFIG="$JARVIS_DIR/voxtype.toml"
-MODEL="${JARVIS_MODEL:-haiku}"
+REPLY_TXT="$RUN_DIR/reply.txt"
 # The internal microphone, via asahi-audio's effect chain. The system
 # default source has been seen wandering off to the FaceTime camera, so
 # recording always targets this node when it exists.
@@ -58,6 +60,15 @@ notify() { notify-send -a "Jarvis" -t 5000 "$1" "${2-}" 2>/dev/null || true; }
 # Animate the Babel fish; harmless when the shell or plugin is not running.
 mascot() { omarchy-shell macarchy.jarvis "$@" >/dev/null 2>&1 || true; }
 
+# The black box: one compact line per event in memory/trace/YYYY-MM-DD.log.
+# The FSM writes the anchors (ask, reply, failures, missions); the stream
+# parser (bin/jarvis-sentences) writes every tool call the brain makes in
+# between. This is what Jarvis reads to debug his own behavior.
+trace() {
+	mkdir -p "$MEMORY_DIR/trace"
+	printf '%s %s\n' "$(date +%H:%M:%S)" "$1" >>"$MEMORY_DIR/trace/$(date +%F).log"
+}
+
 # Append one failure line to the memory journal. Jarvis calls this himself
 # (allowlisted) when he cannot satisfy a request; the pipeline calls it for
 # mechanical failures (empty transcript, unreachable brain, barge-in).
@@ -65,6 +76,7 @@ note_failure() {
 	mkdir -p "$MEMORY_DIR"
 	printf -- '- [%s] %s\n' "$(date +%FT%H:%M)" "$1" >>"$FAILURES"
 	log "note: $1"
+	trace "✗ échec noté : $1"
 }
 
 # One dated line into today's journal (memory/journal/YYYY-MM-DD.md):
@@ -85,11 +97,35 @@ state() { cat "$STATE_FILE" 2>/dev/null || echo idle; }
 
 set_state() {
 	printf '%s' "$1" >"$STATE_FILE"
-	# The mascot has no transcribing sprite; it ponders through it.
+	# The mascot has no transcribing or followup sprite; it ponders through
+	# the one and stays perked up through the other.
 	local sprite=$1
 	[[ $1 == transcribing ]] && sprite=thinking
+	[[ $1 == followup ]] && sprite=listening
 	mascot setState "$sprite"
 	log "state: $1"
+}
+
+# The follow-up window only makes sense if the wake daemon is there to
+# watch it (it detects the speech onset and settles the timeout).
+wake_alive() { pgrep -f "jarvis-wake.py" >/dev/null 2>&1; }
+
+# Which brain answers: a plain command goes to haiku, an open question —
+# long, interrogative, or explicitly reflective — escalates to sonnet.
+# JARVIS_MODEL overrides both.
+pick_model() {
+	if [[ -n ${JARVIS_MODEL:-} ]]; then
+		echo "$JARVIS_MODEL"
+		return
+	fi
+	local text=${1,,} words
+	local re='pourquoi|comment|explique|analyse|compare|résume|raconte|propose|conseille|réfléchis|penses|why|how|explain|analy[sz]e|summari[sz]e|suggest|think'
+	words=$(wc -w <<<"$text")
+	if ((words > 14)) || [[ $text =~ $re ]]; then
+		echo sonnet
+	else
+		echo haiku
+	fi
 }
 
 # ------------------------------------------------------------- the organs
@@ -104,10 +140,21 @@ voice_for() {
 	fi
 }
 
+# Where speaking lands when it ends naturally: the follow-up window (the
+# wake daemon listens a few seconds for a rejoinder, no wake word needed)
+# after a real exchange, plain idle otherwise or when nobody is watching.
+after_speaking() {
+	if [[ ${1:-} == followup ]] && wake_alive; then
+		set_state followup
+	else
+		set_state idle
+	fi
+}
+
 # Speak, interruptibly: the player pid is on disk so a barge-in press can
-# stop it. Only fall back to idle if nothing barged in meanwhile.
+# stop it. Only fall back to rest if nothing barged in meanwhile.
 do_speak() {
-	local text="$1" wav="$RUN_DIR/reply.wav" pid
+	local text="$1" follow="${2:-}" wav="$RUN_DIR/reply.wav" pid
 	[[ -n $text ]] || return 0
 	printf '%s' "$text" | "$PIPER" --model "$(voice_for "$text")" --output_file "$wav" 2>>"$LOG" || return 1
 	set_state speaking
@@ -116,41 +163,102 @@ do_speak() {
 	echo "$pid" >"$PLAY_PID"
 	wait "$pid" 2>/dev/null
 	rm -f "$PLAY_PID"
-	[[ $(state) == speaking ]] && set_state idle
+	[[ $(state) == speaking ]] && after_speaking "$follow"
 }
 
-# One question to the brain. --continue keeps the ongoing conversation;
-# `reset` clears the flag so the next exchange starts fresh (that is when a
-# new SOUL.md takes effect).
+# Speak a stream: one sentence per stdin line, synthesized and played as
+# they arrive — the voice starts on sentence one while the brain still
+# writes the rest. The bubble grows sentence by sentence. A barge-in (the
+# state moved off speaking) drops whatever is still in the pipe.
+speak_sentences() {
+	local sentence wav pid n=0 acc=""
+	while IFS= read -r sentence; do
+		[[ -n ${sentence// /} ]] || continue
+		if ((n == 0)); then
+			[[ $(state) == thinking ]] || break
+			set_state speaking
+		elif [[ $(state) != speaking ]]; then
+			break
+		fi
+		acc+="${acc:+ }$sentence"
+		mascot reply "$acc"
+		wav="$RUN_DIR/reply-$((n % 2)).wav"
+		printf '%s' "$sentence" | "$PIPER" --model "$(voice_for "$sentence")" --output_file "$wav" 2>>"$LOG" || continue
+		[[ $(state) == speaking ]] || break
+		pw-play "$wav" 2>>"$LOG" &
+		pid=$!
+		echo "$pid" >"$PLAY_PID"
+		wait "$pid" 2>/dev/null
+		n=$((n + 1))
+	done
+	rm -f "$PLAY_PID"
+	((n > 0)) && [[ $(state) == speaking ]] && after_speaking followup
+}
+
+# One question to the brain, non-streaming (the fallback path and the
+# helpers). --continue keeps the ongoing conversation; `reset` clears the
+# flag so the next exchange starts fresh (that is when a new SOUL.md takes
+# effect).
 brain() {
-	local text="$1" reply
+	local text="$1" model="${2:-haiku}" reply
 	cd "$JARVIS_DIR" || return 1
 	if [[ -e $CONV_FLAG ]]; then
-		reply=$(claude -p --continue --model "$MODEL" -- "$text" 2>>"$LOG")
+		reply=$(claude -p --continue --model "$model" -- "$text" 2>>"$LOG")
 	fi
 	if [[ -z ${reply:-} ]]; then
-		reply=$(claude -p --model "$MODEL" -- "$text" 2>>"$LOG")
+		reply=$(claude -p --model "$model" -- "$text" 2>>"$LOG")
 	fi
 	[[ -n ${reply:-} ]] && touch "$CONV_FLAG"
 	printf '%s' "${reply:-}"
 }
 
-# transcribing → thinking → speaking → idle, from a captured utterance.
+# The streaming brain: sentences flow straight into the voice as they are
+# generated. The full reply lands in $REPLY_TXT for the journal.
+stream_brain() {
+	local text="$1" model="$2" cont=()
+	cd "$JARVIS_DIR" || return 1
+	rm -f "$REPLY_TXT"
+	[[ -e $CONV_FLAG ]] && cont=(--continue)
+	claude -p "${cont[@]}" --model "$model" \
+		--output-format stream-json --include-partial-messages --verbose \
+		-- "$text" 2>>"$LOG" |
+		"$JARVIS_DIR/bin/jarvis-sentences" "$REPLY_TXT" |
+		speak_sentences
+}
+
+# transcribing → thinking → speaking → followup/idle, from an utterance.
 run_exchange() {
-	local text="$1" reply
+	local text="$1" reply model
 	log "ask: $text"
 	printf '%s' "$text" >"$LAST_ASK"
 	set_state thinking
-	reply=$(brain "$text")
+	model=$(pick_model "$text")
+	log "model: $model"
+	trace "ask($model) « $text »"
+	stream_brain "$text" "$model"
+	reply=$(cat "$REPLY_TXT" 2>/dev/null)
 	if [[ -z $reply ]]; then
-		note_failure "cerveau injoignable pour : « $text »"
-		reply="Je n'ai pas pu joindre mon cerveau. Voyez le journal."
+		# The stream produced nothing — most often a stale --continue.
+		# One fresh, non-streaming retry before declaring the brain down.
+		rm -f "$CONV_FLAG"
+		reply=$(brain "$text" "$model")
+		if [[ -z $reply ]]; then
+			note_failure "cerveau injoignable pour : « $text »"
+			reply="Je n'ai pas pu joindre mon cerveau. Voyez le journal."
+			log "reply: $reply"
+			journal "échange : « $text » → « $reply »"
+			mascot reply "$reply"
+			do_speak "$reply"
+			return 1
+		fi
+		mascot reply "$reply"
+		do_speak "$reply" followup
 	fi
+	touch "$CONV_FLAG"
 	log "reply: $reply"
+	trace "reply « $reply »"
 	journal "échange : « $text » → « $reply »"
 	notify "$text" "$reply"
-	mascot reply "$reply"
-	do_speak "$reply"
 }
 
 do_listen() {
@@ -208,7 +316,7 @@ stop_everything() {
 
 on_press() {
 	case "$(state)" in
-	idle)
+	idle | followup)
 		do_listen
 		;;
 	listening)
@@ -246,6 +354,63 @@ reset)
 	rm -f "$CONV_FLAG"
 	notify "Jarvis" "Nouvelle conversation — l'âme a été relue."
 	;;
+settle)
+	# The wake daemon closes an unused follow-up window quietly.
+	[[ $(state) == followup ]] && set_state idle
+	;;
+dispatch)
+	# A background mission: work too big for a spoken exchange (coding,
+	# multi-step jobs) goes to a detached Claude session in the target
+	# directory. Jarvis stays free; the result comes back as a bubble, a
+	# notification, a journal line — and out loud if he is idle then.
+	shift
+	dir="$JARVIS_DIR"
+	if [[ ${1:-} == --dir ]]; then
+		dir="$2"
+		shift 2
+	fi
+	task="$*"
+	if [[ -z ${task// /} ]]; then
+		echo "usage: jarvis dispatch [--dir <dir>] <task>" >&2
+		exit 1
+	fi
+	if [[ ! -d $dir ]]; then
+		echo "no such directory: $dir" >&2
+		exit 1
+	fi
+	mkdir -p "$STATE_DIR/missions"
+	mission="$STATE_DIR/missions/$(date +%Y%m%d-%H%M%S).log"
+	log "dispatch($dir): $task"
+	trace "— mission ($dir) : $task —"
+	journal "mission lancée dans $dir : « $task »"
+	notify "Jarvis — mission lancée" "$task"
+	(
+		cd "$dir" || exit 1
+		printf 'dir: %s\ntask: %s\n---\n' "$dir" "$task" >"$mission"
+		claude -p --model "${JARVIS_DISPATCH_MODEL:-sonnet}" \
+			--permission-mode acceptEdits \
+			--output-format stream-json --include-partial-messages --verbose \
+			-- "$task"$'\n\nTermine ta réponse par UNE phrase de compte rendu, orale, en français.' 2>>"$mission" |
+			"$JARVIS_DIR/bin/jarvis-sentences" --quiet "$mission.reply"
+		result=$(cat "$mission.reply" 2>/dev/null)
+		printf '%s\n' "$result" >>"$mission"
+		summary=$(printf '%s' "$result" | tail -n 1)
+		if [[ -z ${summary// /} ]]; then
+			summary="La mission a échoué — voyez le journal des missions."
+			note_failure "mission échouée dans $dir : « $task » ($mission)"
+			mascot emote worried
+		else
+			mascot emote celebrate
+		fi
+		journal "mission terminée : $summary"
+		trace "mission terminée : $summary"
+		mascot reply "$summary"
+		notify "Jarvis — mission terminée" "$summary"
+		[[ $(state) == idle ]] && "$0" say "$summary"
+	) >/dev/null 2>&1 &
+	disown
+	echo "mission lancée : $mission"
+	;;
 ask)
 	shift
 	run_exchange "$*"
@@ -270,7 +435,12 @@ dream)
 	set_state sleeping
 	notify "Jarvis" "Jarvis rêve — consolidation de la mémoire…"
 	cd "$JARVIS_DIR" || exit 1
-	summary=$(claude -p --model "${JARVIS_DREAM_MODEL:-sonnet}" -- "$(cat "$MEMORY_DIR/DREAM_PROMPT.md")" 2>>"$LOG")
+	trace "— rêve —"
+	claude -p --model "${JARVIS_DREAM_MODEL:-sonnet}" \
+		--output-format stream-json --include-partial-messages --verbose \
+		-- "$(cat "$MEMORY_DIR/DREAM_PROMPT.md")" 2>>"$LOG" |
+		"$JARVIS_DIR/bin/jarvis-sentences" --quiet "$RUN_DIR/dream.txt"
+	summary=$(cat "$RUN_DIR/dream.txt" 2>/dev/null)
 	log "dream(quiet=$quiet): $summary"
 	[[ -n ${summary:-} ]] && journal "rêve : $summary"
 	notify "Jarvis" "${summary:-Le rêve a tourné court. Voyez le journal.}"
@@ -286,7 +456,12 @@ heartbeat)
 	# only — he changes nothing. Quiet by design: bubble + notification.
 	touch "$STATE_DIR/last-heartbeat"
 	cd "$JARVIS_DIR" || exit 1
-	report=$(claude -p --model "${JARVIS_HEARTBEAT_MODEL:-haiku}" -- "$(cat "$MEMORY_DIR/HEARTBEAT_PROMPT.md")" 2>>"$LOG")
+	trace "— ronde —"
+	claude -p --model "${JARVIS_HEARTBEAT_MODEL:-haiku}" \
+		--output-format stream-json --include-partial-messages --verbose \
+		-- "$(cat "$MEMORY_DIR/HEARTBEAT_PROMPT.md")" 2>>"$LOG" |
+		"$JARVIS_DIR/bin/jarvis-sentences" --quiet "$RUN_DIR/heartbeat.txt"
+	report=$(cat "$RUN_DIR/heartbeat.txt" 2>/dev/null)
 	log "heartbeat: $report"
 	if [[ -n ${report:-} && $report != "RAS" && ${report:0:4} != "RAS." ]]; then
 		journal "ronde : $report"
@@ -333,7 +508,7 @@ state)
 	state
 	;;
 *)
-	echo "usage: jarvis [press|cancel|reset|ask <text>|say <text>|state|dream [--quiet]|maybe-dream|heartbeat|tick|index|note <text>]" >&2
+	echo "usage: jarvis [press|cancel|reset|settle|ask <text>|say <text>|state|dispatch [--dir <dir>] <task>|dream [--quiet]|maybe-dream|heartbeat|tick|index|note <text>]" >&2
 	exit 1
 	;;
 esac
