@@ -388,6 +388,9 @@ run_exchange() {
 	local text="$1" reply model
 	log "ask: $text"
 	printf '%s' "$text" >"$LAST_ASK"
+	# Every ask shows in the philactère — spoken, typed from the Control
+	# Center, or piped through the CLI alike.
+	mascot heard "$text"
 	set_state thinking
 	model=$(pick_model "$text")
 	log "model: $model"
@@ -468,7 +471,6 @@ do_finish() {
 		do_speak "Je n'ai rien entendu."
 		return 1
 	fi
-	mascot heard "$text"
 	run_exchange "$text"
 }
 

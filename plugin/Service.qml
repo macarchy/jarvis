@@ -3,14 +3,18 @@
 // A small always-on layer surface in the bottom-right corner: a pixel-art
 // Babel fish that idles, perks up when Jarvis listens, ponders while the
 // brain thinks, and mouths along while the reply is spoken — with the
-// transcript and reply shown in a glass speech bubble.
+// exchange shown in a comic philactère drawn in his own pixels: the ask
+// in pale ink, the reply typed out at reading speed while the voice
+// speaks, thinking dots while the brain works, and a thought bubble
+// (dashed, beads) for what he says in his sleep.
 //
 // The voice pipeline (~/Work/jarvis/bin/jarvis) drives it over IPC:
 //   omarchy-shell macarchy.jarvis setState idle|listening|thinking|speaking
 //   omarchy-shell macarchy.jarvis heard "<transcript>"
 //   omarchy-shell macarchy.jarvis reply "<text>"
-// Clicking the fish is the same as the push-to-talk key. Right-click hides
-// it until `omarchy-shell macarchy.jarvis show`.
+// Clicking the fish is the same as the push-to-talk key. Clicking the
+// bubble reveals the rest of a reply still typing, then dismisses it.
+// Right-click hides the fish until `omarchy-shell macarchy.jarvis show`.
 
 import QtQuick
 import Quickshell
@@ -29,8 +33,55 @@ Item {
 
   // idle | listening | thinking | speaking | sleeping
   property string mood: "idle"
-  property string bubbleText: ""
   property bool shown: true
+
+  // ------------------------------------------------------- the philactère
+  //
+  // The fish's own ink and paper (sprites/generate.py palette): the bubble
+  // is HIS object, deliberately the same in every shell theme.
+  readonly property color bubbleInk: "#181208"
+  readonly property color bubblePaper: "#FFF8E6"
+
+  property string heardText: ""    // the ask, kept visible under the reply
+  property string replyTarget: ""  // the full reply so far (grows by sentence)
+  property int typeN: 0            // characters revealed by the typewriter
+  property string bubbleStyle: "speech"
+
+  readonly property bool typing: typeN < replyTarget.length
+  readonly property bool dotsOn: mood === "thinking" && replyTarget.length === 0
+  readonly property bool bubbleOn: shown
+    && (heardText.length > 0 || replyTarget.length > 0 || dotsOn)
+
+  // ~60 chars/s: comfortably ahead of the voice, clearly behind a paste.
+  Timer {
+    id: typeTimer
+    interval: 34
+    repeat: true
+    running: service.typing && service.shown
+    onTriggered: service.typeN = Math.min(service.replyTarget.length, service.typeN + 2)
+  }
+
+  function clearBubble() {
+    heardText = ""
+    replyTarget = ""
+    typeN = 0
+    bubbleLinger.stop()
+  }
+
+  // Once the exchange is over, the bubble hangs around long enough to
+  // read — proportionally to how much there is to read.
+  Timer {
+    id: bubbleLinger
+    repeat: false
+    onTriggered: service.clearBubble()
+  }
+
+  function restLinger() {
+    var chars = heardText.length + replyTarget.length
+    if (chars === 0) return
+    bubbleLinger.interval = Math.min(20000, Math.max(6000, 4000 + chars * 55))
+    bubbleLinger.restart()
+  }
 
   // ------------------------------------------------------------ emotions
   //
@@ -99,17 +150,8 @@ Item {
     var valid = ["idle", "listening", "thinking", "speaking", "sleeping"]
     if (valid.indexOf(next) === -1) return
     mood = next
-    if (next === "idle") bubbleLinger.restart()
+    if (next === "idle") restLinger()
     else bubbleLinger.stop()
-  }
-
-  // Once the exchange is over, the bubble hangs around long enough to read,
-  // then the fish goes back to just being a fish.
-  Timer {
-    id: bubbleLinger
-    interval: 8000
-    repeat: false
-    onTriggered: service.bubbleText = ""
   }
 
   // The body clock: whenever Jarvis idles, tick him — the script decides
@@ -131,11 +173,28 @@ Item {
     }
 
     function heard(text: string): void {
-      service.bubbleText = "« " + String(text) + " »"
+      var t = String(text)
+      if (t.length === 0) { service.clearBubble(); return }
+      service.heardText = "« " + t + " »"
+      service.replyTarget = ""
+      service.typeN = 0
+      service.bubbleStyle = "speech"
+      bubbleLinger.stop()
     }
 
     function reply(text: string): void {
-      service.bubbleText = String(text)
+      var t = String(text)
+      if (t.length === 0) { service.clearBubble(); return }
+      // The pipeline resends the whole reply as it grows sentence by
+      // sentence: keep the typewriter's place when the new text only
+      // extends the old, restart it otherwise.
+      if (!(service.replyTarget.length > 0 && t.indexOf(service.replyTarget) === 0))
+        service.typeN = 0
+      service.replyTarget = t
+      service.bubbleStyle = service.mood === "sleeping" ? "thought" : "speech"
+      if (service.mood === "sleeping") service.heardText = ""
+      bubbleLinger.stop()
+      if (service.mood === "idle") service.restLinger()
     }
 
     function show(): void { service.shown = true }
@@ -170,7 +229,7 @@ Item {
     }
 
     implicitWidth: Style.space(300)
-    implicitHeight: bubble.visible ? fish.height + bubble.height + Style.space(10) : fish.height
+    implicitHeight: bubble.visible ? fish.height + bubble.height + Style.space(6) : fish.height
 
     // Only the fish and its bubble catch the pointer; the rest of the
     // surface is click-through.
@@ -179,49 +238,87 @@ Item {
       Region { item: bubble }
     }
 
-    // Speech bubble: glass card, right-aligned above the fish, with a
-    // little pixel tail pointing down at it.
-    Rectangle {
+    PixelBubble {
       id: bubble
-      visible: service.bubbleText.length > 0
+
+      readonly property int pad: px * 3
+
+      visible: service.bubbleOn
       anchors.right: parent.right
       anchors.bottom: fish.top
-      anchors.bottomMargin: Style.space(10)
-      width: Math.min(bubbleLabel.implicitWidth + Style.space(24), window.implicitWidth)
-      height: bubbleLabel.implicitHeight + Style.space(18)
-      radius: Style.space(8)
-      color: Color.popups.background
-      border.width: 1
-      border.color: Util.alpha(Color.popups.text, 0.25)
+      anchors.bottomMargin: Style.space(2)
+      px: fish.pixelScale
+      ink: service.bubbleInk
+      paper: service.bubblePaper
+      kind: service.bubbleStyle
+      // Snapped to the unit grid: fractional text metrics would other-
+      // wise shear the border and detach the tail by half a pixel.
+      width: Math.ceil(Math.min(bubbleCol.implicitWidth + pad * 2, window.implicitWidth) / px) * px
+      height: Math.ceil((bubbleCol.implicitHeight + pad * 2) / px) * px + tailPx
+      // Aim the tail at the mouth: the fish faces left, mouth ~31 units
+      // in from his right edge (which is also the bubble's right edge).
+      tailX: Math.max(3, Math.min(Math.round(width / px) - 5, Math.round(width / px) - 31))
 
-      Rectangle {
-        anchors.top: parent.bottom
-        anchors.right: parent.right
-        anchors.rightMargin: Style.space(28)
-        width: Style.space(8)
-        height: Style.space(8)
-        rotation: 45
-        anchors.topMargin: -Style.space(5)
-        color: bubble.color
-        border.width: 1
-        border.color: bubble.border.color
-      }
+      Column {
+        id: bubbleCol
+        x: bubble.pad
+        y: bubble.pad
+        spacing: Style.space(5)
 
-      Text {
-        id: bubbleLabel
-        anchors.centerIn: parent
-        width: Math.min(implicitWidth, window.implicitWidth - Style.space(24))
-        text: service.bubbleText
-        color: Color.popups.text
-        font.family: Style.font.family
-        font.pixelSize: Style.font.bodySmall
-        wrapMode: Text.WordWrap
+        readonly property int maxw: window.implicitWidth - bubble.pad * 2
+
+        Text {
+          visible: service.heardText.length > 0
+          width: Math.min(implicitWidth, parent.maxw)
+          text: service.heardText
+          color: Qt.rgba(service.bubbleInk.r, service.bubbleInk.g, service.bubbleInk.b, 0.5)
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+          wrapMode: Text.WordWrap
+        }
+
+        Text {
+          visible: service.replyTarget.length > 0
+          width: Math.min(implicitWidth, parent.maxw)
+          // The block cursor rides along while the typewriter works.
+          text: service.replyTarget.substring(0, service.typeN) + (service.typing ? "█" : "")
+          color: service.bubbleInk
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+          wrapMode: Text.WordWrap
+        }
+
+        Row {
+          visible: service.dotsOn
+          spacing: bubble.px
+
+          property int active: 0
+          Timer {
+            running: service.dotsOn
+            interval: 280
+            repeat: true
+            onTriggered: parent.active = (parent.active + 1) % 3
+          }
+
+          Repeater {
+            model: 3
+            Rectangle {
+              width: bubble.px * 2
+              height: bubble.px * 2
+              color: service.bubbleInk
+              opacity: parent.active === index ? 1 : 0.45
+            }
+          }
+        }
       }
 
       MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: service.bubbleText = ""
+        onClicked: {
+          if (service.typing) service.typeN = service.replyTarget.length
+          else service.clearBubble()
+        }
       }
     }
 
