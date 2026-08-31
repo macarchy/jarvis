@@ -1,0 +1,394 @@
+<title>Le Poisson de Babel</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* ————— Le monde : une seule eau, assumée. Palette du poisson lui-même. */
+:root{
+  --water:#152430; --deep:#0E1922; --glass:#2A4155;
+  --paper:#FFF8E6; --ink:#181208;
+  --gold:#F2C94C; --wave:#78BEFF; --dim:#8FA9BC;
+  --px:4px;
+}
+html{box-sizing:border-box}
+*,*::before,*::after{box-sizing:inherit}
+body{
+  margin:0; background:var(--water); color:#E8EFF4;
+  font-family:"Atkinson Hyperlegible",system-ui,sans-serif;
+  font-size:17px; line-height:1.55;
+}
+.wrap{max-width:960px;margin:0 auto;padding:40px 20px 80px}
+
+/* ————— typographie */
+h1,h2,.pixfont{font-family:"Silkscreen","Atkinson Hyperlegible",monospace}
+h1{font-size:clamp(26px,5vw,40px);margin:6px 0 10px;color:var(--gold);text-wrap:balance;letter-spacing:1px}
+h2{font-size:20px;color:var(--wave);margin:0 0 4px}
+h3{font-family:"Silkscreen",monospace;font-size:14px;margin:12px 0 6px;color:var(--ink)}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--dim)}
+code{font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:#5A4A14;background:rgba(24,18,8,.08);padding:2px 6px;display:inline-block}
+p{margin:6px 0}
+.intro{max-width:62ch;color:#C8D6E0}
+
+/* ————— cartes papier à bordure pixel (les box-shadow dessinent une
+   bordure crantée : les coins restent vides, comme sur le philactère) */
+.pixcard{
+  background:var(--paper); color:var(--ink); padding:16px 16px 14px;
+  margin:var(--px);
+  box-shadow:0 calc(-1*var(--px)) 0 0 var(--ink), 0 var(--px) 0 0 var(--ink),
+             calc(-1*var(--px)) 0 0 0 var(--ink), var(--px) 0 0 0 var(--ink);
+}
+.pixcard p{font-size:14.5px;margin:0 0 10px;color:#3A311D}
+
+/* ————— sprites : la vraie planche PNG, nearest-neighbor, steps() */
+.sprite{width:36px;height:28px;image-rendering:pixelated;background-repeat:no-repeat}
+.tank{display:flex;align-items:center;justify-content:center;height:132px;background:var(--deep);
+      box-shadow:inset 0 0 0 1px var(--glass)}
+.tank .sprite{transform:scale(3.5)}
+.sp-idle{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANgAAAAcCAYAAAADWXFPAAABYUlEQVR42u2ZOwrCQBRFLa2tXILgFlyCq7J0ARbuyCXYiUuwEWwiIzwZJzEZze8+cg4MgRTmct6dqMlsBgAAAAAAAAAAAAAAAAAAAADOuJ22RXwEbT/kccRyMS+CmPjIwHT9kMdRf0zGt+PUB6bmhzzONny4eFiP6+697JytqRdIzQ95HPSnSkzY7VVrSFkqA1PzQx5H/bGvzvNxXRh2rml9C9k2vNLA1PzEeXIyDJmH/mTISQXlBIw/737Zv5bSwP4dmpqfOE96Jx47D/2pCZMSzufeIePftX3IaTOwtrlU/VStMfPQn5pAh83q558a6Y5vK0Z5YGp+yOOnP7WC4gtQIH0/5NHrT+lrNd7ldqHBdrvgwNT8kMdffz7+wJmkVFbOk5cuJSkVSM0Pefz1p1GUrZx3CF088uxiYH0IUvFDHp/9KQUc8y18FwPrK7eKH/L47I8cagUC+gMAAAAAkMETy6A3fV3UZogAAAAASUVORK5CYII=);animation:k-idle 2.73s steps(6) infinite}
+@keyframes k-idle{to{background-position-x:-216px}}
+.sp-listening{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAAcCAYAAADC8vmmAAABBklEQVR42u2WPQoCMRBGt7S28giCV/AIHsja0gNYeIm9gfV6BDvxCDaCTSTCyDDkbzeZTYTvwRBIsfOYmbDTdQAAAAAAAABFnted4Sd8GKvlwlgRfsKHyYRODfYX07fkQ1KDT8jG+3H4Bd1RzFWcGj7e4rhE7Di7QrFYQ3UfV8fobd/OG0PQXSx8YmOFZXFK+0xx8spIoZQO8u+97sdvTOloaZ/RTnKCKLHE3lvJ1K7lFocmqAkfOc6n7TopcWikc6aGezXjwzvmE+KJtIRcE13TJ/ru+RhTohmeV9+ST3DfICkpl/JrLSlVwqdogWJiFClLWskdKddHbZmUidUS/akPAABo8AF1Mul52hNhLgAAAABJRU5ErkJggg==);animation:k-listening 0.5s steps(2) infinite}
+@keyframes k-listening{to{background-position-x:-72px}}
+.sp-thinking{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGwAAAAcCAYAAACERFoMAAABJUlEQVR42u2YvQ3CMBCFU1JTMQISKzACA1FTMgAFS7ABNYxAhxiBBonG6CIdshwnWIl/nvD7pJMlitzj82GSNA0hhFTP9mwutEAIqfzo4VFICI+eMnlOzEPK8bxujL0SYD+L+cxIEHulIFA/2rxvrV0QnB9pLPV+7L6ln2nVLAjGjy+ITLOvcoZDEQTlR4+a23FlBG3WF8gXru8L/oOgFH5GO3LD2GjTEGH29V73fVtjBSINUGw/kx1pIB8SMlRSqs0qPUBoftqLHNbLoMZDEz05CPAAIfkZDGQ3yrlhaAOE5KdzDNlTrI2y/dxBBSH56fwpayg3XMidWcxNQxMUw0/UDfsVTCvkGSjGLTbSAMX0k+zxw21c4i0H0gCh+oGFggghpHo+vrG7EtgMlf0AAAAASUVORK5CYII=);animation:k-thinking 1.0s steps(3) infinite}
+@keyframes k-thinking{to{background-position-x:-108px}}
+.sp-speaking{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJAAAAAcCAYAAACONDYbAAABSElEQVR42u2YvQ3CMBBGKampGAGJFRiBgagpGYCCJdiAGkagQ4xAg0QTcKRDluOACfn5Er0nnSKlyD3dZ1tJRiMAAAAAAAAAAAAAAAlup2XmX/Ehr2Smk3HmRPwrPrqBSc3Hmpddm2R1yPZKPn0ITG4+rrGrx3X9LrtnNXSf10I+9iUwmbxiIm53xaoNOTUftcCk5mNH8Xk3zwy7963KxH4RDnd81z7qgUnNJyYTCqUMzH/e/bLJq4qQmo9aYDLzsRdWaxzi7jvJ1CHVHZaaj9oGU5lP/pDtYpZXSvOyHfa3SMSnilMTPmoLumpWTczn4wLyGyksoK59lDZYWa+251M4pv1dZY1aOw6DwNR8VAJTyqvwUmdSoVzKl0adoan5qAWmNJ8kMauUfx51fsKq+KgGppZX9BTo6i+0oo9qYGp5AYEBAAAMiSfYwohZWFljPgAAAABJRU5ErkJggg==);animation:k-speaking 0.5s steps(4) infinite}
+@keyframes k-speaking{to{background-position-x:-144px}}
+.sp-sleeping{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJAAAAAcCAYAAACONDYbAAABLklEQVR42u2YsQ3CMBBFU1JTMQISKzACA1FTMgAFS7ABdRiBDjECDRJNUJAOWVFCzrIVH/b70slSivjl2/52XFUIoby1PTe1lBGekxSj80eTyBgPk4cEIoEQYpWzyjlncM5g8pBACLHKWeWoyHPG47Jp3Da1rPFEAYqZQJF4oiTQYj5rWg63TTlW1ngwaITlV1s6DwYpeNp63XffkmdSJfNgkAdHm4Z9NQWbNR4MUmyh1+NqkGGMbej7cuDBICVLN/mkT80Ed9/3vO0/lQMPBil5+ko7wd1zW9BgGeTBIAXPYb30TsJuIgYPlFEeDArgcfsplQeDPLdVNwWln8m2C6M8GOTxVyhMXTbNn2FsjyzxYFAgl5TmjirmlYM1Hgzy5Ep662uYB4MQQgghlJPe33HUax05eWcAAAAASUVORK5CYII=);animation:k-sleeping 2.86s steps(4) infinite}
+@keyframes k-sleeping{to{background-position-x:-144px}}
+.sp-tired{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAAcCAYAAADC8vmmAAAA/0lEQVR42mNgGAWjYBSMglEwCkbBKBg8oGLf//WDzUEnRqNlaKWg0QgbBcMNfDrp8x+ZHgVIQEKI4z8oYJDp0QhDChx89IiPMJDlIPzrURMcw8RgeERGGLaAAcUWNkzPwBoUEQZLujdnaeMMFEKBhctjQz7CkAMHPWZgDiDGgcjmfX/QBcbkOpgWEUZ2pMEcgw5A4sQ6ELlcoGbgUCPCKHYXSMM0Gw2SYwo9xigNmMEaYXgDCNkCegbQYIowjGSNHEswi+gWW4MwwjAKMFggoQcWMTUHNQNpsEQY0QEFw8S0QahR5VIjwmgSQOgOHMhWNDUibKDcPWBdoIGOsBEPAB+suCc1TZc4AAAAAElFTkSuQmCC);animation:k-tired 1.25s steps(2) infinite}
+@keyframes k-tired{to{background-position-x:-72px}}
+.sp-dnd{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAAcCAYAAADC8vmmAAABAElEQVR42u2WsQ3CMBBFXVJTMQISK1CnomAmSgagYCNGSBdlBBokGtBFusiyiWPFZ/tE/pN+YyW57/8jJ8YAAAAAAAAAMtE0509Iqw9H4pq/LCx2WElTqgqjQbvtZtC7v4ziNdYqC6ON0yA7mOfj9FOlwlJTGA2hjZMhhtfmNGUy1byawjiI9n4YDz03oBiD9vNe3XXQUsM5CltcGg924QZZc6akw5EqLNkX3XA77r0hbM4OKtRYajBaC5sMyA4pZChHQJoK815rkj2MhhRrS2Fh3gHGIblhxXw5JEPSUlh0UKyYfxCJT65EYVkCcg3W+ouWKqyWb1MrqNqFAQCS+AJ93KbzPIPY/AAAAABJRU5ErkJggg==);animation:k-dnd 0.91s steps(2) infinite}
+@keyframes k-dnd{to{background-position-x:-72px}}
+.sp-worried{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAAcCAYAAADC8vmmAAAA8UlEQVR42u2XQQrCMBBFu3TtyiMIXsEjeCDXLj2ACw/j2h7BnXgEN4KbSAIDQ2qmwbTpl/4PQyDQZngvNGnTMAzDMAwz1+wv7koKDHf06Hm2O6dHRmW1XDgPRo8UpuBY4+yF+cWl3o9DKD1XuzkYYSkot/MmWNNVExaEMNm6HoZE5voq1WRp8zDCvsGJAUmTFiT9vtf9GOrXhqGEycJxUrYsQGPBmVSYf+i0XWeBsIyVgkEVZgLSC9QEhCSss621JVmomi1AYZ2PmECKYeWcHENCQhGWDUoq5w4yxJGLJKz3gjbVLRpJ2F/8QCMIYximKB9e47o45DkudAAAAABJRU5ErkJggg==);animation:k-worried 0.8s steps(2) infinite}
+@keyframes k-worried{to{background-position-x:-72px}}
+.sp-proud{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAAcCAYAAADC8vmmAAABCElEQVR42u2WQQrCMBBFu3TtyiMIXsEj9AQex6UHcOGNvIDQXXHrzo3gJhJhZAhtmjqTZMT/YQgUmnn9M5OmaSDor+UuuxtciJhDgQpZ5DNRIcw4BONrjO793Dq+Vpc2kMSc1XLhPAdfq5pjCYhyj63Fx1wTSMsgH8/r/hP0jKLoH1oLKIcxvpuHIpVNZE4OIOmId6fNKMMUW+wbTQB9C8NZws6lnCkFDPd89Id3zGbSBhLBMJ6hSC0gPzclLCaB/HvH7Xp2J4cdLTbGKlCMh+cxYVAVoGDseRdTnmLjZRaIHfLEFLKl/Fk1eVSAtE2KcVFM3dHUryNSoCxQbM8al9bfAIIgCIKgF2736UtI31ghAAAAAElFTkSuQmCC);animation:k-proud 0.91s steps(2) infinite}
+@keyframes k-proud{to{background-position-x:-72px}}
+.sp-curious{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAAcCAYAAADC8vmmAAABDUlEQVR42u2XPQrCQBBGU1pbeQTBK3gED2Rt6QEsvIQ3sI5HsBOPYCPYrIwwMiSbZcj+Tcj3wbAhkMz43pLEpkFsZn91LZWheS5UZuD4jmvC8R2bg2VlJwHOFOAAEIIdhCAJ87rtnFwRkdVy4QiMXCFMwAmtsxdGzak+z8O/+BzXLIX5wJAtX5WEZUIYb937eeMo3HgIkA/W0A+bvLAuHBkeQDOgvN/7cfzV2IFzCBstjRv7QgNqh8oFJ1ZY9Fx0wWm7VoEIGYsFY1VYEJBsUBKQJWG9bS0tcaNitgwK6z3AGFIXlubNkRKSFWFqUFyab5AUr9wUwrIA6g5Y8ys6hbBac1f7C1RbGIIgUfkC1MP01yHRIfIAAAAASUVORK5CYII=);animation:k-curious 0.8s steps(2) infinite}
+@keyframes k-curious{to{background-position-x:-72px}}
+.sp-celebrate{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGwAAAAcCAYAAACERFoMAAABSklEQVR42u2XPQrCQBSEU1pbeQTBK3gET2CbS6S29AAWHsZaLyDYiW06G8FmZcUny5KfxX3ZTOIMPAIBky+ZL2uSZQzDAMac1+UgOPM8CWd+LMpRFl0czOAvDLKcVGYiCdDHqgGzUo12iRip+J0beT+tjLulUMAmzaYTY4tyt31ff6xA6ku9NlBMWU3bvpigBEICsue287xtviP7ZP5aIBSgqqKsPFWTsjw0gSCA5Mm+7BdGIvvapokxhh9OIBSgqrL8wkL4/GM+rtv3/MLchUBR9w8JSM7rx+63fKFMGkV1IVA0ExqQ/c1uOQ8qpkmg2KJQBYI0uq4w9/gpC0MSCA/Ie+pdaeQ8yWwGFAgPyPsPlNL88kJehLSXRQSBMIECipNp++TQepvVEEi9NCigGr5eP1IVBNKUCBMINCgC4QIxDMMwDMMwDPPJCzWSy7UIZxufAAAAAElFTkSuQmCC);animation:k-celebrate 0.5s steps(3) infinite}
+@keyframes k-celebrate{to{background-position-x:-108px}}
+
+/* ————— la scène : le poisson vivant et son philactère */
+.scene{
+  background:var(--deep);
+  box-shadow:inset 0 0 0 1px var(--glass);
+  padding:28px 24px 20px; margin:26px 0 10px;
+  min-height:270px; position:relative; overflow:hidden;
+}
+.scene .weed{position:absolute;bottom:0;font-size:0}
+.scene .weed i{display:inline-block;width:4px;background:#1E4034;margin-right:10px}
+.fishspot{position:absolute;right:56px;bottom:26px}
+.fishspot .sprite{transform:scale(5);transform-origin:bottom right}
+.bulle{
+  position:absolute; right:36px; bottom:196px; max-width:min(420px,70%);
+  background:var(--paper); color:var(--ink); padding:12px 16px; margin:var(--px);
+  box-shadow:0 calc(-1*var(--px)) 0 0 var(--ink), 0 var(--px) 0 0 var(--ink),
+             calc(-1*var(--px)) 0 0 0 var(--ink), var(--px) 0 0 0 var(--ink);
+  font-size:15px;
+}
+.bulle.thought{box-shadow:none;border:var(--px) dashed var(--ink);margin:0}
+.bulle .heard{display:block;color:rgba(24,18,8,.55);font-size:12.5px;margin-bottom:4px}
+.bulle .tail{position:absolute;right:96px;bottom:-16px;width:16px;height:16px;font-size:0}
+.bulle .tail i{position:absolute;background:var(--paper)}
+.bulle .tail i:nth-child(1){left:0;top:0;width:12px;height:4px;box-shadow:-4px 0 0 var(--ink),12px 0 0 var(--ink)}
+.bulle .tail i:nth-child(2){left:0;top:4px;width:8px;height:4px;box-shadow:-4px 0 0 var(--ink),8px 0 0 var(--ink)}
+.bulle .tail i:nth-child(3){left:0;top:8px;width:4px;height:4px;box-shadow:-4px 0 0 var(--ink),4px 0 0 var(--ink)}
+.bulle .tail i:nth-child(4){left:-4px;top:12px;width:8px;height:4px;background:var(--ink)}
+.bulle.thought .tail i{box-shadow:none;background:var(--ink)}
+.bulle.thought .tail i:nth-child(1){width:8px;height:8px;left:2px;background:transparent;border:4px solid var(--ink)}
+.bulle.thought .tail i:nth-child(2){display:none}
+.bulle.thought .tail i:nth-child(3){left:-6px;top:12px;width:4px;height:4px}
+.bulle.thought .tail i:nth-child(4){display:none}
+.dots i{display:inline-block;width:8px;height:8px;background:var(--ink);margin-right:4px;opacity:.3}
+.dots i.on{opacity:1}
+.cursor{display:inline-block;width:9px;height:15px;background:var(--ink);vertical-align:-2px}
+
+/* ————— la machine à états, pilotable */
+.fsm{margin:14px 0 8px}
+.staterow{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:center;margin:14px 0}
+.state{
+  font-family:"Silkscreen",monospace;font-size:12px;color:var(--dim);
+  background:var(--deep);padding:8px 12px;box-shadow:inset 0 0 0 1px var(--glass);
+  position:relative;white-space:nowrap;
+}
+.state.on{color:var(--ink);background:var(--gold);box-shadow:0 -4px 0 var(--ink),0 4px 0 var(--ink),-4px 0 0 var(--ink),4px 0 0 var(--ink);margin:4px}
+.state+.state::before{content:"▸";position:absolute;left:-18px;top:50%;transform:translateY(-50%);color:var(--glass)}
+.state:last-child::before{content:none} /* rêve n'est pas la suite de « suite » */
+.events{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0 6px}
+button{
+  font-family:"Silkscreen",monospace;font-size:13px;cursor:pointer;
+  background:var(--paper);color:var(--ink);border:0;padding:10px 16px;margin:var(--px);
+  box-shadow:0 calc(-1*var(--px)) 0 0 var(--ink), 0 var(--px) 0 0 var(--ink),
+             calc(-1*var(--px)) 0 0 0 var(--ink), var(--px) 0 0 0 var(--ink);
+}
+button:hover{background:var(--gold)}
+button:active{transform:translateY(2px)}
+button:focus-visible{outline:3px solid var(--wave);outline-offset:4px}
+.hint{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--dim);min-height:1.5em}
+.ascii{background:var(--deep);box-shadow:inset 0 0 0 1px var(--glass);padding:14px 18px;overflow-x:auto;margin:18px 0}
+.ascii pre{margin:0;font-family:"IBM Plex Mono",monospace;font-size:12.5px;line-height:1.5;color:var(--dim)}
+.ascii .t{color:var(--gold)}
+
+/* ————— la galerie */
+.group{margin-top:44px}
+.groupsub{color:var(--dim);margin:0 0 14px;font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:18px}
+
+footer{margin-top:56px;color:var(--dim);font-size:14px;border-top:1px solid var(--glass);padding-top:18px}
+footer code{color:var(--wave);background:rgba(120,190,255,.08)}
+
+@media (prefers-reduced-motion: reduce){
+  .sprite{animation:none !important}
+}
+@media (max-width:640px){
+  .fishspot{right:16px}
+  .bulle{right:8px}
+  .tank .sprite{transform:scale(3)}
+}
+</style>
+
+<div class="wrap">
+  <span class="eyebrow">macarchy.jarvis — la mascotte</span>
+  <h1>Le Poisson de Babel</h1>
+  <p class="intro">Un petit poisson jaune en pixel art vit en bas à droite de l'écran,
+  sorti de l'aquarium qui sert de fond. Comme son homonyme du <em>Guide du voyageur
+  galactique</em>, il comprend toutes les langues qu'on lui parle — et son corps
+  raconte, en 36 × 28 pixels, tout ce que Jarvis fait ou ressent.</p>
+
+  <!-- ————————— la machine à états, en vrai ————————— -->
+  <section class="fsm">
+    <h2>La machine à états</h2>
+    <p class="groupsub">Chaque échange vocal traverse ces états. Pilote-la : le poisson joue chaque étape, philactère compris.</p>
+
+    <div class="scene" aria-label="Scène animée : le poisson et son philactère">
+      <span class="weed" style="left:24px"><i style="height:64px"></i><i style="height:38px"></i><i style="height:52px"></i></span>
+      <span class="weed" style="left:190px"><i style="height:30px"></i><i style="height:44px"></i></span>
+      <div class="bulle" id="bulle" hidden>
+        <span class="heard" id="bheard" hidden></span>
+        <span id="btext"></span>
+        <span class="dots" id="bdots" hidden><i></i><i></i><i></i></span>
+        <span class="tail"><i></i><i></i><i></i><i></i></span>
+      </div>
+      <div class="fishspot"><div class="sprite sp-idle" id="fish"></div></div>
+    </div>
+
+    <div class="staterow" id="staterow"></div>
+    <div class="events">
+      <button id="bpress">Appui</button>
+      <button id="bsettle">Silence</button>
+      <button id="bcancel">Annuler</button>
+      <button id="bdream">Rêver</button>
+    </div>
+    <p class="hint" id="hint"></p>
+
+    <div class="ascii"><pre><span class="t">// bin/jarvis — la carte du territoire</span>
+idle ── press ──▶ listening ── press ──▶ transcribing ─▶ thinking
+  ▲                   │ cancel                              │
+  │                                     streamed sentences  │
+  ├─ settle ── followup ◀──── done ── speaking ◀────────────┘
+  │  (silence)     │ speech onset ──▶ listening (no wake word)
+  └────────────────┴── press (barge-in: stop the voice, listen)</pre></div>
+  </section>
+
+  <!-- ————————— la galerie des émotions ————————— -->
+<section class="group"><h2>La pipeline vocale</h2><p class="groupsub">Ces cinq états sont pilotés par la machine à états de bin/jarvis — le corps suit la voix.</p><div class="grid">
+<article class="pixcard">
+  <div class="tank"><div class="sprite sp-idle"></div></div>
+  <h3>Au repos</h3>
+  <p>L'état de base : il flotte, cligne, remue la queue.</p>
+  <code>setState idle</code>
+</article>
+<article class="pixcard">
+  <div class="tank"><div class="sprite sp-listening"></div></div>
+  <h3>À l'écoute</h3>
+  <p>Un appui, un clic sur lui, ou « Hey Jarvis » : branchies dressées, ondes sonores.</p>
+  <code>setState listening</code>
+</article>
+<article class="pixcard">
+  <div class="tank"><div class="sprite sp-thinking"></div></div>
+  <h3>Réfléchit</h3>
+  <p>Pupille en l'air, points qui montent — transcription puis cerveau au travail.</p>
+  <code>setState thinking</code>
+</article>
+<article class="pixcard">
+  <div class="tank"><div class="sprite sp-speaking"></div></div>
+  <h3>Parle</h3>
+  <p>La bouche suit la voix, des bulles s'échappent, phrase par phrase.</p>
+  <code>setState speaking</code>
+</article>
+<article class="pixcard">
+  <div class="tank"><div class="sprite sp-sleeping"></div></div>
+  <h3>Dort, rêve</h3>
+  <p>La nuit (23 h – 7 h), ou pendant qu'il consolide sa mémoire. Les zZz montent.</p>
+  <code>setState sleeping</code>
+</article>
+</div></section>
+<section class="group"><h2>Les humeurs</h2><p class="groupsub">Des émotions ponctuelles (six secondes) par-dessus le corps au repos — le pipeline les déclenche, toi aussi.</p><div class="grid">
+<article class="pixcard">
+  <div class="tank"><div class="sprite sp-curious"></div></div>
+  <h3>Curieux</h3>
+  <p>Une notification arrive : un coup d'œil, un point d'interrogation.</p>
+  <code>emote curious</code>
+</article>
+<article class="pixcard">
+  <div class="tank"><div class="sprite sp-proud"></div></div>
+  <h3>Fier</h3>
+  <p>Mission accomplie — poitrail haut, étincelles dorées.</p>
+  <code>emote proud</code>
+</article>
+<article class="pixcard">
+  <div class="tank"><div class="sprite sp-celebrate"></div></div>
+  <h3>Fête</h3>
+  <p>Le cerveau est de retour, une réussite : confettis.</p>
+  <code>emote celebrate</code>
+</article>
+<article class="pixcard">
+  <div class="tank"><div class="sprite sp-worried"></div></div>
+  <h3>Inquiet</h3>
+  <p>Un échec noté, un cerveau injoignable : sourcil bas, goutte au front.</p>
+  <code>emote worried</code>
+</article>
+</div></section>
+<section class="group"><h2>Le corps</h2><p class="groupsub">Au repos, il porte l'état de la machine sans qu'on le lui demande.</p><div class="grid">
+<article class="pixcard">
+  <div class="tank"><div class="sprite sp-dnd"></div></div>
+  <h3>Ne pas déranger</h3>
+  <p>Le casque quand le DND du système est actif. Il n'entend rien.</p>
+  <code>(état du système)</code>
+</article>
+<article class="pixcard">
+  <div class="tank"><div class="sprite sp-tired"></div></div>
+  <h3>Fatigué</h3>
+  <p>Batterie sous 20 % en décharge : paupières lourdes, il coule un peu.</p>
+  <code>(état du système)</code>
+</article>
+</div></section>
+
+  <footer>
+    <p><strong>Sa vie continue sans toi</strong> : toutes les 10 à 22 minutes d'oisiveté il part
+    nager le long du bord et fait demi-tour ; une notification lui vaut un coup d'œil curieux ;
+    la nuit il dort de lui-même. À la demande : <code>omarchy-shell macarchy.jarvis swim</code>,
+    <code>emote celebrate</code>, <code>reply "…"</code> — et un clic sur lui, c'est l'appui vocal.</p>
+  </footer>
+</div>
+
+<script>
+(function(){
+  var reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var fish = document.getElementById("fish");
+  var bulle = document.getElementById("bulle");
+  var bheard = document.getElementById("bheard");
+  var btext = document.getElementById("btext");
+  var bdots = document.getElementById("bdots");
+  var hint = document.getElementById("hint");
+  var staterow = document.getElementById("staterow");
+
+  var STATES = [
+    ["idle","repos"],["listening","écoute"],["transcribing","transcrit"],
+    ["thinking","réfléchit"],["speaking","parle"],["followup","suite"],["sleeping","rêve"]
+  ];
+  var SPRITE = {transcribing:"thinking", followup:"listening"};
+  var HINTS = {
+    idle:"Au repos. « Appui » (ou un clic sur lui) : il écoute.",
+    listening:"Il écoute. « Appui » : fin de la phrase, il transcrit.",
+    transcribing:"Whisper transcrit — le corps pense déjà.",
+    thinking:"Le cerveau travaille. Les points patientent dans la bulle.",
+    speaking:"Il parle : la bulle tape au rythme de la voix. « Appui » : barge-in.",
+    followup:"Fenêtre de suite : reparle sans mot d'éveil, ou « Silence ».",
+    sleeping:"Il rêve : bulle de pensée. Un « Appui » le réveille."
+  };
+  STATES.forEach(function(s){
+    var el = document.createElement("span");
+    el.className = "state"; el.id = "st-" + s[0]; el.textContent = s[1];
+    staterow.appendChild(el);
+  });
+
+  var state = "idle", timers = [];
+  function later(fn, ms){ timers.push(setTimeout(fn, reduced ? Math.min(ms,150) : ms)); }
+  function clearTimers(){ timers.forEach(clearTimeout); timers = []; stopType(); stopDots(); }
+
+  function setState(next){
+    state = next;
+    STATES.forEach(function(s){
+      document.getElementById("st-" + s[0]).classList.toggle("on", s[0] === next);
+    });
+    var sp = SPRITE[next] || next;
+    fish.className = "sprite sp-" + sp;
+    hint.textContent = HINTS[next];
+  }
+
+  // ————— le philactère
+  var dotTimer = null, typeTimer = null;
+  function showBulle(thought){
+    bulle.hidden = false;
+    bulle.classList.toggle("thought", !!thought);
+  }
+  function hideBulle(){ bulle.hidden = true; bheard.hidden = true; btext.textContent = ""; stopDots(); }
+  function heard(t){ showBulle(false); bheard.hidden = false; bheard.textContent = "« " + t + " »"; btext.textContent = ""; }
+  function dots(on){
+    bdots.hidden = !on;
+    stopDots();
+    if (on && !reduced){
+      var i = 0, els = bdots.querySelectorAll("i");
+      dotTimer = setInterval(function(){
+        els.forEach(function(e, k){ e.classList.toggle("on", k === i % 3); });
+        i++;
+      }, 280);
+    }
+  }
+  function stopDots(){ if (dotTimer){ clearInterval(dotTimer); dotTimer = null; } bdots.hidden = true; }
+  function stopType(){ if (typeTimer){ clearInterval(typeTimer); typeTimer = null; } }
+  function typeReply(t, done){
+    stopType(); dots(false);
+    if (reduced){ btext.textContent = t; if (done) later(done, 300); return; }
+    var n = 0;
+    btext.innerHTML = "<span class='cursor'></span>";
+    typeTimer = setInterval(function(){
+      n = Math.min(t.length, n + 2);
+      btext.innerHTML = t.substring(0, n).replace(/</g,"&lt;") + (n < t.length ? "<span class='cursor'></span>" : "");
+      if (n >= t.length){ stopType(); if (done) done(); }
+    }, 34);
+  }
+
+  // ————— le scénario d'un échange
+  function toIdle(){ clearTimers(); setState("idle"); later(hideBulle, 2600); }
+  function runExchange(){
+    setState("transcribing");
+    later(function(){
+      heard("quelle heure est-il ?");
+      setState("thinking"); dots(true);
+      later(function(){
+        setState("speaking");
+        typeReply("Il est dix-neuf heures. Tout est calme, la batterie tiendra la soirée.", function(){
+          later(function(){ setState("followup");
+            later(function(){ if (state === "followup") toIdle(); }, 5000);
+          }, 400);
+        });
+      }, 1700);
+    }, 1200);
+  }
+
+  document.getElementById("bpress").addEventListener("click", function(){
+    if (state === "idle" || state === "followup" || state === "sleeping"){
+      clearTimers(); hideBulle(); setState("listening");
+    } else if (state === "listening"){
+      clearTimers(); runExchange();
+    } else if (state === "speaking"){
+      clearTimers(); hideBulle(); setState("listening"); // barge-in
+    }
+  });
+  document.getElementById("bsettle").addEventListener("click", function(){
+    if (state === "followup") toIdle();
+  });
+  document.getElementById("bcancel").addEventListener("click", function(){
+    clearTimers(); hideBulle(); setState("idle");
+  });
+  document.getElementById("bdream").addEventListener("click", function(){
+    if (state !== "idle") return;
+    clearTimers(); setState("sleeping");
+    showBulle(true); bheard.hidden = true;
+    typeReply("Je range les souvenirs du jour… deux leçons, une fiche.", function(){
+      later(function(){ if (state === "sleeping") toIdle(); }, 3200);
+    });
+  });
+
+  setState("idle");
+})();
+</script>
