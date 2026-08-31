@@ -19,7 +19,7 @@
 #   jarvis press          the one button: advance the machine
 #   jarvis cancel         back to idle, discard everything in flight
 #   jarvis reset          forget the conversation (new soul applies here)
-#   jarvis ask "text"     text in, spoken reply out
+#   jarvis ask "text"     text in, spoken reply out (--quiet: no voice)
 #   jarvis say "text"     just speak
 #   jarvis state          print the current state
 #   jarvis status         key=value report for the Control Center
@@ -69,6 +69,11 @@ REPLY_TXT="$RUN_DIR/reply.txt"
 MIC_TARGET="${JARVIS_MIC:-effect_output.j493-mic}"
 
 mkdir -p "$RUN_DIR" "$STATE_DIR"
+
+# The written exchange (`ask --quiet`): everything happens — brain,
+# bubble, notification, journal, Control Center banner — except the
+# speakers. For shared offices.
+QUIET=0
 
 log() { printf '%s %s\n' "$(date +%FT%T)" "$*" >>"$LOG"; }
 
@@ -271,6 +276,10 @@ after_speaking() {
 do_speak() {
 	local text="$1" follow="${2:-}" wav="$RUN_DIR/reply.wav" pid
 	[[ -n $text ]] || return 0
+	if ((QUIET)); then
+		[[ $(state) == thinking || $(state) == speaking ]] && set_state idle
+		return 0
+	fi
 	printf '%s' "$text" | "$PIPER" --model "$(voice_for "$text")" --output_file "$wav" 2>>"$LOG" || return 1
 	set_state speaking
 	pw-play "$wav" 2>>"$LOG" &
@@ -287,6 +296,16 @@ do_speak() {
 # state moved off speaking) drops whatever is still in the pipe.
 speak_sentences() {
 	local sentence wav pid n=0 acc=""
+	if ((QUIET)); then
+		while IFS= read -r sentence; do
+			[[ -n ${sentence// /} ]] || continue
+			acc+="${acc:+ }$sentence"
+			mascot reply "$acc"
+			n=$((n + 1))
+		done
+		((n > 0)) && [[ $(state) == thinking ]] && set_state idle
+		return 0
+	fi
 	while IFS= read -r sentence; do
 		[[ -n ${sentence// /} ]] || continue
 		if ((n == 0)); then
@@ -561,6 +580,10 @@ dispatch)
 	;;
 ask)
 	shift
+	if [[ ${1:-} == --quiet ]]; then
+		QUIET=1
+		shift
+	fi
 	run_exchange "$*"
 	;;
 say)
@@ -933,7 +956,7 @@ suggestion)
 	fi
 	;;
 *)
-	echo "usage: jarvis [press|cancel|reset|settle|ask <text>|say <text>|state|status|dispatch [--dir <dir>] <task>|dream [--quiet]|maybe-dream|heartbeat|tick|digest|doctor|rotate|index|note <text>|suggestions|suggestion <n> accept|reject]" >&2
+	echo "usage: jarvis [press|cancel|reset|settle|ask [--quiet] <text>|say <text>|state|status|dispatch [--dir <dir>] <task>|dream [--quiet]|maybe-dream|heartbeat|tick|digest|doctor|rotate|index|note <text>|suggestions|suggestion <n> accept|reject]" >&2
 	exit 1
 	;;
 esac
