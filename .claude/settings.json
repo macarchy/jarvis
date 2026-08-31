@@ -27,7 +27,8 @@
       "Bash(omarchy-jarvis note:*)",
       "Edit(memory/**)",
       "Write(memory/**)",
-      "Bash(timedatectl:*)"
+      "Bash(timedatectl:*)",
+      "WebSearch"
     ],
     "deny": [
       "Bash(omarchy system:*)",
