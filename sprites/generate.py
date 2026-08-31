@@ -58,7 +58,7 @@ PALETTE = {
     "P": (24, 18, 8, 255),       # pupil
     "R": (150, 60, 40, 255),     # mouth interior
     "B": (120, 190, 255, 200),   # sound waves / bubbles, soft blue
-    "b": (120, 190, 255, 120),   # fainter blue
+    "b": (120, 190, 255, 175),  # fainter blue
     ".": (0, 0, 0, 0),           # transparent
     "1": (255, 99, 99, 235),     # confetti red
     "2": (99, 200, 120, 235),    # confetti green
@@ -74,19 +74,23 @@ PALETTE = {
 # Row templates use placeholders replaced per-frame:
 #   E1/E2 rows carry the eye (open, closed, up), M the mouth column.
 
+# v2 art: real forked tail (chevron prongs, open notch), highlight
+# ridge along the back, an O ring hinting the eye socket, a pectoral
+# fin on the flank, and SOLID gill stalks — the Babel fish's signature
+# survives strip_fx and shows in every state, not just listening.
 FISH = [
-    "......b.b...................",
-    ".....KbKbK..................",
+    "......Y.Y...................",
+    ".....KYKYK..................",
     "....K.K.K.K.................",
-    "....KKYYYKKKK...............",
-    "..KKYYYYYYYYYKKK............",
-    ".KYYWWPYYYYYYYYYKK....KK....",
-    "KYYWWWPYYHHYYYYYYYK..KFFK...",
-    "KYWWWWPYYYYYYYYYYYYKKFFFK...",
-    "KRYYYYYYYYYYYYYYYYYFFFFK....",
-    "KRYYYYYYYYYYYYYYYYYFFFK.....",
-    ".KYOOYYYYYYYYYYYYYYFFFFK....",
-    "..KKOOOOYYYYYYYYKKKKFFFK....",
+    "....KKHHHKKKK...............",
+    "..KKHHHYYYYYYKKK............",
+    ".KYOWWPYYYYYYYYYKK....KK....",
+    "KYOWWWPYYHHYYYYYYK..KFFK....",
+    "KYWWWWPOYYYYYYYYYK.KFFK.....",
+    "KRYYYYYYYYYYYYYYKKFFK.......",
+    "KRYYYYYKFFYYYYYYKKFFK.......",
+    ".KYOOYYKFYYYYYYYK.KFFK......",
+    "..KKOOOOYYYYYYKKK..KFFK.....",
     "....KKOOOOOOKKKK.....KK.....",
     "......KKKKKK................",
 ]
@@ -138,17 +142,17 @@ def open_mouth(rows, wide=False):
 
 
 def sway_tail(rows):
-    # Alternate tail fork position by one pixel.
+    # Flutter only the fork's outer tips: the peduncle and mid-prongs
+    # stay put, so the fin flexes without tearing off the body.
     out = []
     for y, row in enumerate(rows):
         row = row[:]
-        if 5 <= y <= 12:
-            tail = row[20:]
-            if y <= 8:
-                tail = ["."] + tail[:-1]
-            else:
-                tail = tail[1:] + ["."]
-            row = row[:20] + tail
+        if y in (5, 6):
+            tail = row[19:]
+            row = row[:19] + ["."] + tail[:-1]
+        elif y in (11, 12):
+            tail = row[19:]
+            row = row[:19] + tail[1:] + ["."]
         out.append(row)
     return out
 
@@ -236,14 +240,13 @@ def half_eyes(rows):
 
 
 def worried_brow(rows):
-    # A thick oblique brow floating just above the eye: unmistakable worry.
-    cols = [x for x, c in enumerate(FISH[5]) if c in "WP"]
-    if cols:
-        x0 = cols[0]
-        rows[3][x0] = "K"
-        rows[3][x0 + 1] = "K"
-        rows[2][x0 + 2] = "K"
-        rows[2][x0 + 3] = "K"
+    # A slanted brow pressing down over the eye — carved into the head
+    # so it reads against the body, not lost in the outline.
+    rows[3][5] = "K"
+    rows[3][6] = "K"
+    rows[4][6] = "K"
+    rows[4][7] = "K"
+    rows[4][8] = "O"
     return rows
 
 
@@ -289,8 +292,8 @@ sleeping = [
 # tired: heavy lids, low in the water, a sweat drop.
 tired_rows = half_eyes([r[:] for r in plain])
 tired = [
-    compose(tired_rows, 2, [(9, 8, "b")]),
-    compose(sway_tail(tired_rows), 3, [(9, 9, "b"), (9, 7, "b")]),
+    compose(tired_rows, 2, [(9, 8, "B")]),
+    compose(sway_tail(tired_rows), 3, [(9, 9, "B"), (9, 7, "b")]),
 ]
 
 # dnd: headphones on, do not disturb — the calm bob with ear cups.
@@ -303,8 +306,8 @@ dnd = [
 # worried: oblique brow, a nervous drop, slight tremble.
 worried_rows = worried_brow([r[:] for r in plain])
 worried = [
-    compose(worried_rows, 0, [(8, 7, "b")]),
-    compose(worried_rows, 1, [(8, 9, "b")]),
+    compose(worried_rows, 0, [(8, 7, "B")]),
+    compose(worried_rows, 1, [(8, 9, "B")]),
 ]
 
 # proud: chest high, eyes closed in contentment, gold sparkles.

@@ -91,6 +91,7 @@ Item {
   property string emote: ""
 
   readonly property var notificationService: shell ? shell.serviceFor("omarchy.notifications") : null
+  readonly property var popupModel: notificationService ? notificationService.popupModel : null
   readonly property bool dnd: notificationService ? notificationService.doNotDisturb : false
   readonly property var batteryDevice: UPower.displayDevice
   readonly property bool batteryLow: batteryDevice
@@ -108,6 +109,58 @@ Item {
     repeat: true
     running: true
     onTriggered: service.hourNow = new Date().getHours()
+  }
+
+  // --------------------------------------------------------- visible life
+  //
+  // A pet that only exists when spoken to is a widget. Every so often an
+  // idle fish takes a little swim along the bottom edge and comes back;
+  // a fresh notification earns a curious glance. Both stand down the
+  // moment the pipeline needs the body.
+  property real swimX: 0
+  property double lastGlance: 0
+
+  SequentialAnimation {
+    id: excursion
+    NumberAnimation { target: service; property: "swimX"; to: -Style.space(150); duration: 4600; easing.type: Easing.InOutSine }
+    PauseAnimation { duration: 1100 }
+    ScriptAction { script: fishMirror.xScale = -1 }
+    PauseAnimation { duration: 350 }
+    NumberAnimation { target: service; property: "swimX"; to: 0; duration: 4600; easing.type: Easing.InOutSine }
+    ScriptAction { script: fishMirror.xScale = 1 }
+  }
+
+  function stopExcursion() {
+    if (!excursion.running && swimX === 0) return
+    excursion.stop()
+    swimX = 0
+    fishMirror.xScale = 1
+  }
+
+  onMoodChanged: if (mood !== "idle") stopExcursion()
+  onShownChanged: if (!shown) stopExcursion()
+
+  Timer {
+    id: excursionClock
+    interval: (10 + Math.random() * 12) * 60 * 1000
+    repeat: true
+    running: service.shown && !service.night
+    onTriggered: {
+      interval = (10 + Math.random() * 12) * 60 * 1000
+      if (service.mood === "idle" && !excursion.running) excursion.start()
+    }
+  }
+
+  Connections {
+    target: service.popupModel
+    ignoreUnknownSignals: true
+    function onCountChanged() {
+      if (!service.popupModel || service.popupModel.count === 0) return
+      var now = Date.now()
+      if (service.mood !== "idle" || now - service.lastGlance < 120000) return
+      service.lastGlance = now
+      service.playEmote("curious")
+    }
   }
 
   readonly property string sprite: mood !== "idle" ? mood
@@ -204,6 +257,11 @@ Item {
 
     // Punctual emotion over the idle body (celebrate, worried, tired, dnd).
     function emote(name: string): void { service.playEmote(String(name)) }
+
+    // A little swim along the bottom edge, on demand (idle only).
+    function swim(): void {
+      if (service.mood === "idle" && !excursion.running) excursion.start()
+    }
     function ping(): string { return "ok" }
   }
 
@@ -331,11 +389,22 @@ Item {
       frameCount: service.sheets[service.sprite][0]
       fps: service.sheets[service.sprite][1]
 
-      // Swim in from below when shown, dive away when hidden.
-      transform: Translate {
-        id: swim
-        y: 0
-      }
+      // The excursion glides him left and back; the mirror turns him
+      // around for the return leg.
+      transform: [
+        Scale {
+          id: fishMirror
+          xScale: 1
+          origin.x: fish.width / 2
+
+          Behavior on xScale { NumberAnimation { duration: 90 } }
+        },
+        Translate {
+          id: swim
+          x: service.swimX
+          y: 0
+        }
+      ]
 
       MouseArea {
         anchors.fill: parent
