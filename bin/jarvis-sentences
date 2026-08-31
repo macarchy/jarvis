@@ -83,6 +83,15 @@ def describe_tool(block):
     return f"{name}: {squash(detail)}"
 
 
+def separate():
+    """Text blocks arrive back to back ("Un instant.RAS"): insert a
+    space between two blocks when the first ends mid-line."""
+    global buf, full
+    if full and not full[-1].isspace():
+        buf += " "
+        full += " "
+
+
 def emit(text):
     text = " ".join(text.split())
     if text and not quiet:
@@ -112,7 +121,13 @@ for line in sys.stdin:
         continue
     kind = ev.get("type")
     if kind == "stream_event":
-        delta = ev.get("event", {}).get("delta", {})
+        event = ev.get("event", {})
+        if event.get("type") == "content_block_start":
+            # A new text block after a tool call: the previous sentence
+            # ended without trailing whitespace, keep the words apart.
+            if event.get("content_block", {}).get("type") == "text":
+                separate()
+        delta = event.get("delta", {})
         if delta.get("type") == "text_delta":
             got_delta = True
             buf += delta.get("text", "")
@@ -128,6 +143,7 @@ for line in sys.stdin:
                     # reply — the FSM reads it from the sidecar.
                     error(block["text"])
                     continue
+                separate()
                 buf += block["text"]
                 full += block["text"]
             elif btype == "tool_use":
