@@ -41,6 +41,9 @@ TRACE = os.path.join(TRACE_DIR, time.strftime("%Y-%m-%d") + ".log")
 # reaches the voice anyway (the soul forbids it).
 BOUNDARY = re.compile(r'[.!?…:]["»)\]]?[ \t]*\n|[.!?…]["»)\]]?[ \t]+')
 
+# The CLI reporting on itself rather than answering — a usage limit.
+LIMIT = re.compile(r"(hit|reached) your .*limit|usage limit|rate limit", re.I)
+
 buf = ""
 full = ""
 got_delta = False
@@ -51,6 +54,14 @@ def trace(line):
     os.makedirs(TRACE_DIR, exist_ok=True)
     with open(TRACE, "a") as f:
         f.write(f"{time.strftime('%H:%M:%S')} {line}\n")
+
+
+def error(text):
+    """A session error is not a reply: it goes to <reply-file>.error for
+    the FSM to classify (quota, lost session…) and never to the voice."""
+    trace(f"✗ session: {squash(text)}")
+    with open(out_path + ".error", "w") as f:
+        f.write(" ".join(str(text).split()))
 
 
 def squash(value, limit=200):
@@ -111,6 +122,12 @@ for line in sys.stdin:
         for block in ev.get("message", {}).get("content", []):
             btype = block.get("type")
             if btype == "text" and not got_delta:
+                if not full and LIMIT.search(block["text"]):
+                    # The CLI's usage notice arrives as a synthetic
+                    # assistant message: a report on the brain, not a
+                    # reply — the FSM reads it from the sidecar.
+                    error(block["text"])
+                    continue
                 buf += block["text"]
                 full += block["text"]
             elif btype == "tool_use":
@@ -133,9 +150,12 @@ for line in sys.stdin:
                 mark = "✗" if block.get("is_error") else "←"
                 trace(f"{mark} [{desc.split(':')[0]}] {squash(body)}")
     elif kind == "result":
-        if ev.get("is_error") or ev.get("subtype", "") != "success":
+        failed = ev.get("is_error") or ev.get("subtype", "") != "success"
+        if failed and not full:
+            error(ev.get("result") or ev.get("subtype") or "erreur de session")
+        elif failed:
             trace(f"✗ session: {squash(ev.get('result') or ev.get('subtype'))}")
-        if not full:
+        elif not full:
             buf = ev.get("result") or ""
             full = buf
 drain(force=True)
