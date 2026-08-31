@@ -1,0 +1,14 @@
+[Unit]
+Description=Jarvis inbox — digest what lands in ~/Jarvis/input
+
+[Path]
+# glob(3) skips dotfiles, so the hidden machinery dirs inside input/
+# (.work, .pending, .archive, .failed) never hold the trigger open —
+# only really dropped files do. digest empties or parks everything it
+# can, and sleeps before exiting when a partial download remains, so
+# the retrigger is a slow poll, never a hot loop.
+PathExistsGlob=%h/Jarvis/input/*
+MakeDirectory=yes
+
+[Install]
+WantedBy=default.target
