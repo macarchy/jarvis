@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# tests/run — the offline test suite. A fake `claude` and no-op desktop
+# shims (tests/bin) let the whole pipeline run in throwaway sandboxes:
+# no quota, no network, no sound. Each test gets a fresh sandbox via
+# the JARVIS_RUN/STATE/MEMORY/BOX overrides in bin/jarvis.
+set -u
+TESTS_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+JARVIS="$TESTS_DIR/../bin/jarvis"
+FIX="$TESTS_DIR/fixtures"
+export PATH="$TESTS_DIR/bin:$PATH"
+pass=0 fail=0 current=""
+
+sandbox() {
+	SB=$(mktemp -d)
+	export JARVIS_RUN="$SB/run" JARVIS_STATE="$SB/state" \
+		JARVIS_MEMORY="$SB/memory" JARVIS_BOX="$SB/box" \
+		FAKE_CLAUDE_LOG="$SB/claude.log"
+	mkdir -p "$JARVIS_RUN" "$JARVIS_STATE" "$JARVIS_MEMORY/knowledge"
+	cp "$TESTS_DIR"/../memory/*_PROMPT.md "$JARVIS_MEMORY/"
+	echo test >"$JARVIS_MEMORY/knowledge/VERSION"
+	: >"$FAKE_CLAUDE_LOG"
+	# a non-idle state keeps digest from trying to speak
+	printf 'thinking' >"$JARVIS_RUN/state"
+}
+
+t() { current="$1"; sandbox; }
+assert() {
+	local desc="$1"
+	shift
+	if "$@" >/dev/null 2>&1; then
+		pass=$((pass + 1))
+	else
+		fail=$((fail + 1))
+		printf '✗ %s — %s\n' "$current" "$desc"
+	fi
+}
+today() { date +%F; }
+journal_has() { grep -q "$1" "$JARVIS_MEMORY/journal/$(today).md"; }
+
+# ---- jarvis-sentences: blocks stay separated across tool calls
+t "sentences: espaces entre blocs"
+out=$(mktemp)
+"$TESTS_DIR/../bin/jarvis-sentences" --quiet "$out.txt" <"$FIX/blocks.jsonl"
+assert "texte complet espacé" test "$(cat "$out.txt")" = "Je fais ma ronde. Un instant. RAS"
+
+# ---- heartbeat
+t "heartbeat: RAS reste silencieux"
+FAKE_CLAUDE_STREAM="$FIX/ras.jsonl" "$JARVIS" heartbeat
+assert "cerveau ok" test "$(cat "$JARVIS_STATE/brain")" = ok
+assert "pas de ligne ronde au journal" bash -c "! grep -q 'ronde :' '$JARVIS_MEMORY/journal/$(today).md' 2>/dev/null"
+
+t "heartbeat: un rapport est journalisé"
+FAKE_CLAUDE_STREAM="$FIX/report.jsonl" "$JARVIS" heartbeat
+assert "journal ronde" journal_has "ronde : Le disque est presque plein."
+
+t "heartbeat: l'avis de quota n'atteint pas la bulle"
+FAKE_CLAUDE_STREAM="$FIX/quota.jsonl" "$JARVIS" heartbeat
+rc=$?
+assert "exit non nul" test "$rc" != 0
+assert "statut quota" bash -c "grep -q '^quota ' '$JARVIS_STATE/brain'"
+assert "journal en français" journal_has "quota atteint"
+assert "pas de ronde journalisée" bash -c "! grep -q 'ronde :' '$JARVIS_MEMORY/journal/$(today).md'"
+
+# ---- digest
+t "digest: succès de bout en bout"
+echo "document" >"$JARVIS_BOX-seed"; mkdir -p "$JARVIS_BOX/input"; mv "$JARVIS_BOX-seed" "$JARVIS_BOX/input/doc.md"
+FAKE_CLAUDE_STREAM="$FIX/digest-ok.jsonl" FAKE_CLAUDE_FICHE=1 "$JARVIS" digest
+assert "fiche écrite" bash -c "ls '$JARVIS_MEMORY/knowledge/inbox/'*-doc.md"
+assert "original archivé" test -e "$JARVIS_BOX/input/.archive/doc.md"
+assert "journal digestion" journal_has "digestion : doc.md"
+assert "index inbox régénéré" bash -c "grep -q 'Fiche de test' '$JARVIS_MEMORY/knowledge/inbox/INDEX.md'"
+assert "confinement demandé" bash -c "grep -q -- '--disallowedTools Bash' '$FAKE_CLAUDE_LOG'"
+
+t "digest: le quota gare sans appeler le cerveau"
+printf 'quota %s' "$(( $(date +%s) + 3600 ))" >"$JARVIS_STATE/brain"
+mkdir -p "$JARVIS_BOX/input"; echo x >"$JARVIS_BOX/input/doc.md"
+"$JARVIS" digest
+assert "fichier en .pending" test -e "$JARVIS_BOX/input/.pending/doc.md"
+assert "compteur à 0" test "$(cat "$JARVIS_BOX/input/.pending/.tries.doc.md")" = 0
+assert "aucun appel cerveau" test ! -s "$FAKE_CLAUDE_LOG"
+
+t "digest: cerveau muet → gare sans compter d'essai"
+mkdir -p "$JARVIS_BOX/input"; echo x >"$JARVIS_BOX/input/doc.md"
+FAKE_CLAUDE_STREAM="$FIX/empty.jsonl" "$JARVIS" digest
+assert "fichier en .pending" test -e "$JARVIS_BOX/input/.pending/doc.md"
+assert "compteur intact" test "$(cat "$JARVIS_BOX/input/.pending/.tries.doc.md")" = 0
+assert "statut down" test "$(cat "$JARVIS_STATE/brain")" = down
+
+t "digest: trois échecs réels → .failed"
+mkdir -p "$JARVIS_BOX/input"; echo x >"$JARVIS_BOX/input/doc.md"
+for _ in 1 2 3; do FAKE_CLAUDE_STREAM="$FIX/digest-error.jsonl" "$JARVIS" digest; done
+assert "fichier en .failed" test -e "$JARVIS_BOX/input/.failed/doc.md"
+assert "échec noté" bash -c "grep -q 'abandonnée après 3 essais' '$JARVIS_MEMORY/FAILURES.md'"
+
+# ---- rotate
+t "rotate: résume et clôt la conversation"
+printf 'test-session-id' >"$JARVIS_STATE/conversation"
+FAKE_CLAUDE_REPLY="Nous avons parlé de la fondue et de la boîte Jarvis." "$JARVIS" rotate
+assert "résumé écrit" bash -c "grep -q 'parlé de la fondue' '$JARVIS_MEMORY/CONVERSATION.md'"
+assert "flag effacé" test ! -e "$JARVIS_STATE/conversation"
+assert "reprise de la bonne session" bash -c "grep -q -- '--resume test-session-id' '$FAKE_CLAUDE_LOG'"
+assert "journal rotation" journal_has "conversation résumée et close"
+
+t "rotate: le quota garde la conversation"
+printf 'test-session-id' >"$JARVIS_STATE/conversation"
+FAKE_CLAUDE_REPLY="You've hit your weekly limit · resets 8pm" "$JARVIS" rotate
+assert "flag conservé" test -e "$JARVIS_STATE/conversation"
+assert "statut quota" bash -c "grep -q '^quota ' '$JARVIS_STATE/brain'"
+
+t "rotate: session perdue → close sans résumé"
+printf 'test-session-id' >"$JARVIS_STATE/conversation"
+FAKE_CLAUDE_REPLY="" "$JARVIS" rotate
+assert "flag effacé" test ! -e "$JARVIS_STATE/conversation"
+assert "journal sans résumé" journal_has "close sans résumé"
+
+# ---- tick
+t "tick: le quota bloque toute autonomie"
+printf 'quota %s' "$(( $(date +%s) + 3600 ))" >"$JARVIS_STATE/brain"
+printf 'idle' >"$JARVIS_RUN/state"
+"$JARVIS" tick
+assert "boîte échafaudée" test -d "$JARVIS_BOX/input/.work"
+assert "aucun appel cerveau" test ! -s "$FAKE_CLAUDE_LOG"
+
+printf '\n%d réussite(s), %d échec(s)\n' "$pass" "$fail"
+exit "$((fail > 0))"

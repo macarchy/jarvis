@@ -16,7 +16,8 @@ import subprocess
 import sys
 
 JARVIS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-KNOWLEDGE = os.path.join(JARVIS_DIR, "memory", "knowledge")
+MEMORY = os.environ.get("JARVIS_MEMORY") or os.path.join(JARVIS_DIR, "memory")
+KNOWLEDGE = os.path.join(MEMORY, "knowledge")
 
 
 def run(cmd):
@@ -81,7 +82,43 @@ def plugin_page():
     return len(plugins), ["- `shell-plugins.md` — cibles IPC du shell"]
 
 
+def inbox_index():
+    """Deterministic index of the digested-document fiches: front-matter
+    (source, date, tags) plus first heading, one line each. Fiches
+    without front-matter (merge stubs left by dreams) are skipped."""
+    inbox = os.path.join(KNOWLEDGE, "inbox")
+    rows = []
+    for name in sorted(os.listdir(inbox) if os.path.isdir(inbox) else []):
+        if not name.endswith(".md") or name == "INDEX.md":
+            continue
+        try:
+            text = open(os.path.join(inbox, name)).read()
+        except OSError:
+            continue
+        if not text.startswith("---"):
+            continue
+        head, _, body = text[3:].partition("---")
+        meta = {}
+        for line in head.splitlines():
+            key, sep, value = line.partition(":")
+            if sep:
+                meta[key.strip()] = value.strip()
+        title = next((l[2:].strip() for l in body.splitlines()
+                      if l.startswith("# ")), name)
+        rows.append(f"- `{name}` — {title} ({meta.get('date', '?')} ; "
+                    f"{meta.get('source', '?')} ; tags : {meta.get('tags', '-')})")
+    write(os.path.join(inbox, "INDEX.md"), "\n".join(
+        ["# Inbox — documents confiés", "",
+         "Fiches issues des dépôts dans ~/Jarvis/input (une par document).",
+         "Régénéré par `jarvis-index --inbox` ; cherche par tag ou source.",
+         ""] + (rows or ["(aucun document digéré pour l'instant)"])) + "\n")
+    return len(rows)
+
+
 def main():
+    if "--inbox" in sys.argv[1:]:
+        print(f"inbox : {inbox_index()} fiche(s)")
+        return
     version = run(["omarchy", "version"]).strip() or "inconnue"
     command_count, toc = command_pages()
     plugin_count, plugin_toc = plugin_page()
@@ -93,8 +130,9 @@ def main():
          "sujet (`grep -ril <mot> memory/knowledge/`), puis lis le fichier",
          "du groupe touché.", ""] + toc + plugin_toc) + "\n")
 
+    fiches = inbox_index()
     print(f"index : {command_count} commandes, {plugin_count} plugins, "
-          f"version {version}")
+          f"{fiches} fiche(s) inbox, version {version}")
 
 
 if __name__ == "__main__":

@@ -20,8 +20,13 @@ Tu es en phase de rêve : tu consolides ta mémoire. Fais exactement ceci :
 5. Pour tout ce qui demande un changement hors de ta mémoire (permission
    manquante, commande à ajouter au contrat, bug de la pipeline), ajoute
    une entrée datée à memory/SUGGESTIONS.md. Ne l'applique pas toi-même.
-6. Réécris memory/FAILURES.md en ne gardant que l'en-tête (les entrées
+6. Jardin des documents confiés : si memory/knowledge/inbox/ contient
+   plus de dix fiches, fusionne les redondantes — enrichis la fiche la
+   plus complète, puis remplace ENTIÈREMENT chaque doublon par la seule
+   ligne « fusionnée : <fiche gardée>.md » (sans front-matter : l'index
+   l'ignorera). Ne touche à rien d'autre ; l'index se régénère tout seul.
+7. Réécris memory/FAILURES.md en ne gardant que l'en-tête (les entrées
    traitées disparaissent — les leçons les remplacent).
-7. Ta sortie finale : UNE phrase courte en français, parlée à voix haute,
+8. Ta sortie finale : UNE phrase courte en français, parlée à voix haute,
    qui résume le rêve (« J'ai retenu deux leçons cette nuit. »). Aucun
    markdown, aucune énumération.
