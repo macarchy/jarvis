@@ -92,6 +92,15 @@ for _ in 1 2 3; do FAKE_CLAUDE_STREAM="$FIX/digest-error.jsonl" "$JARVIS" digest
 assert "fichier en .failed" test -e "$JARVIS_BOX/input/.failed/doc.md"
 assert "échec noté" bash -c "grep -q 'abandonnée après 3 essais' '$JARVIS_MEMORY/FAILURES.md'"
 
+# ---- ask --quiet
+t "ask --quiet: répond sans voix"
+printf 'idle' >"$JARVIS_RUN/state"
+FAKE_CLAUDE_STREAM="$FIX/digest-ok.jsonl" "$JARVIS" ask --quiet "test écrit"
+assert "réponse enregistrée" test "$(cat "$JARVIS_RUN/last-reply")" = "J'ai retenu la fondue."
+assert "état revenu à idle" test "$(cat "$JARVIS_RUN/state")" = idle
+assert "échange journalisé" journal_has "échange : « test écrit »"
+assert "aucun wav synthétisé" bash -c "! ls '$JARVIS_RUN/'reply*.wav 2>/dev/null"
+
 # ---- rotate
 t "rotate: résume et clôt la conversation"
 printf 'test-session-id' >"$JARVIS_STATE/conversation"
