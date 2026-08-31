@@ -25,6 +25,8 @@
 #   jarvis status         key=value report for the Control Center
 #   jarvis suggestions    the dreams' proposals; `suggestion <n> accept|reject`
 #   jarvis digest         turn ~/Jarvis/input drops into memory fiches
+#   jarvis doctor         deterministic self-check of every dependency
+#   jarvis rotate         summarize and close a stale conversation
 #
 # The persona is CLAUDE.md (operational) + SOUL.md (identity, editable from
 # the Control Center); both live next to this script's parent directory.
@@ -32,8 +34,10 @@
 set -uo pipefail
 
 JARVIS_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-RUN_DIR="${XDG_RUNTIME_DIR:-/tmp}/jarvis"
-STATE_DIR="$HOME/.local/state/jarvis"
+# JARVIS_RUN/STATE/MEMORY override the real locations — that is what
+# lets tests/run exercise the whole pipeline in a sandbox.
+RUN_DIR="${JARVIS_RUN:-${XDG_RUNTIME_DIR:-/tmp}/jarvis}"
+STATE_DIR="${JARVIS_STATE:-$HOME/.local/state/jarvis}"
 LOG="$STATE_DIR/jarvis.log"
 WAV="$RUN_DIR/utterance.wav"
 RECORD_PID="$RUN_DIR/record.pid"
@@ -41,7 +45,7 @@ PLAY_PID="$RUN_DIR/play.pid"
 STATE_FILE="$RUN_DIR/state"
 CONV_FLAG="$STATE_DIR/conversation"
 LAST_ASK="$RUN_DIR/last-ask"
-MEMORY_DIR="$JARVIS_DIR/memory"
+MEMORY_DIR="${JARVIS_MEMORY:-$JARVIS_DIR/memory}"
 FAILURES="$MEMORY_DIR/FAILURES.md"
 SUGGESTIONS="$MEMORY_DIR/SUGGESTIONS.md"
 LAST_REPLY="$RUN_DIR/last-reply"
@@ -679,6 +683,7 @@ digest)
 		exit 0
 	fi
 	mkdir -p "$MEMORY_DIR/knowledge/inbox"
+	digested=0
 	for f in "${claimed[@]}"; do
 		base=$(basename "$f")
 		# Quota can land mid-batch: park the rest without burning tries.
@@ -723,6 +728,7 @@ digest)
 			log "digest: $base -> $fiche"
 			journal "digestion : $base → knowledge/inbox/$(basename "$fiche")"
 			trace "✓ digéré : $base → $(basename "$fiche")"
+			digested=1
 			mascot emote curious
 			notify "Jarvis — document digéré" "${summary:-$base}"
 			[[ $(state) == idle ]] && ! quiet_now && "$0" say "$summary"
@@ -744,6 +750,7 @@ digest)
 			printf '%s' "${tries[$base]}" >"$inbox/.pending/.tries.$base"
 		fi
 	done
+	((digested)) && "$JARVIS_DIR/bin/jarvis-index" --inbox >/dev/null 2>&1
 	;;
 index)
 	# Rebuild the knowledge base from live introspection (deterministic).
@@ -758,6 +765,7 @@ tick)
 	# after an
 	# omarchy update the knowledge base is stale — reindex, no LLM needed.
 	box_init
+	"$JARVIS_DIR/bin/jarvis-index" --inbox >/dev/null 2>&1
 	if [[ "$(omarchy version 2>/dev/null)" != "$(cat "$MEMORY_DIR/knowledge/VERSION" 2>/dev/null)" ]]; then
 		"$0" index
 	fi
@@ -770,6 +778,11 @@ tick)
 	# Documents parked in the inbox while the brain was out: retry now.
 	if [[ -n $(find "$BOX_DIR/input/.pending" -maxdepth 1 -type f ! -name '.*' -print -quit 2>/dev/null) ]]; then
 		"$0" digest
+	fi
+	# A conversation untouched for eight hours is over: consolidate
+	# and close it — a night's sleep rotates every morning.
+	if [[ -e $CONV_FLAG && -z $(find "$CONV_FLAG" -mmin -480 2>/dev/null) ]]; then
+		"$0" rotate
 	fi
 	# Then: nap first if there is memory to digest, otherwise consider a
 	# round. Each branch keeps its own guards; the soul can switch either off.
@@ -792,6 +805,72 @@ maybe-dream)
 	[[ -e $LAST_ASK && -n $(find "$LAST_ASK" -mmin -10 2>/dev/null) ]] && exit 0
 	[[ -e $STATE_DIR/last-dream && -n $(find "$STATE_DIR/last-dream" -mmin -30 2>/dev/null) ]] && exit 0
 	exec "$0" dream --quiet
+	;;
+rotate)
+	# Close a stale conversation: ask the session itself for the summary
+	# (it holds the context), keep it in memory/CONVERSATION.md (imported
+	# by CLAUDE.md), then clear the flag so the next exchange starts
+	# fresh — morning amnesia without forgetting. tick triggers this
+	# when the conversation has been untouched for eight hours.
+	id=$(cat "$CONV_FLAG" 2>/dev/null)
+	[[ -n $id ]] || exit 0
+	cd "$JARVIS_DIR" || exit 1
+	trace "— rotation de conversation —"
+	summary=$(claude -p --resume "$id" --model "${JARVIS_ROTATE_MODEL:-sonnet}" \
+		-- "Notre conversation va être clôturée. Écris un résumé de cinq à dix lignes de ce fil pour ton futur toi : sujets abordés, préférences et faits durables exprimés par l'utilisateur, affaires en cours. Texte brut, sans markdown ni préambule." 2>>"$LOG")
+	if ! brain_check "$summary"; then
+		# Quota: keep the flag, tick retries once the brain is back.
+		# Anything else means the session is unreachable — close it
+		# without a summary rather than retrying forever.
+		[[ $(brain_status) == quota* ]] && exit 1
+		rm -f "$CONV_FLAG"
+		journal "conversation close sans résumé (session injoignable)"
+		trace "✗ rotation : session injoignable, conversation close"
+		exit 1
+	fi
+	{
+		printf '# CONVERSATION.md — le fil récent\n\n'
+		printf '<!-- Écrit par `omarchy-jarvis rotate` : le résumé de la dernière\n     conversation close, importé dans CLAUDE.md. -->\n\n'
+		printf 'Résumé du %s :\n\n%s\n' "$(date '+%F %H:%M')" "$summary"
+	} >"$MEMORY_DIR/CONVERSATION.md"
+	rm -f "$CONV_FLAG"
+	log "rotate: conversation closed"
+	journal "conversation résumée et close (rotation)"
+	trace "✓ conversation résumée et close"
+	;;
+doctor)
+	# The deterministic self-check: every dependency of the pipeline,
+	# green or red, no LLM involved. Exit code = number of problems.
+	fails=0
+	chk() {
+		local label="$1"
+		shift
+		if "$@" >/dev/null 2>&1; then
+			printf '✓ %s\n' "$label"
+		else
+			printf '✗ %s\n' "$label"
+			fails=$((fails + 1))
+		fi
+	}
+	chk "claude (le cerveau)" command -v claude
+	chk "voxtype (l'oreille)" command -v voxtype
+	chk "pw-record" command -v pw-record
+	chk "pw-play" command -v pw-play
+	chk "piper (la voix)" test -x "$PIPER"
+	chk "voix française" test -f "$VOICE_FR"
+	chk "voix anglaise" test -f "$VOICE_EN"
+	chk "micro ($MIC_TARGET)" bash -c "pactl list sources short 2>/dev/null | grep -q '$MIC_TARGET'"
+	chk "daemon wake (hey Jarvis)" wake_alive
+	chk "unité jarvis-inbox.path" systemctl --user --quiet is-active jarvis-inbox.path
+	chk "boîte $BOX_DIR" test -d "$BOX_DIR/input/.work"
+	chk "symlink memory" test "$(readlink -f "$BOX_DIR/memory" 2>/dev/null)" = "$(readlink -f "$MEMORY_DIR")"
+	chk "settings.json valide" python3 -c "import json;json.load(open('$JARVIS_DIR/.claude/settings.json'))"
+	chk "prompts (ronde, rêve, digestion)" bash -c "test -f '$MEMORY_DIR/HEARTBEAT_PROMPT.md' -a -f '$MEMORY_DIR/DREAM_PROMPT.md' -a -f '$MEMORY_DIR/DIGEST_PROMPT.md'"
+	chk "connaissance à jour (omarchy)" test "$(omarchy version 2>/dev/null)" = "$(cat "$MEMORY_DIR/knowledge/VERSION" 2>/dev/null)"
+	printf 'ℹ cerveau : %s — conversation : %s — état : %s\n' \
+		"$(brain_status)" "$([[ -e $CONV_FLAG ]] && echo "ouverte ($((($(date +%s) - $(stat -c %Y "$CONV_FLAG")) / 60)) min)" || echo fermée)" "$(state)"
+	((fails)) && printf '%s problème(s).\n' "$fails"
+	exit "$fails"
 	;;
 state)
 	state
@@ -854,7 +933,7 @@ suggestion)
 	fi
 	;;
 *)
-	echo "usage: jarvis [press|cancel|reset|settle|ask <text>|say <text>|state|status|dispatch [--dir <dir>] <task>|dream [--quiet]|maybe-dream|heartbeat|tick|digest|index|note <text>|suggestions|suggestion <n> accept|reject]" >&2
+	echo "usage: jarvis [press|cancel|reset|settle|ask <text>|say <text>|state|status|dispatch [--dir <dir>] <task>|dream [--quiet]|maybe-dream|heartbeat|tick|digest|doctor|rotate|index|note <text>|suggestions|suggestion <n> accept|reject]" >&2
 	exit 1
 	;;
 esac

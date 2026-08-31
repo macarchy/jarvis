@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# The fake brain. Records its argv, then plays the part set by env:
+#   FAKE_CLAUDE_STREAM=<file>  cat this stream-json fixture to stdout
+#   FAKE_CLAUDE_REPLY=<text>   print this plain reply
+#   FAKE_CLAUDE_FICHE=1        write the fiche named by the digest prompt
+#   FAKE_CLAUDE_EXIT=<code>    exit status (default 0)
+printf '%s\n' "$*" >>"${FAKE_CLAUDE_LOG:-/dev/null}"
+if [[ ${FAKE_CLAUDE_FICHE:-} == 1 && $# -gt 0 ]]; then
+	fiche=$(printf '%s' "${@: -1}" | sed -n 's/^Fiche : //p' | tail -1)
+	if [[ -n $fiche ]]; then
+		mkdir -p "$(dirname "$fiche")"
+		printf -- '---\nsource: test\ndate: 2026-08-31\ntags: test\n---\n\n# Fiche de test\n\ncontenu.\n' >"$fiche"
+	fi
+fi
+[[ -n ${FAKE_CLAUDE_STREAM:-} ]] && cat "$FAKE_CLAUDE_STREAM"
+[[ -n ${FAKE_CLAUDE_REPLY:-} ]] && printf '%s' "$FAKE_CLAUDE_REPLY"
+exit "${FAKE_CLAUDE_EXIT:-0}"
