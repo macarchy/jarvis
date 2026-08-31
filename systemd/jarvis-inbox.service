@@ -1,0 +1,9 @@
+[Unit]
+Description=Jarvis inbox digestion
+
+[Service]
+Type=oneshot
+# User units do not inherit the session PATH: rebuild the parts
+# digestion needs (mise-installed claude, omarchy bins).
+Environment=PATH=%h/.local/share/mise/installs/claude/latest:%h/.local/bin:%h/.local/share/mise/shims:/usr/share/omarchy/bin:/usr/local/bin:/usr/bin
+ExecStart=%h/Work/jarvis/bin/jarvis digest

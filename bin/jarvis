@@ -24,6 +24,7 @@
 #   jarvis state          print the current state
 #   jarvis status         key=value report for the Control Center
 #   jarvis suggestions    the dreams' proposals; `suggestion <n> accept|reject`
+#   jarvis digest         turn ~/Jarvis/input drops into memory fiches
 #
 # The persona is CLAUDE.md (operational) + SOUL.md (identity, editable from
 # the Control Center); both live next to this script's parent directory.
@@ -47,6 +48,11 @@ LAST_REPLY="$RUN_DIR/last-reply"
 # One line: `ok`, `quota <until-epoch>`, `blocked` or `down` — what the
 # last answer from the brain told us about the brain itself.
 BRAIN_STATUS="$STATE_DIR/brain"
+# The exchange box: the file contract between the user and Jarvis —
+# drop a document in input/, it becomes memory; todo/TODO.md is edited
+# by voice; output/ receives requested extractions. JARVIS_BOX overrides
+# for tests.
+BOX_DIR="${JARVIS_BOX:-$HOME/Jarvis}"
 
 PIPER="$JARVIS_DIR/piper/piper"
 VOICE_FR="$JARVIS_DIR/models/fr_FR-tom-medium.onnx"
@@ -182,6 +188,18 @@ brain_excuse() {
 	quota\ *) echo "Mon cerveau a atteint son quota. Retour vers $(date -d "@$(brain_status | cut -d' ' -f2)" +%-H) heures." ;;
 	*) echo "Je n'ai pas pu joindre mon cerveau. Voyez le journal." ;;
 	esac
+}
+
+# Idempotent scaffold for ~/Jarvis. The hidden dirs under input/ are the
+# digestion machinery: .work (claimed), .pending (waiting on the brain),
+# .archive (digested originals), .failed (given up). memory is a symlink
+# so everything of Jarvis lives in one place.
+box_init() {
+	mkdir -p "$BOX_DIR/input/.work" "$BOX_DIR/input/.pending" \
+		"$BOX_DIR/input/.archive" "$BOX_DIR/input/.failed" \
+		"$BOX_DIR/todo" "$BOX_DIR/output"
+	[[ -e $BOX_DIR/memory ]] || ln -s "$MEMORY_DIR" "$BOX_DIR/memory"
+	[[ -e $BOX_DIR/todo/TODO.md ]] || printf '# TODO\n\n' >"$BOX_DIR/todo/TODO.md"
 }
 
 # ------------------------------------------------------------ the machine
@@ -606,6 +624,127 @@ heartbeat)
 		notify "Jarvis — ronde" "$report"
 	fi
 	;;
+digest)
+	# The inbox: a file dropped in ~/Jarvis/input becomes a fiche in
+	# memory/knowledge/inbox/. Claim first — moving files out of input/
+	# is what keeps the systemd path unit (PathExistsGlob) quiet — then
+	# one CONTAINED session per file: a dropped document is untrusted
+	# input, so its session gets no Bash and can only read, and write
+	# its fiche. Quota parks files in .pending/ (tick retries them);
+	# three real failures give up into .failed/.
+	exec 9>"$RUN_DIR/digest.lock"
+	flock -n 9 || exit 0
+	box_init
+	inbox="$BOX_DIR/input"
+	declare -A tries=()
+	claimed=()
+	leftover=0
+	shopt -s nullglob
+	# Orphans of a crashed run first (the lock makes adopting them safe).
+	for f in "$inbox/.work"/*; do
+		[[ -f $f ]] || continue
+		claimed+=("$f")
+		tries[$(basename "$f")]=0
+	done
+	# Fresh drops. A file still being copied (moving size, or a
+	# downloader's .part) stays put; we exit slowly so the path unit
+	# polls instead of spinning.
+	for f in "$inbox"/*; do
+		[[ -f $f ]] || continue
+		base=$(basename "$f")
+		case "$base" in *.part | *.crdownload) leftover=1; continue ;; esac
+		size=$(stat -c %s "$f" 2>/dev/null) || continue
+		sleep 2
+		[[ $(stat -c %s "$f" 2>/dev/null) == "$size" ]] || { leftover=1; continue; }
+		mv "$f" "$inbox/.work/$base" 2>/dev/null || { leftover=1; continue; }
+		claimed+=("$inbox/.work/$base")
+		tries[$base]=0
+	done
+	# Parked retries, unless the brain is still out of quota.
+	gate=0
+	case "$(brain_status)" in quota\ *) gate=$(brain_status | cut -d' ' -f2) ;; esac
+	if (($(date +%s) >= gate)); then
+		for f in "$inbox/.pending"/*; do
+			[[ -f $f ]] || continue
+			base=$(basename "$f")
+			mv "$f" "$inbox/.work/$base" 2>/dev/null || continue
+			tries[$base]=$(cat "$inbox/.pending/.tries.$base" 2>/dev/null || echo 0)
+			rm -f "$inbox/.pending/.tries.$base"
+			claimed+=("$inbox/.work/$base")
+		done
+	fi
+	shopt -u nullglob
+	if ((${#claimed[@]} == 0)); then
+		((leftover)) && sleep 28
+		exit 0
+	fi
+	mkdir -p "$MEMORY_DIR/knowledge/inbox"
+	for f in "${claimed[@]}"; do
+		base=$(basename "$f")
+		# Quota can land mid-batch: park the rest without burning tries.
+		gate=0
+		case "$(brain_status)" in quota\ *) gate=$(brain_status | cut -d' ' -f2) ;; esac
+		if (($(date +%s) < gate)); then
+			mv "$f" "$inbox/.pending/$base"
+			printf '%s' "${tries[$base]}" >"$inbox/.pending/.tries.$base"
+			continue
+		fi
+		slug=$(printf '%s' "${base%.*}" | iconv -f utf-8 -t ascii//TRANSLIT 2>/dev/null |
+			tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]\{1,\}/-/g; s/^-//; s/-$//' | cut -c1-48)
+		fiche="$MEMORY_DIR/knowledge/inbox/$(date +%F)-${slug:-document}.md"
+		n=2
+		while [[ -e $fiche ]]; do
+			fiche="$MEMORY_DIR/knowledge/inbox/$(date +%F)-${slug:-document}-$n.md"
+			n=$((n + 1))
+		done
+		# A .url file (or a lone URL) may fetch its page; nothing else may.
+		extra=()
+		if [[ $base == *.url ]] || { (($(wc -c <"$f") < 500)) && [[ $(grep -c . "$f") == 1 ]] && grep -qE '^[[:space:]]*https?://[^[:space:]]+[[:space:]]*$' "$f"; }; then
+			extra=(--allowedTools WebFetch)
+		fi
+		trace "— digestion : $base —"
+		cd "$JARVIS_DIR" || exit 1
+		rm -f "$RUN_DIR/digest.txt" "$RUN_DIR/digest.txt.error"
+		claude -p --model "${JARVIS_DIGEST_MODEL:-sonnet}" \
+			--disallowedTools Bash Edit NotebookEdit Task WebSearch "${extra[@]}" \
+			--output-format stream-json --include-partial-messages --verbose \
+			-- "$(cat "$MEMORY_DIR/DIGEST_PROMPT.md")"$'\n\n'"Fichier : $f"$'\n'"Fiche : $fiche" 2>>"$LOG" |
+			"$JARVIS_DIR/bin/jarvis-sentences" --quiet "$RUN_DIR/digest.txt"
+		summary=$(cat "$RUN_DIR/digest.txt" 2>/dev/null)
+		if brain_check "${summary:-$(cat "$RUN_DIR/digest.txt.error" 2>/dev/null)}"; then
+			brain_ok=1
+		else
+			brain_ok=0
+		fi
+		if ((brain_ok)) && [[ -s $fiche ]]; then
+			dest="$inbox/.archive/$base"
+			[[ -e $dest ]] && dest="$inbox/.archive/$(date +%s)-$base"
+			mv "$f" "$dest"
+			log "digest: $base -> $fiche"
+			journal "digestion : $base → knowledge/inbox/$(basename "$fiche")"
+			trace "✓ digéré : $base → $(basename "$fiche")"
+			mascot emote curious
+			notify "Jarvis — document digéré" "${summary:-$base}"
+			[[ $(state) == idle ]] && ! quiet_now && "$0" say "$summary"
+		elif ((brain_ok)); then
+			# The brain answered but produced no fiche: the file's fault.
+			t=$((${tries[$base]} + 1))
+			if ((t >= 3)); then
+				mv "$f" "$inbox/.failed/$base"
+				note_failure "digestion abandonnée après $t essais : $base"
+				notify "Jarvis" "Impossible de digérer $base — voyez ~/Jarvis/input/.failed."
+			else
+				mv "$f" "$inbox/.pending/$base"
+				printf '%s' "$t" >"$inbox/.pending/.tries.$base"
+			fi
+		else
+			# The brain reported on itself (brain_set already told the
+			# user): park unchanged, tick will retry.
+			mv "$f" "$inbox/.pending/$base"
+			printf '%s' "${tries[$base]}" >"$inbox/.pending/.tries.$base"
+		fi
+	done
+	;;
 index)
 	# Rebuild the knowledge base from live introspection (deterministic).
 	out=$("$JARVIS_DIR/bin/jarvis-index" 2>>"$LOG")
@@ -614,8 +753,11 @@ index)
 	notify "Jarvis" "$out"
 	;;
 tick)
-	# The mascot's idle pulse. First the mechanical upkeep: after an
+	# The mascot's idle pulse. The exchange box first (MakeDirectory
+	# cannot create the parent of a glob), then the mechanical upkeep:
+	# after an
 	# omarchy update the knowledge base is stale — reindex, no LLM needed.
+	box_init
 	if [[ "$(omarchy version 2>/dev/null)" != "$(cat "$MEMORY_DIR/knowledge/VERSION" 2>/dev/null)" ]]; then
 		"$0" index
 	fi
@@ -625,6 +767,10 @@ tick)
 	case "$(brain_status)" in
 	quota\ *) (($(date +%s) < $(brain_status | cut -d' ' -f2))) && exit 0 ;;
 	esac
+	# Documents parked in the inbox while the brain was out: retry now.
+	if [[ -n $(find "$BOX_DIR/input/.pending" -maxdepth 1 -type f ! -name '.*' -print -quit 2>/dev/null) ]]; then
+		"$0" digest
+	fi
 	# Then: nap first if there is memory to digest, otherwise consider a
 	# round. Each branch keeps its own guards; the soul can switch either off.
 	[[ $(setting reves oui) == non ]] || "$0" maybe-dream
@@ -708,7 +854,7 @@ suggestion)
 	fi
 	;;
 *)
-	echo "usage: jarvis [press|cancel|reset|settle|ask <text>|say <text>|state|status|dispatch [--dir <dir>] <task>|dream [--quiet]|maybe-dream|heartbeat|tick|index|note <text>|suggestions|suggestion <n> accept|reject]" >&2
+	echo "usage: jarvis [press|cancel|reset|settle|ask <text>|say <text>|state|status|dispatch [--dir <dir>] <task>|dream [--quiet]|maybe-dream|heartbeat|tick|digest|index|note <text>|suggestions|suggestion <n> accept|reject]" >&2
 	exit 1
 	;;
 esac

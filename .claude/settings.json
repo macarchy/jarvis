@@ -28,7 +28,10 @@
       "Edit(memory/**)",
       "Write(memory/**)",
       "Bash(timedatectl:*)",
-      "WebSearch"
+      "WebSearch",
+      "Read(~/Jarvis/**)",
+      "Edit(~/Jarvis/todo/**)",
+      "Edit(~/Jarvis/output/**)"
     ],
     "deny": [
       "Bash(omarchy system:*)",
