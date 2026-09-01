@@ -28,6 +28,9 @@
 #   jarvis doctor         deterministic self-check of every dependency
 #   jarvis rotate         summarize and close a stale conversation
 #   jarvis look [random]  regenerate the mascot from the soul's look settings
+#   jarvis lastcmd/missed his senses: the last shell command, missed notifications
+#   jarvis save           « enregistre ça » — the clipboard into ~/Jarvis/input
+#   jarvis greet          the unlock hello: a bubble with what happened meanwhile
 #
 # The persona is CLAUDE.md (operational) + SOUL.md (identity, editable from
 # the Control Center); both live next to this script's parent directory.
@@ -239,6 +242,8 @@ set_state() {
 	[[ $1 == transcribing ]] && sprite=thinking
 	[[ $1 == followup ]] && sprite=listening
 	mascot setState "$sprite"
+	# The Touch Bar key wears the state too (omarchy-dfr renders it on USR1).
+	pid=$(cat "${XDG_RUNTIME_DIR:-/tmp}/omarchy-dfr/daemon.pid" 2>/dev/null) && kill -USR1 "$pid" 2>/dev/null
 	log "state: $1"
 }
 
@@ -793,6 +798,82 @@ digest)
 	done
 	((digested)) && "$JARVIS_DIR/bin/jarvis-index" --inbox >/dev/null 2>&1
 	;;
+lastcmd)
+	# The last finished shell command, straight from atuin's database
+	# (its CLI needs a session it does not have here): one line the
+	# brain can read — command, exit code, duration, when.
+	sqlite3 -separator $'\t' "$HOME/.local/share/atuin/history.db" \
+		"select command, exit, duration, timestamp from history order by timestamp desc limit 1" 2>/dev/null |
+		awk -F'\t' '{ d = $3 / 1e9; code = ($2 < 0 ? "inconnu (encore en cours ?)" : $2); printf "commande : %s\ncode de sortie : %s\ndurée : %.1f s\nil y a : %d min\n", $1, code, d, (systime() - $4 / 1e9) / 60 }'
+	;;
+missed)
+	# Notifications since the last exchange (or the last N minutes):
+	# the notification-center's archive, one line each, newest last.
+	since=$(stat -c %Y "$LAST_ASK" 2>/dev/null || echo 0)
+	[[ ${2:-} =~ ^[0-9]+$ ]] && since=$(($(date +%s) - $2 * 60))
+	python3 - "$since" "$HOME/.local/state/omarchy/notification-center/archive" <<'EOF'
+import json, os, sys, time
+since, d = int(sys.argv[1]) * 1000, sys.argv[2]
+rows = []
+for name in (os.listdir(d) if os.path.isdir(d) else []):
+    try:
+        n = json.load(open(os.path.join(d, name)))
+    except Exception:
+        continue
+    if n.get("timestamp", 0) >= since:
+        rows.append(n)
+rows.sort(key=lambda n: n.get("timestamp", 0))
+for n in rows:
+    t = time.strftime("%H:%M", time.localtime(n["timestamp"] / 1000))
+    body = " ".join(str(n.get("body", "")).split())[:120]
+    print(f"{t} {n.get('app', '?')} — {n.get('summary', '')}" + (f" : {body}" if body else ""))
+print(f"({len(rows)} notification(s))" if rows else "(rien de nouveau)")
+EOF
+	;;
+save)
+	# « Enregistre ça » : the clipboard into the inbox — a lone URL as a
+	# .url (WebFetch digests the page), an image as a .png, text as .md.
+	box_init
+	stamp=$(date +%Y%m%d-%H%M%S)
+	if wl-paste --list-types 2>/dev/null | grep -q '^image/png'; then
+		wl-paste --type image/png >"$BOX_DIR/input/capture-$stamp.png"
+		what="l'image"
+	else
+		text=$(wl-paste --no-newline 2>/dev/null)
+		if [[ -z ${text// /} ]]; then
+			notify "Jarvis" "Le presse-papier est vide."
+			exit 1
+		fi
+		if [[ $text =~ ^https?://[^[:space:]]+$ ]]; then
+			printf '%s\n' "$text" >"$BOX_DIR/input/lien-$stamp.url"
+			what="le lien"
+		else
+			printf '%s\n' "$text" >"$BOX_DIR/input/note-$stamp.md"
+			what="le texte"
+		fi
+	fi
+	log "save: $what"
+	mascot emote curious
+	notify "Jarvis" "Je digère $what."
+	;;
+greet)
+	# The unlock hello: a bubble (never the voice) with what happened
+	# while the user was away — rounds, dreams, digestions, missions,
+	# the closed conversation — at most once per half hour, and only
+	# if there is something to tell.
+	stamp="$STATE_DIR/last-greet"
+	[[ -e $stamp && -n $(find "$stamp" -mmin -30 2>/dev/null) ]] && exit 0
+	since=$(stat -c %Y "$LAST_ASK" 2>/dev/null || echo 0)
+	[[ -e $stamp ]] && (($(stat -c %Y "$stamp") > since)) && since=$(stat -c %Y "$stamp")
+	touch "$stamp"
+	lines=$(awk -v since="$(date -d "@$since" +%H:%M)" -v today="$(date +%F)" '
+		/^- [0-9][0-9]:[0-9][0-9] / { t = $2; sub(/^- [0-9:]+ /, ""); if (t >= since && $0 ~ /^(ronde|rêve|digestion|mission terminée|conversation)/) print }
+	' "$MEMORY_DIR/journal/$(date +%F).md" 2>/dev/null | tail -4)
+	[[ -n $lines ]] || exit 0
+	summary=$(printf '%s' "$lines" | sed 's/^[a-zé ]* : //' | awk '{ printf "%s%s", (NR > 1 ? " " : ""), $0 }' | cut -c1-240)
+	mascot reply "Pendant ton absence : $summary"
+	log "greet: $summary"
+	;;
 look)
 	# The fish's appearance: regenerate the mascot's sprite sheets from
 	# the soul's look settings (corps, oeil, criniere, queue, couleur)
@@ -839,6 +920,20 @@ tick)
 	case "$(brain_status)" in
 	quota\ *) (($(date +%s) < $(brain_status | cut -d' ' -f2))) && exit 0 ;;
 	esac
+	# The body tells the truth, without the brain: a nearly full disk
+	# worries him (once a day), available updates make him curious (the
+	# check fetches, so at most every six hours, in the background).
+	stamp="$STATE_DIR/emote-disk"
+	if (($(df --output=pcent / 2>/dev/null | tail -1 | tr -dc 0-9) >= 90)) && [[ ! -e $stamp || -z $(find "$stamp" -mmin -1440 2>/dev/null) ]]; then
+		touch "$stamp"
+		mascot emote worried
+		notify "Jarvis" "Le disque est presque plein."
+	fi
+	stamp="$STATE_DIR/emote-updates"
+	if [[ ! -e $stamp || -z $(find "$stamp" -mmin -360 2>/dev/null) ]]; then
+		touch "$stamp"
+		(omarchy-update-available >/dev/null 2>&1 && mascot emote curious) &
+	fi
 	# Documents parked in the inbox while the brain was out: retry now.
 	if [[ -n $(find "$BOX_DIR/input/.pending" -maxdepth 1 -type f ! -name '.*' -print -quit 2>/dev/null) ]]; then
 		"$0" digest
@@ -998,7 +1093,7 @@ suggestion)
 	fi
 	;;
 *)
-	echo "usage: jarvis [press|cancel|reset|settle|ask [--quiet] <text>|say <text>|state|status|dispatch [--dir <dir>] <task>|dream [--quiet]|maybe-dream|heartbeat|tick|digest|doctor|rotate|look [random]|index|note <text>|suggestions|suggestion <n> accept|reject]" >&2
+	echo "usage: jarvis [press|cancel|reset|settle|ask [--quiet] <text>|say <text>|state|status|dispatch [--dir <dir>] <task>|dream [--quiet]|maybe-dream|heartbeat|tick|digest|doctor|rotate|look [random]|lastcmd|missed [min]|save|greet|index|note <text>|suggestions|suggestion <n> accept|reject]" >&2
 	exit 1
 	;;
 esac

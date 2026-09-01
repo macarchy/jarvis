@@ -31,7 +31,12 @@
       "WebSearch",
       "Read(~/Jarvis/**)",
       "Edit(~/Jarvis/todo/**)",
-      "Edit(~/Jarvis/output/**)"
+      "Edit(~/Jarvis/output/**)",
+      "Bash(grim:*)",
+      "Bash(wl-paste:*)",
+      "Bash(omarchy-jarvis lastcmd:*)",
+      "Bash(omarchy-jarvis missed:*)",
+      "Read(~/.cache/jarvis/**)"
     ],
     "deny": [
       "Bash(omarchy system:*)",
