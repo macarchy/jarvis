@@ -32,6 +32,13 @@ out-of-repo Touch Bar daemon. Richer information goes in `state.rec` beside it.
 grid frozen; the suite diffs it against what the machine actually prints. If
 you change the table, regenerate the fixture *and say why in the commit*.
 
+**His memory is not tracked, and must not become tracked.** `memory/journal/`,
+`LEARNED.md`, `CONVERSATION.md`, `FAILURES.md`, `ABORTS.md` and
+`SUGGESTIONS.md` are what one Jarvis lived through with one person. Only their
+headers are in the repository, under `memory/scaffold/`, and `memory_init`
+restores them on the first command. The three `*_PROMPT.md` and
+`memory/skills/` *are* tracked — those are the project.
+
 **A change to the state machine that no test covers is not finished.** That
 surface had zero coverage once, and it cost ten confirmed bugs.
 

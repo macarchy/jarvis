@@ -9,3 +9,14 @@ memory/trace/
 __pycache__/
 sprites/variants/
 sprites/parts_out/
+
+# Sa mémoire vivante : ce qu'il a vécu ICI, avec CETTE personne. Les
+# en-têtes de ces fichiers sont dans memory/scaffold/ et sont suivis ;
+# memory_init les restaure au premier lancement. Les prompts et
+# memory/skills/ restent suivis : eux, c'est le projet.
+memory/journal/
+memory/CONVERSATION.md
+memory/FAILURES.md
+memory/ABORTS.md
+memory/LEARNED.md
+memory/SUGGESTIONS.md

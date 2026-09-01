@@ -88,6 +88,10 @@ It stays on your disk and is never sent anywhere on its own — but it is quoted
 back into his context when he is asked to explain himself, and it is the file
 to scrub before pasting anything into a bug report.
 
+None of these are tracked by git. The repository carries only their headers,
+in `memory/scaffold/`, and they are restored empty on a fresh clone — so
+nothing you can say to Jarvis ends up in a commit by accident.
+
 The neighbours: `memory/journal/` (one line per exchange), `memory/FAILURES.md`
 (what he could not do), `memory/ABORTS.md` (what you interrupted),
 `~/.local/state/jarvis/jarvis.log` (the developer log).
