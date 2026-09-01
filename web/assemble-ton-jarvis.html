@@ -1,0 +1,184 @@
+<title>Assemble ton Jarvis</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+:root{--water:#152430;--deep:#0E1922;--glass:#2A4155;--gold:#F2C94C;--dim:#8FA9BC;--paper:#FFF8E6;--ink:#181208;--wave:#78BEFF;--px:4px}
+*{box-sizing:border-box}
+body{margin:0;background:var(--water);color:#E8EFF4;font-family:"Atkinson Hyperlegible",system-ui,sans-serif;font-size:16px;line-height:1.5}
+.wrap{max-width:1120px;margin:0 auto;padding:32px 20px 70px}
+h1{font-family:Silkscreen,monospace;color:var(--gold);font-size:clamp(22px,4vw,30px);margin:0 0 4px;letter-spacing:1px}
+h2{font-family:Silkscreen,monospace;color:var(--wave);font-size:13px;margin:0 0 10px;letter-spacing:1px}
+.lead{color:#C8D6E0;max-width:64ch;margin:0 0 22px}
+.atelier{display:grid;grid-template-columns:minmax(300px,400px) 1fr;gap:28px;align-items:start}
+@media (max-width:820px){.atelier{grid-template-columns:1fr}}
+.tank-col{position:sticky;top:16px}
+.tank{background:#0A1218;box-shadow:inset 0 0 0 1px var(--glass);padding:16px;display:flex;flex-direction:column;align-items:center;gap:12px}
+.tank canvas{image-rendering:pixelated;display:block}
+#big{width:100%;max-width:360px;height:auto;aspect-ratio:72/56}
+#big.bob{animation:bob .5s ease-out}
+@keyframes bob{0%{transform:translateY(0)}30%{transform:translateY(-8px)}60%{transform:translateY(3px)}100%{transform:translateY(0)}}
+.plate{font-family:"IBM Plex Mono",monospace;font-size:13px;background:var(--paper);color:var(--ink);padding:8px 12px;margin:var(--px) var(--px) 0;
+  box-shadow:0 calc(-1*var(--px)) 0 0 var(--ink),0 var(--px) 0 0 var(--ink),calc(-1*var(--px)) 0 0 0 var(--ink),var(--px) 0 0 0 var(--ink);
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center}
+.plate .lat{font-family:Silkscreen,monospace;font-size:11px;color:#5A4A14}
+.plate button{margin:0;padding:4px 10px;font-size:11px}
+.small{display:flex;gap:16px;align-items:center;color:var(--dim);font-size:13px;font-family:"IBM Plex Mono",monospace}
+button{font-family:Silkscreen,monospace;font-size:13px;cursor:pointer;background:var(--paper);color:var(--ink);border:0;padding:10px 16px;margin:var(--px);
+  box-shadow:0 calc(-1*var(--px)) 0 0 var(--ink),0 var(--px) 0 0 var(--ink),calc(-1*var(--px)) 0 0 0 var(--ink),var(--px) 0 0 0 var(--ink)}
+button:hover{background:var(--gold)} button:active{transform:translateY(2px)}
+button:focus-visible{outline:3px solid var(--wave);outline-offset:4px}
+.random{width:calc(100% - 8px);padding:14px;font-size:15px;margin-top:10px}
+.random.spinning{background:var(--gold)}
+.axis{margin-bottom:22px}
+.choices{display:flex;flex-wrap:wrap;gap:10px}
+.choice,.chip{cursor:pointer;background:var(--deep);box-shadow:inset 0 0 0 1px var(--glass);display:flex;flex-direction:column;align-items:center;gap:6px;position:relative}
+.choice{padding:6px;width:150px} .chip{padding:8px 10px;width:96px}
+.choice input,.chip input{position:absolute;opacity:0;pointer-events:none}
+.choice:has(input:checked),.chip:has(input:checked){background:var(--paper);color:var(--ink);box-shadow:0 -4px 0 var(--ink),0 4px 0 var(--ink),-4px 0 0 var(--ink),4px 0 0 var(--ink);margin:4px}
+.choice:has(input:focus-visible),.chip:has(input:focus-visible){outline:3px solid var(--wave);outline-offset:3px}
+.thumb{width:136px;height:106px;background:#0A1218;image-rendering:pixelated}
+.name{font-size:13px} .name b{font-family:Silkscreen,monospace;font-size:11px;margin-right:6px}
+.swatch{display:flex;width:72px;height:36px;box-shadow:0 0 0 2px var(--ink)}
+.swatch i{flex:1}
+.note{color:var(--dim);font-size:13px;margin-top:28px;border-top:1px solid var(--glass);padding-top:12px}
+@media (prefers-reduced-motion:reduce){#big.bob{animation:none}}
+</style>
+<div class="wrap">
+<h1>Assemble ton Jarvis</h1>
+<p class="lead">Quatre corps, quatre yeux, quatre crinières, quatre queues, huit couleurs — 8 192 poissons possibles. Chaque pièce se pose sur un ancrage fixe — c'est ce qui permettra d'animer n'importe quelle combinaison avec le même code. Sur la machine, la même chose se règle dans le Control Center (page Jarvis › Apparence) — la plaque correspond aux lignes de SOUL.md.</p>
+<div class="atelier">
+  <div class="tank-col">
+    <div class="tank">
+      <canvas id="big" width="576" height="448" aria-label="Le poisson assemblé"></canvas>
+      <div class="plate"><span class="lat">Babelus jarvisii</span><code id="cfgline">corps=B1 oeil=E1 criniere=M1 queue=T1 couleur=or</code><button id="copy" type="button">Copier</button></div>
+      <div class="small"><canvas id="real" width="144" height="112"></canvas><span>taille réelle<br>à l'écran</span></div>
+    </div>
+    <button class="random" id="random" type="button">Au hasard</button>
+  </div>
+  <div class="tray">
+<section class="axis"><h2>Le corps</h2><div class="choices" role="radiogroup" aria-label="Le corps">
+<label class="choice"><input type="radio" name="body" value="B1"><canvas class="thumb" width="144" height="112" data-axis="body" data-key="B1"></canvas><span class="name"><b>B1</b>Babel</span></label>
+<label class="choice"><input type="radio" name="body" value="B2"><canvas class="thumb" width="144" height="112" data-axis="body" data-key="B2"></canvas><span class="name"><b>B2</b>Rond</span></label>
+<label class="choice"><input type="radio" name="body" value="B3"><canvas class="thumb" width="144" height="112" data-axis="body" data-key="B3"></canvas><span class="name"><b>B3</b>Élancé</span></label>
+<label class="choice"><input type="radio" name="body" value="B4"><canvas class="thumb" width="144" height="112" data-axis="body" data-key="B4"></canvas><span class="name"><b>B4</b>Anguille</span></label>
+</div></section>
+<section class="axis"><h2>L'œil</h2><div class="choices" role="radiogroup" aria-label="L'œil">
+<label class="choice"><input type="radio" name="eye" value="E1"><canvas class="thumb" width="144" height="112" data-axis="eye" data-key="E1"></canvas><span class="name"><b>E1</b>Grand</span></label>
+<label class="choice"><input type="radio" name="eye" value="E2"><canvas class="thumb" width="144" height="112" data-axis="eye" data-key="E2"></canvas><span class="name"><b>E2</b>Amande</span></label>
+<label class="choice"><input type="radio" name="eye" value="E3"><canvas class="thumb" width="144" height="112" data-axis="eye" data-key="E3"></canvas><span class="name"><b>E3</b>Rond</span></label>
+<label class="choice"><input type="radio" name="eye" value="E4"><canvas class="thumb" width="144" height="112" data-axis="eye" data-key="E4"></canvas><span class="name"><b>E4</b>Anneau</span></label>
+</div></section>
+<section class="axis"><h2>La crinière</h2><div class="choices" role="radiogroup" aria-label="La crinière">
+<label class="choice"><input type="radio" name="crest" value="M1"><canvas class="thumb" width="144" height="112" data-axis="crest" data-key="M1"></canvas><span class="name"><b>M1</b>Éventail</span></label>
+<label class="choice"><input type="radio" name="crest" value="M2"><canvas class="thumb" width="144" height="112" data-axis="crest" data-key="M2"></canvas><span class="name"><b>M2</b>Voile</span></label>
+<label class="choice"><input type="radio" name="crest" value="M3"><canvas class="thumb" width="144" height="112" data-axis="crest" data-key="M3"></canvas><span class="name"><b>M3</b>Mohawk</span></label>
+<label class="choice"><input type="radio" name="crest" value="M4"><canvas class="thumb" width="144" height="112" data-axis="crest" data-key="M4"></canvas><span class="name"><b>M4</b>Antennes</span></label>
+</div></section>
+<section class="axis"><h2>La queue</h2><div class="choices" role="radiogroup" aria-label="La queue">
+<label class="choice"><input type="radio" name="tail" value="T1"><canvas class="thumb" width="144" height="112" data-axis="tail" data-key="T1"></canvas><span class="name"><b>T1</b>Fourche</span></label>
+<label class="choice"><input type="radio" name="tail" value="T2"><canvas class="thumb" width="144" height="112" data-axis="tail" data-key="T2"></canvas><span class="name"><b>T2</b>Éventail</span></label>
+<label class="choice"><input type="radio" name="tail" value="T3"><canvas class="thumb" width="144" height="112" data-axis="tail" data-key="T3"></canvas><span class="name"><b>T3</b>Croissant</span></label>
+<label class="choice"><input type="radio" name="tail" value="T4"><canvas class="thumb" width="144" height="112" data-axis="tail" data-key="T4"></canvas><span class="name"><b>T4</b>Ruban</span></label>
+</div></section>
+<section class="axis"><h2>La couleur</h2><div class="choices chips" role="radiogroup" aria-label="La couleur">
+<label class="chip"><input type="radio" name="pal" value="or"><span class="swatch"><i style="background:#FAE282"></i><i style="background:#F2C94C"></i><i style="background:#D99A2B"></i></span><span class="name">Or</span></label>
+<label class="chip"><input type="radio" name="pal" value="corail"><span class="swatch"><i style="background:#FFB48F"></i><i style="background:#F08A5D"></i><i style="background:#C95C3A"></i></span><span class="name">Corail</span></label>
+<label class="chip"><input type="radio" name="pal" value="lagon"><span class="swatch"><i style="background:#9CEDE7"></i><i style="background:#4CC9C0"></i><i style="background:#2A9D96"></i></span><span class="name">Lagon</span></label>
+<label class="chip"><input type="radio" name="pal" value="lavande"><span class="swatch"><i style="background:#D1C4FF"></i><i style="background:#A78BFA"></i><i style="background:#7C5CD6"></i></span><span class="name">Lavande</span></label>
+<label class="chip"><input type="radio" name="pal" value="menthe"><span class="swatch"><i style="background:#C0F2A6"></i><i style="background:#7ED957"></i><i style="background:#4FA83A"></i></span><span class="name">Menthe</span></label>
+<label class="chip"><input type="radio" name="pal" value="perle"><span class="swatch"><i style="background:#FFFFFF"></i><i style="background:#ECE7DC"></i><i style="background:#BFB6A6"></i></span><span class="name">Perle</span></label>
+<label class="chip"><input type="radio" name="pal" value="braise"><span class="swatch"><i style="background:#FFB3B3"></i><i style="background:#FF6B6B"></i><i style="background:#D64545"></i></span><span class="name">Braise</span></label>
+<label class="chip"><input type="radio" name="pal" value="encre"><span class="swatch"><i style="background:#A9C4FF"></i><i style="background:#5C8DFF"></i><i style="background:#3A64C8"></i></span><span class="name">Encre</span></label>
+</div></section>
+  </div>
+</div>
+<p class="note">Pièces, corps et palettes dans <code>sprites/parts.py</code> ; les calques sont recolorés et composés ici, exactement comme le générateur le fera.</p>
+</div>
+<script>
+(function(){
+  var LAYERS = {"B1-body": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAA/UlEQVR42u3YMQrCMBSA4Y7OTh5B8AoewVM5egAHb+QR3KRHcBFclAiRUNr6kjzhvfh/8MaW5qelTbsOAAAAAAAAAAAAAAAbVsvF83beFU04tvk4NYHSUE3FGgvz6PezI43kPlRumNxQru+oNM7UYrUiuQsliaPxqLmMJI0jidTkGy8GylmgdiCzkXLvnrlAtZ8DJiOFCzpu1yqL0xpTkQj0w63EXwTS2G/dr4fPaG1NTAa6nDbvKY2jEcns6z5cWAwkDaUdyMUH4zDSt1g1j1h6fjfbjnihU6HGJt2p5xznKoxGqJKgzfwbqomVnqPpv4zDhUqHH9cAAABw4wUTDnoqEV8xxAAAAABJRU5ErkJggg==", "B1-eye-E1": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAYUlEQVR42u3VsQnAMAwAQZeuU2X/oTKFd0iKEDDCNqmtO9ACD5JKAQAAAAAAAACA3M6j3nFU6eKMiBTiXO0dkX7E+dYsdaTZavWBUt+jVaAYyZotIjnUgxfv1QMAAADAph4n+b9kqHhryQAAAABJRU5ErkJggg==", "B1-eye-E2": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAU0lEQVR42u3UMQrAIBBFQUvrVN7/UJ4id4iFbiNBknpn4IP1A7cUAAAAAAAAAACAg3bV523KrDih33MhfagvceKdOs7OV/sZyYE+zJUGAAAAAPIYhOuGa/JtvAMAAAAASUVORK5CYII=", "B1-eye-E3": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAXklEQVR42u3UsQnAIBCGUUvrVNl/KKdwh1iEQJBLsPbeg1vgw99SAAAAAAAAAAAgt/Oo13yqvOJERJritH7fEyf9S1qJkzpSNK0ojkALkczsJ5CP+mNW4gAAAADAhgYxSKCro0vtNgAAAABJRU5ErkJggg==", "B1-eye-E4": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAUUlEQVR42u3UsQnAMAwAQZWpXXneDJkBXGeCNHKbCEzA9R1ogUdSBAAAAAAAAAAAwI/ejnyPIiXOM87PiFTi1A0SaRHoulMgJ+ZJAwAAAABsmEUCR4QKz0uIAAAAAElFTkSuQmCC", "B1-crest-M1": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAYUlEQVR42u3UoRGAMAwF0Eo0iqEYiOnQsA4LBBAxlb3DhPdM0+/y79rWAAAAAAAAeGx7HKNZecs8xXWuMZKVLyyXfs/RrPST6hdXTrdwzv0959+V89WfBQAAAAAAAADUdgPLfWa6ldFPjQAAAABJRU5ErkJggg==", "B1-crest-M2": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAVUlEQVR42u3UsQnAMAxFQZeuU3nmTOktUiY4EFBjY9LqDv4AeoVKAQAAAAAAIGhHvceUmMS5+vlOpEWcGEmoSRyhNuOkDvUd/GeeEgAAAAAAAADk8gDzGG79AnFffgAAAABJRU5ErkJggg==", "B1-crest-M3": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAASklEQVR42u3ToRHAIBBEUSQ6iqIoKNVFQzs0cExsXOYc8575esWWAgAAAAAAAPxyPzEyPd6aPTI9WrtqvEMz9UEAAAAAAAAAgI8NtIxTAlKXcr4AAAAASUVORK5CYII=", "B1-crest-M4": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAATUlEQVR42u3QoQ3AIBBA0ZPVVQzVgTpdNazDAkewDUnTYN8z3/8IAAAAAAAAXu4nqwsL5Tyytytnjfsx52ucOeaYYw4AAAAAAAAAsGUAaAw2owfRzxoAAAAASUVORK5CYII=", "B1-tail-T1": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAW0lEQVR42u3Wqw3AMAxAQcPgoszcKbNFYasUhTgFJgV3khd4yscRAAAAAAAAAAAAP9ePds9RIolzjfMdkTZxBEqulUCJNYw4H4HEcYLqD7RIfjF7kE0aAAAAqh4kmXZVbKvVYgAAAABJRU5ErkJggg==", "B1-tail-T2": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAYUlEQVR42u3WsQmAMBBA0SutrdzBTR3BzdK5RcpIIEVUSG3gPbgFPkdyEQAAAAAAAAAAAD+3rUvpR5FXmHwdjxGpxUnn/okjUrc5NZBIg+0RSCCBvEF+MXeQSxoAAACmcQOwPfOypwadEQAAAABJRU5ErkJggg==", "B1-tail-T3": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAWElEQVR42u3XvQ1AERSAUaVaZWZT2kL5Xgzgr6I4J7HAl5uLEAAAAAAAAAAAgJfkFL9+lBjEabUINIsjkDhnu0acxcSIsxFIHBNkB7nFRPKS9hcDAADgvh9P+HgflGxaugAAAABJRU5ErkJggg==", "B1-tail-T4": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAATUlEQVR42u3WsQkAIAwAQUtrK2d2SrewjNgK2gpyB1ngCSEpAQAAAAAAAAAA8J/RW6xR4hBGIGHuasmxRxHmEEcRG+QGCeUPAgAAAN6b0r1y9OzLlAkAAAAASUVORK5CYII=", "B2-body": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAA7UlEQVR42u3YMQrCMBSA4Y7OTh5B8AoewVM5egAHb+QR3MQjuAhdlAgpGpr0BY343vs/eJMt2J+Gtuk6AAAAAAAAAAAAAAD+z2I+u5fGfZTrcTNMf9m+jbtQY1FyccLE31xEyoXJBRo7xmykqThppNIx5iJJ49SMmUgt4piK1DKQ+kit46iOFP70fr38SSCVkQgkXF4hUm2ocO7tvBtGslTVLrPaSGkcaSTVgT65eySBTDzJTofVc769xNS/C4ULiHFqI5U+bM29TaeRamK5+GAtRZIGM7/lES9QEup13O0sSkK533JlLxoAAMCWB8LImX8qCtwVAAAAAElFTkSuQmCC", "B2-eye-E1": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAYUlEQVR42u3VsQnAMAwAQZeuU2X/oTKFd0iKEDDCNqmtO9ACD5JKAQAAAAAAAACA3M6j3nFU6eKMiBTiXO0dkX7E+dYsdaTZavWBUt+jVaAYyZotIjnUgxfv1QMAAADAph4n+b9kqHhryQAAAABJRU5ErkJggg==", "B2-eye-E2": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAU0lEQVR42u3UMQrAIBBFQUvrVN7/UJ4id4iFbiNBknpn4IP1A7cUAAAAAAAAAACAg3bV523KrDih33MhfagvceKdOs7OV/sZyYE+zJUGAAAAAPIYhOuGa/JtvAMAAAAASUVORK5CYII=", "B2-eye-E3": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAXklEQVR42u3UsQnAIBCGUUvrVNl/KKdwh1iEQJBLsPbeg1vgw99SAAAAAAAAAAAgt/Oo13yqvOJERJritH7fEyf9S1qJkzpSNK0ojkALkczsJ5CP+mNW4gAAAADAhgYxSKCro0vtNgAAAABJRU5ErkJggg==", "B2-eye-E4": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAUUlEQVR42u3UsQnAMAwAQZWpXXneDJkBXGeCNHKbCEzA9R1ogUdSBAAAAAAAAAAAwI/ejnyPIiXOM87PiFTi1A0SaRHoulMgJ+ZJAwAAAABsmEUCR4QKz0uIAAAAAElFTkSuQmCC", "B2-crest-M1": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAYUlEQVR42u3UsQ2AMAwEwJTUVAzFQExHDeuwgBESblJGojF3TZzv/FLSGgAAAAAAAK9tj2M0K2+Zp7jONUay8oXl0s85mpV+Uv3iyukWzrm/5/y7cr76swAAAAAAAACAum4wima6S8QtJgAAAABJRU5ErkJggg==", "B2-crest-M2": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAVUlEQVR42u3UMQrAIBBFQcvUqTxzTplbpFQMCBIwiO3OwD/AvmJTAgAAAAAA4COfR2lTYhLnua93Iv3EGSMJNYkj1GKc0KH6wTvzlAAAAAAAAAAgjgo3GW79FRlsgQAAAABJRU5ErkJggg==", "B2-crest-M3": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAASklEQVR42u3ToRHAIBBEUSQ6iqIoKNVFQzs0cExcbOYc8575esWWAgAAAAAAAPx2PzEyPd6aPTI9WrtqvEMz9UEAAAAAAAAAgI8NaHlTAvxUa68AAAAASUVORK5CYII=", "B2-crest-M4": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAATElEQVR42u3QoRGAMBAAwZfoqBRFQVQXDe2kgc/E/wwDetecvwgAAAAAAAAK18jbhUJvR87nzF3jPsx5G2eOOeaYAwAAAAAAAAD8tgCNdTaj/L9RUAAAAABJRU5ErkJggg==", "B2-tail-T1": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAXElEQVR42u3Wuw3AIAxAQZfUqZg5U7JFShCpaJwUSElzJ3mBJz6OAAAAAAAAAAAA+FE9Sp+jRBLnauc9Ij3EESi5VgIl1jDivAQSxwnaf6BF8ovZg2zSAAAA8IUByVl2VQKjsfoAAAAASUVORK5CYII=", "B2-tail-T2": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAYUlEQVR42u3WsQmAMBBA0SutrdzBTR3BzdK5RcpIIEVUSCuE9+AW+BzJRQAAAAAAAAAAAPxoW5fSjyKvMPk6HiNSi5PO/RNHpG5zaiCRBtsjkEACeYP8Yu4glzQAAABM5Qb3H/Oy/ZrAJgAAAABJRU5ErkJggg==", "B2-tail-T3": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAWUlEQVR42u3XuwkAIRBAQUNjI2u2SrswvMMC/CWCMAM28FhWDQEAAAAAAAAAALglp/j1o8QgTqtFoFkcgcQ52zXiLCZGnI1A4pggO8gtJpKXtL8YAAAAb/gBNS94HxpHglAAAAAASUVORK5CYII=", "B2-tail-T4": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAATUlEQVR42u3WsQkAIAwAwZTWVs7slG5hqdgK2gfuIAs8ISQCAAAAAAAAAACAXObo64wSjzACCfPXall3FGEecRSxQW6QUP4gAAAAIIcN/dly9KyczH8AAAAASUVORK5CYII=", "B3-body": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAxElEQVR42u3XMQrCMBgG0I7OTs5OglfwCB5KHD2Ag+dx8Qhu4hFcBBdFoSKlUNq0+hveg29sSD7SJi0KAAAAAAAAAIhrMh7dU5N1IfvVNDl/X1jfhTTlcli+Er6wcoLlhKsL+FbClVQtJkLClBStmFAlpZRzO697S+iCtouZHTREQc9nr6fNO0O8qiG+Q10XVi2o75JCnWTlKXbczVulbhe1HaNuzLD3oS5FfS4oy1KabtKpOyKbUob8Oc36ZxUAAADg9x594a8f6lL89QAAAABJRU5ErkJggg==", "B3-eye-E1": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAYUlEQVR42u3VsQnAMAwAQZeuU2X/oTKFd0iKEDDCNqmtO9ACD5JKAQAAAAAAAABgY+dR7ziqdHFGRApxrvaOSD/ifGuWOtJstfpAqe/RKlCMZM0WkRzqwYv36gEAAACAvB5BHb9kRmVvQAAAAABJRU5ErkJggg==", "B3-eye-E2": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAVElEQVR42u3UMQrAIBBFQUvrVN7/UJ4id4iFLkgIIal3Bj5YP3BLAQAAAAAAAACAvNpRr6cps+KEfs6F9KG+xIl36jh3vtrPSA70y1xpAAAAAAA2A2VDhmuTUWjNAAAAAElFTkSuQmCC", "B3-eye-E3": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAXklEQVR42u3UsQnAIBCGUUvrVNl/KKdwh1iEQJBLsPbeg1vgw99SAAAAAAAAAADY2HnUaz5VXnEiIk1xWr/viZP+Ja3ESR0pmlYUR6CFSGb2E8hH/TErcQAAAACAnAYeoqCr4rilQwAAAABJRU5ErkJggg==", "B3-eye-E4": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAUUlEQVR42u3UsQ2AMAwAQZfUqTIvQzJAaiagcVqwlJIqd5IXeNmOAAAAAAAAAACAvfV25HsUKXGecX5GpBKnbpBIi0DXnQI5MU8aAAAAAIB/TCK/R4QgDqxcAAAAAElFTkSuQmCC", "B3-crest-M1": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAYklEQVR42u3UIQ6AMAwF0Ek0ikNxIE6HhutwgRFETRPMEkx5z6z7rj/ZWgMAAAAAAODFtvdjNCtvmad+nWsfycoXFks/52hW+knlxZWTFo4532P+XTlf/VkAAAAAAAAAQB03xJFmuk6YXNYAAAAASUVORK5CYII=", "B3-crest-M2": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAVUlEQVR42u3UMQ6AIBBFQUprK87sKb2FJQQTEhqQUMpM8g+wr9gQAAAAAAAA+BDPI5Up0Ynz3Nc7kQZx2khCdeIINRln61D14JV5SgAAAAAAAADwXxlG8G79CesQnAAAAABJRU5ErkJggg==", "B3-crest-M3": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAASUlEQVR42u3ToRWAQAxEwUg06oqiIKpDQzvXQO5dDXFhxny9YiMAAAAAAACAsvvJt9L25ndlpa2N88g9tFIfBAAAAAAAAAB+bQE4HlMCE93dAQAAAABJRU5ErkJggg==", "B3-crest-M4": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAS0lEQVR42u3QoRGAMBAAwZdoVIqiIKpDQztp4DPxzOTjd835iwAAAAAAAKDgfvJ14Uc7j+zflbPGbcxZjTPHHHPMAQAAAAAAAADKBiMoNqM1/FE7AAAAAElFTkSuQmCC", "B3-tail-T1": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAW0lEQVR42u3Wqw3AMAxAQcPgoszcKbNFYasUhbgFkYzuJC/wlI8jAAAAAAAAAACgVD/aPUeJJM41zndE+ogjUHKtBEqsYcT5CSSOE7T/QIvkF7MH2aQBAAAA6j3RnHZV+vqO+QAAAABJRU5ErkJggg==", "B3-tail-T2": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAYUlEQVR42u3WsQmAMBBA0SutrdzBTR3BzdK5RcpIIEVUSGkR3oNb4HMkFwEAAAAAAAAAAL/a1qX0o8grTL6Ox4jU4qRz/8QRqducGkikwfYIJJBA3iC/mDvIJQ0AAAAwsRuZKPOyHN564QAAAABJRU5ErkJggg==", "B3-tail-T3": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAWUlEQVR42u3XuwkAIRBAQUNjI2u2SrswvMMC/AUGwgzYwGNZNQQAAAAAAAAAAO7JKX79KDGI02oRaBZHIHHOdo04i4kRZyOQOCbIDnKLieQl7S8GAAAAvOgH8dN4HyZ8hGkAAAAASUVORK5CYII=", "B3-tail-T4": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAATUlEQVR42u3WsQkAIAwAQUtrK2d2SrewjNgKWivcQRZ4QkhKAAAAAAAAAADA60ZvsUaJQxiBhLmrJcceRZhDHEVskBsklD8IAAAAgB9NBvBy9MDjG7IAAAAASUVORK5CYII=", "B4-body": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAyElEQVR42u3XsQnCQBSA4ZTWVo4guIIjOJWlA1i4kSPYSUawEWzUCGnkzjtD1Ev8Pnil8PJziVxVAQAAAAAAAEBZZtPJNTbC3Oe0X0XnL4OFwlzqdXBSwUYVLXZiYnFikXKiDS5c6lX6xAwm2i/ipMKJM4RIzRLb5VygPgM1vzkfN4/pcvoOu0XWFPOatQ/ZLpYbJydSboznMMV9rJuFQsvmnKAuEUJBiv/rbxd856FGGyP33tXnyRjlNeTVJTU1rvgAAAAAX3MDYPz39aziPRkAAAAASUVORK5CYII=", "B4-eye-E1": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAYUlEQVR42u3VwQnAIAxAUY89e3L/oTpFd9CDFCSo9Fp8D7LAhyQpAQAAAAAAAAD8WclXjaPKEGdGpBDnfvqI9CHOu2ZHR1qt1hjo6Hu0CxQjWbNNJId68uK9egAAAAAAFhpciL9kBl19xAAAAABJRU5ErkJggg==", "B4-eye-E2": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAVElEQVR42u3UMQrAIBBFQUvrVLn/oTxF7hALs02QYFp3Bj5YP3BLAQAAAAAAAABgY+dR79mUeeKEdo2F9KFW4sQ7dZw3X+1nJAf6Y640AAAAAACs6yvVhms/nPNnAAAAAElFTkSuQmCC", "B4-eye-E3": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAXklEQVR42u3UsQnAIBRFUcvUqdx/qEzhDrEQQeQn2IrnwF/g4jMlAAAAAAAAAICd5ft651NliBMRaYrzlHY9zvEvaSXO0ZGiaUVxBFqIZGY/gXzUH7MSBwAAAACAQAWJJ6CrOI+b6AAAAABJRU5ErkJggg==", "B4-eye-E4": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAUklEQVR42u3UsQnAMAwAQZWpXXneDJkBXGeCNHKbCFwHzB1ogUdSBAAAAAAAAAAAm+vtyPcoUuI84/yMSCVO3SCRFoGuOwVyYp40AAAAAAD8YgLiUkeELRl5dAAAAABJRU5ErkJggg==", "B4-crest-M1": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAYklEQVR42u3UsQ2AMAwEwJTUVAzFQExHDeuwQBBFJOTSEo25a+J855eS1gAAAAAAAHjZ9n5ks/KWeerXufZMVr6wsfRzZrPSTyourpyw8Jjjfcy/K+erPwsAAAAAAAAAqOkGlYhmuoPyk0YAAAAASUVORK5CYII=", "B4-crest-M2": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAVUlEQVR42u3UMQrAIBBFQcvUqTxzTplbpFQMCBYxiO3OwD/AvmJTAgAAAAAA4EM+j9KmxCTOc1/vRPqJM0YSahJHqMU4oUP1g3fmKQEAAAAAAABADBV7C279uUkNhAAAAABJRU5ErkJggg==", "B4-crest-M3": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAASklEQVR42u3ToRHAIBBEUSQ6iqIoKNVFQzs0cExmUkHOMe+Zr1dsKQAAAAAAAMAv9xMj0+Ot2SPTo7Wrxjs0Ux8EAAAAAAAAAPhsHGZTAnE7v7IAAAAASUVORK5CYII=", "B4-crest-M4": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAATElEQVR42u3QsRGAIBAAwQ+NjSjKgqzOGNqhgWfIZRyJd5PLLwIAAAAAAICF+8nqwotyHtnblbPG/ZjzNc4cc8wxBwAAAAAAAADYMgCy3jaj9O+tcAAAAABJRU5ErkJggg==", "B4-tail-T1": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAXElEQVR42u3Wuw3AIAxAQZfUqZg5U7JFShCpaJwUSElzJ3mBJz6OAAAAAAAAAACAz9Sj9DlKJHGudt4j0kMcgZJrJVBiDSPOSyBxnKD9B1okv5g9yCYNAAAA8I8Bqwp2VeEKDscAAAAASUVORK5CYII=", "B4-tail-T2": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAYUlEQVR42u3WsQmAMBBA0SutrdzBTR3BzdK5RcpIIEVUSGkR3oNb4HMkFwEAAAAAAAAAAL/Z1qX0o8grTL6Ox4jU4qRz/8QRqducGkikwfYIJJBA3iC/mDvIJQ0AAAAwuRtoKPOyhM7+OgAAAABJRU5ErkJggg==", "B4-tail-T3": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAAWUlEQVR42u3XuwkAIRBAQUNjI2u2SrswvMMC/AUGwgzYwGNZNQQAAAAAAAAAAO7IKX79KDGI02oRaBZHIHHOdo04i4kRZyOQOCbIDnKLieQl7S8GAAAAvOoH0ml4H3iDVREAAAAASUVORK5CYII=", "B4-tail-T4": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAA4CAYAAABez76GAAAATUlEQVR42u3WsQkAIAwAQUtrK2d2SrewjNgKWivcQRZ4QkhKAAAAAAAAAADAy0ZvsUaJQxiBhLmrJcceRZhDHEVskBsklD8IAAAAgF9N0sty9IrLjBsAAAAASUVORK5CYII="};
+  var AXES = {"body": [["B1", "Babel"], ["B2", "Rond"], ["B3", "\u00c9lanc\u00e9"], ["B4", "Anguille"]], "eye": [["E1", "Grand"], ["E2", "Amande"], ["E3", "Rond"], ["E4", "Anneau"]], "crest": [["M1", "\u00c9ventail"], ["M2", "Voile"], ["M3", "Mohawk"], ["M4", "Antennes"]], "tail": [["T1", "Fourche"], ["T2", "\u00c9ventail"], ["T3", "Croissant"], ["T4", "Ruban"]]};
+  var PAL = {"or": {"name": "Or", "map": {"Y": "#F2C94C", "O": "#D99A2B", "H": "#FAE282", "F": "#F7E08A", "D": "#C48022"}}, "corail": {"name": "Corail", "map": {"Y": "#F08A5D", "O": "#C95C3A", "H": "#FFB48F", "F": "#FFC9A8", "D": "#A64A2C"}}, "lagon": {"name": "Lagon", "map": {"Y": "#4CC9C0", "O": "#2A9D96", "H": "#9CEDE7", "F": "#B8F2EC", "D": "#1F7A75"}}, "lavande": {"name": "Lavande", "map": {"Y": "#A78BFA", "O": "#7C5CD6", "H": "#D1C4FF", "F": "#DCD3FF", "D": "#5F45B0"}}, "menthe": {"name": "Menthe", "map": {"Y": "#7ED957", "O": "#4FA83A", "H": "#C0F2A6", "F": "#D2F5C0", "D": "#3B8228"}}, "perle": {"name": "Perle", "map": {"Y": "#ECE7DC", "O": "#BFB6A6", "H": "#FFFFFF", "F": "#F6F2EA", "D": "#9A9082"}}, "braise": {"name": "Braise", "map": {"Y": "#FF6B6B", "O": "#D64545", "H": "#FFB3B3", "F": "#FFC6C6", "D": "#A83232"}}, "encre": {"name": "Encre", "map": {"Y": "#5C8DFF", "O": "#3A64C8", "H": "#A9C4FF", "F": "#BFD2FF", "D": "#2B4A99"}}};
+  var SRC = {"Y": [242, 201, 76], "O": [217, 154, 43], "H": [250, 226, 130], "F": [247, 224, 138], "D": [196, 128, 34]};
+  var reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var cfg = {body:"B1", eye:"E1", crest:"M1", tail:"T1", pal:"or"};
+  try { var saved = JSON.parse(localStorage.getItem("jarvis-cfg3") || "null"); if (saved && PAL[saved.pal] && saved.body) cfg = saved; } catch (e) {}
+
+  // Decode every layer once to native pixels; recolour per palette, cached.
+  var native = {}, cache = {}, pending = 0;
+  function hex(h){ return [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]; }
+  Object.keys(LAYERS).forEach(function(k){
+    pending++;
+    var img = new Image();
+    img.onload = function(){
+      var c = document.createElement("canvas"); c.width = 72; c.height = 56;
+      var x = c.getContext("2d"); x.drawImage(img, 0, 0);
+      native[k] = x.getImageData(0, 0, 72, 56);
+      if (--pending === 0) repaintAll();
+    };
+    img.src = LAYERS[k];
+  });
+  function recoloured(k, pal){
+    var id = k + "|" + pal;
+    if (cache[id]) return cache[id];
+    var src = native[k]; if (!src) return null;
+    var out = new ImageData(new Uint8ClampedArray(src.data), 72, 56), d = out.data;
+    var map = {}; Object.keys(SRC).forEach(function(ch){ map[SRC[ch].join(",")] = hex(PAL[pal].map[ch]); });
+    for (var i = 0; i < d.length; i += 4){
+      if (d[i+3] === 0) continue;
+      var t = map[d[i] + "," + d[i+1] + "," + d[i+2]];
+      if (t){ d[i] = t[0]; d[i+1] = t[1]; d[i+2] = t[2]; }
+    }
+    var c = document.createElement("canvas"); c.width = 72; c.height = 56;
+    c.getContext("2d").putImageData(out, 0, 0);
+    cache[id] = c; return c;
+  }
+  function paint(canvas, c){
+    var ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    var s = canvas.width / 72;
+    ["tail","body","crest","eye"].forEach(function(slot){
+      var k = c.body + "-" + (slot === "body" ? "body" : slot + "-" + c[slot]);
+      var layer = recoloured(k, c.pal); if (layer) ctx.drawImage(layer, 0, 0, 72*s, 56*s);
+    });
+  }
+  function repaintAll(){
+    paint(document.getElementById("big"), cfg);
+    paint(document.getElementById("real"), cfg);
+    document.querySelectorAll("canvas.thumb").forEach(function(t){
+      var c = Object.assign({}, cfg); c[t.dataset.axis] = t.dataset.key; paint(t, c);
+    });
+    document.getElementById("cfgline").textContent = "corps=" + cfg.body + " oeil=" + cfg.eye + " criniere=" + cfg.crest + " queue=" + cfg.tail + " couleur=" + cfg.pal;
+    document.querySelectorAll("input[type=radio]").forEach(function(r){ r.checked = cfg[r.name] === r.value; });
+    try { localStorage.setItem("jarvis-cfg3", JSON.stringify(cfg)); } catch (e) {}
+  }
+  document.querySelectorAll("input[type=radio]").forEach(function(r){
+    r.addEventListener("change", function(){ cfg[r.name] = r.value; repaintAll(); });
+  });
+
+  // The slot machine: flicker through strangers, land on one, bob.
+  function pick(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
+  function randomCfg(){
+    return {body: pick(AXES.body)[0], eye: pick(AXES.eye)[0], crest: pick(AXES.crest)[0], tail: pick(AXES.tail)[0], pal: pick(Object.keys(PAL))};
+  }
+  var btn = document.getElementById("random"), big = document.getElementById("big");
+  btn.addEventListener("click", function(){
+    var final = randomCfg();
+    if (reduced){ cfg = final; repaintAll(); return; }
+    btn.classList.add("spinning"); btn.disabled = true;
+    var n = 0, steps = 10;
+    (function tick(){
+      var c = n < steps ? randomCfg() : final;
+      paint(big, c);
+      if (n++ < steps){ setTimeout(tick, 55 + n * 12); }
+      else { cfg = final; repaintAll(); big.classList.remove("bob"); void big.offsetWidth; big.classList.add("bob"); btn.classList.remove("spinning"); btn.disabled = false; }
+    })();
+  });
+
+  document.getElementById("copy").addEventListener("click", function(){
+    var t = document.getElementById("cfgline").textContent, b = this;
+    function done(){ b.textContent = "Copié"; setTimeout(function(){ b.textContent = "Copier"; }, 1400); }
+    if (navigator.clipboard) navigator.clipboard.writeText(t).then(done, done); else done();
+  });
+})();
+</script>
