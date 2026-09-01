@@ -840,6 +840,9 @@ save)
 		what="l'image"
 	else
 		text=$(wl-paste --no-newline 2>/dev/null)
+		# Nothing copied: fall back to the selection (a link merely
+		# highlighted in a browser lives there, not in the clipboard).
+		[[ -z ${text// /} ]] && text=$(wl-paste --primary --no-newline 2>/dev/null)
 		if [[ -z ${text// /} ]]; then
 			notify "Jarvis" "Le presse-papier est vide."
 			exit 1
