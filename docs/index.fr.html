@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Jarvis · the Babel fish</title>
-<meta name="description" content="A bilingual voice assistant that lives on one laptop, with Claude as its brain, the shell as its hands, and a pixel-art Babel fish as its face.">
-<link rel="alternate" hreflang="fr" href="https://macarchy.github.io/jarvis/index.fr.html">
+<title>Jarvis · le poisson de Babel</title>
+<meta name="description" content="Un assistant vocal bilingue qui vit sur un seul portable, avec Claude comme cerveau, le shell comme mains, et un poisson de Babel en pixel art comme visage.">
 <link rel="alternate" hreflang="en" href="https://macarchy.github.io/jarvis/">
+<link rel="alternate" hreflang="fr" href="https://macarchy.github.io/jarvis/index.fr.html">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 :root{
@@ -106,59 +106,61 @@ footer .mono{font-family:"IBM Plex Mono",monospace;font-size:12px;margin:22px 0 
 <div class="wrap">
 
   <div class="langbar">
-    <div class="langs"><span aria-current="true">EN</span><a href="index.fr.html" hreflang="fr" lang="fr">FR</a></div>
+    <div class="langs"><a href="index.html" hreflang="en" lang="en">EN</a><span aria-current="true">FR</span></div>
   </div>
 
   <div class="hero">
     <div>
       <h1>Jarvis</h1>
-      <p class="tagline">the Babel fish</p>
+      <p class="tagline">le poisson de Babel</p>
       <p class="lede">
-        A bilingual voice assistant that lives on one laptop, with Claude as its
-        brain, the shell as its hands, and a pixel-art Babel fish as its face.
-        He answers in the language you spoke, and he remembers yesterday.
+        Un assistant vocal bilingue qui vit sur un seul portable, avec Claude
+        comme cerveau, le shell comme mains, et un poisson de Babel en pixel art
+        comme visage. Il répond dans la langue que tu as parlée, et il se
+        souvient d’hier.
       </p>
     </div>
     <div class="tank"><div class="fish"></div></div>
   </div>
 
   <section>
-    <span class="eyebrow">five doors</span>
+    <span class="eyebrow">cinq portes</span>
     <div class="doors">
 
-      <a class="door" href="machine.html">
-        <h2>The machine</h2>
-        <p><span class="lead">Eight states, nine events, drivable.</span>
-        Press the events and watch the illegal ones be refused, with the reason.
-        Thirty seconds here beats reading the architecture.</p>
+      <a class="door" href="machine.fr.html">
+        <h2>La machine</h2>
+        <p><span class="lead">Huit états, neuf événements, pilotable.</span>
+        Appuie sur les événements et regarde les coups illégaux être refusés,
+        avec leur raison. Trente secondes ici valent mieux que lire
+        l’architecture.</p>
       </a>
 
-      <a class="door" href="privacy.html">
-        <h2>Privacy</h2>
-        <p><span class="lead">What leaves your machine.</span>
-        Audio never does. The transcript goes to Anthropic. The screen and the
-        clipboard only when you ask, in that exchange. With the source lines
-        that prove it.</p>
+      <a class="door" href="privacy.fr.html">
+        <h2>Vie privée</h2>
+        <p><span class="lead">Ce qui quitte ta machine.</span>
+        L’audio, jamais. Le transcript part chez Anthropic. L’écran et le
+        presse-papier seulement quand tu le demandes, dans l’échange en cours.
+        Avec les lignes de code qui le prouvent.</p>
       </a>
 
-      <a class="door" href="troubleshooting.html">
-        <h2>Troubleshooting</h2>
-        <p><span class="lead">When something is red.</span>
-        One entry per line <code>doctor</code> can print, in the order it prints
-        them — and the things it cannot see.</p>
+      <a class="door" href="troubleshooting.fr.html">
+        <h2>Dépannage</h2>
+        <p><span class="lead">Quand quelque chose est rouge.</span>
+        Une entrée par ligne que <code>doctor</code> peut afficher, dans l’ordre
+        où il les affiche — et ce qu’il ne peut pas voir.</p>
       </a>
 
-      <a class="door" href="poisson.html">
-        <h2>The fish</h2>
-        <p><span class="lead">Twelve sheets, 256 fish.</span>
-        The sprite engine — every gesture is built from parts and proved on all
-        256 configurations before it is accepted.</p>
+      <a class="door" href="poisson.fr.html">
+        <h2>Le poisson</h2>
+        <p><span class="lead">Douze planches, 256 poissons.</span>
+        Le moteur de sprites — chaque geste est assemblé depuis des pièces et
+        prouvé sur les 256 configurations avant d’être accepté.</p>
       </a>
 
-      <a class="door" href="assembler.html">
-        <h2>Build one</h2>
-        <p><span class="lead">Four bodies, four eyes, four crests, four tails.</span>
-        Roll your own fish, then write the five settings into
+      <a class="door" href="assembler.fr.html">
+        <h2>L’assembler</h2>
+        <p><span class="lead">Quatre corps, quatre yeux, quatre crinières, quatre queues.</span>
+        Tire ton propre poisson, puis écris les cinq réglages dans
         <code>SOUL.md</code>.</p>
       </a>
 
@@ -166,28 +168,28 @@ footer .mono{font-family:"IBM Plex Mono",monospace;font-size:12px;margin:22px 0 
   </section>
 
   <section>
-    <span class="eyebrow">install it</span>
+    <span class="eyebrow">l’installer</span>
     <pre><b>git clone</b> https://github.com/macarchy/jarvis.git ~/Work/jarvis
 <b>cd</b> ~/Work/jarvis
-<b>./bootstrap.sh</b>      <i># Piper, its voices, the Whisper model, the wake venv</i>
-<b>./install.sh</b>        <i># the CLI, the mascot plugin, the user units</i>
+<b>./bootstrap.sh</b>      <i># Piper, ses voix, le modèle Whisper, le venv du réveil</i>
+<b>./install.sh</b>        <i># le lien de commande, le greffon, les unités utilisateur</i>
 <b>omarchy-jarvis doctor</b></pre>
     <p class="note">
-      The voice loop is portable — Linux, PipeWire, voxtype, Claude Code. The
-      <em>hands</em> need Omarchy and Hyprland, and the <em>body</em> needs
-      Quickshell; both fail softly, so on a plain Linux box he still listens,
-      thinks and speaks. The full honesty is in the
-      <a href="https://github.com/macarchy/jarvis#readme">README</a>
-      (<a href="https://github.com/macarchy/jarvis/blob/main/README.fr.md">en français</a>).
+      La boucle vocale est portable — Linux, PipeWire, voxtype, Claude Code.
+      Les <em>mains</em> exigent Omarchy et Hyprland, et le <em>corps</em>
+      Quickshell ; les deux tombent en douceur, donc sur un Linux ordinaire il
+      écoute, réfléchit et parle toujours. Toute l’honnêteté est dans le
+      <a href="https://github.com/macarchy/jarvis/blob/main/README.fr.md">README</a>
+      (<a href="https://github.com/macarchy/jarvis#readme">in English</a>).
     </p>
   </section>
 
   <footer>
-    <p class="mono">macarchy/jarvis · MIT · <a href="https://github.com/macarchy/jarvis">the code</a></p>
+    <p class="mono">macarchy/jarvis · MIT · <a href="https://github.com/macarchy/jarvis">le code</a></p>
     <p style="margin:0">
-      “Like my namesake in the <em>Hitchhiker’s Guide</em>, I understand every
-      language spoken to me, and I answer in it. I am the voice of this system:
-      its daemons are my fins.”
+      « Comme mon homonyme du <em>Guide du voyageur galactique</em>, je comprends
+      toutes les langues qu’on me parle, et j’y réponds. Je suis la voix de ce
+      système : ses daemons sont mes nageoires. »
     </p>
   </footer>
 

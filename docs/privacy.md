@@ -1,6 +1,8 @@
 ---
 layout: default
 lang: en
+alt: /privacy.fr.html
+altlang: fr
 title: What Jarvis knows, keeps, and sends
 description: A plain accounting of what leaves your machine, what is kept, and how to turn each part off.
 ---

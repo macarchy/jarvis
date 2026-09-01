@@ -1,5 +1,5 @@
 <meta charset="utf-8">
-<title>The Babel Fish</title>
+<title>Le Poisson de Babel</title>
 <link rel="alternate" hreflang="en" href="https://macarchy.github.io/jarvis/poisson.html">
 <link rel="alternate" hreflang="fr" href="https://macarchy.github.io/jarvis/poisson.fr.html">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;600&display=swap">
@@ -156,18 +156,18 @@ footer code{color:var(--wave);background:rgba(120,190,255,.08)}
 </style>
 
 <div class="wrap">
-<div class="langbar"><div class="langs"><span aria-current="true">EN</span><a href="poisson.fr.html" hreflang="fr" lang="fr">FR</a></div></div>
-  <span class="eyebrow">macarchy.jarvis — the mascot</span>
-  <h1>The Babel Fish</h1>
-  <p class="intro">A small yellow pixel-art fish lives in the bottom-right corner of
-  the screen, out of the aquarium that serves as the wallpaper. Like his namesake in the
-  <em>Hitchhiker&rsquo;s Guide</em>, he understands every language spoken to him — and
-  his body tells, in 72 × 56 pixels, everything Jarvis is doing or feeling.</p>
+<div class="langbar"><div class="langs"><a href="poisson.html" hreflang="en" lang="en">EN</a><span aria-current="true">FR</span></div></div>
+  <span class="eyebrow">macarchy.jarvis — la mascotte</span>
+  <h1>Le Poisson de Babel</h1>
+  <p class="intro">Un petit poisson jaune en pixel art vit en bas à droite de l'écran,
+  sorti de l'aquarium qui sert de fond. Comme son homonyme du <em>Guide du voyageur
+  galactique</em>, il comprend toutes les langues qu'on lui parle — et son corps
+  raconte, en 72 × 56 pixels, tout ce que Jarvis fait ou ressent.</p>
 
   <!-- ————————— la machine à états, en vrai ————————— -->
   <section class="fsm">
-    <h2>The state machine</h2>
-    <p class="groupsub">Every spoken exchange goes through these states. Drive it: the fish plays each stage, speech bubble included.</p>
+    <h2>La machine à états</h2>
+    <p class="groupsub">Chaque échange vocal traverse ces états. Pilote-la : le poisson joue chaque étape, philactère compris.</p>
 
     <div class="scene" aria-label="Scène animée : le poisson et son philactère">
       <span class="weed" style="left:24px"><i style="height:64px"></i><i style="height:38px"></i><i style="height:52px"></i></span>
@@ -183,95 +183,95 @@ footer code{color:var(--wave);background:rgba(120,190,255,.08)}
 
     <div class="staterow" id="staterow"></div>
     <div class="events">
-      <button id="bpress">Press</button>
+      <button id="bpress">Appui</button>
       <button id="bsettle">Silence</button>
-      <button id="bcancel">Cancel</button>
-      <button id="bdream">Dream</button>
+      <button id="bcancel">Annuler</button>
+      <button id="bdream">Rêver</button>
     </div>
     <p class="hint" id="hint"></p>
 
-    <div class="ascii"><p style="margin:10px 0 0"><a href="machine.html">The state machine, drivable →</a><br><span style="opacity:.7">Eight states, nine events, and only 38 of the 72 pairs legal — the real table, the one the suite diffs against its fixture.</span></p></div>
+    <div class="ascii"><p style="margin:10px 0 0"><a href="machine.fr.html">La machine à états, en pilotable →</a><br><span style="opacity:.7">Huit états, neuf événements, et seulement 38 des 72 couples légaux — la vraie table, celle que la suite de tests compare à sa fixture.</span></p></div>
   </section>
 
   <!-- ————————— la galerie des émotions ————————— -->
-<section class="group"><h2>The voice pipeline</h2><p class="groupsub">These five states are driven by the state machine in bin/jarvis — the body follows the voice.</p><div class="grid">
+<section class="group"><h2>La pipeline vocale</h2><p class="groupsub">Ces cinq états sont pilotés par la machine à états de bin/jarvis — le corps suit la voix.</p><div class="grid">
 <article class="pixcard">
   <div class="tank"><div class="sprite sp-idle"></div></div>
-  <h3>At rest</h3>
-  <p>The base state: he floats, blinks, flicks his tail.</p>
+  <h3>Au repos</h3>
+  <p>L'état de base : il flotte, cligne, remue la queue.</p>
   <code>setState idle</code>
 </article>
 <article class="pixcard">
   <div class="tank"><div class="sprite sp-listening"></div></div>
-  <h3>Listening</h3>
-  <p>A press, a click on him, or &ldquo;Hey Jarvis&rdquo;: gills up, sound waves.</p>
+  <h3>À l'écoute</h3>
+  <p>Un appui, un clic sur lui, ou « Hey Jarvis » : branchies dressées, ondes sonores.</p>
   <code>setState listening</code>
 </article>
 <article class="pixcard">
   <div class="tank"><div class="sprite sp-thinking"></div></div>
-  <h3>Thinking</h3>
-  <p>Pupil up, dots rising — transcription, then the brain at work.</p>
+  <h3>Réfléchit</h3>
+  <p>Pupille en l'air, points qui montent — transcription puis cerveau au travail.</p>
   <code>setState thinking</code>
 </article>
 <article class="pixcard">
   <div class="tank"><div class="sprite sp-speaking"></div></div>
-  <h3>Speaking</h3>
-  <p>The mouth follows the voice, bubbles escape, sentence by sentence.</p>
+  <h3>Parle</h3>
+  <p>La bouche suit la voix, des bulles s'échappent, phrase par phrase.</p>
   <code>setState speaking</code>
 </article>
 <article class="pixcard">
   <div class="tank"><div class="sprite sp-sleeping"></div></div>
-  <h3>Asleep, dreaming</h3>
-  <p>At night (23:00–07:00), or while he consolidates his memory. The zZz rise.</p>
+  <h3>Dort, rêve</h3>
+  <p>La nuit (23 h – 7 h), ou pendant qu'il consolide sa mémoire. Les zZz montent.</p>
   <code>setState sleeping</code>
 </article>
 </div></section>
-<section class="group"><h2>The moods</h2><p class="groupsub">Punctual emotions (six seconds) over the resting body — the pipeline triggers them, and so can you.</p><div class="grid">
+<section class="group"><h2>Les humeurs</h2><p class="groupsub">Des émotions ponctuelles (six secondes) par-dessus le corps au repos — le pipeline les déclenche, toi aussi.</p><div class="grid">
 <article class="pixcard">
   <div class="tank"><div class="sprite sp-curious"></div></div>
-  <h3>Curious</h3>
-  <p>A notification arrives: a glance, a question mark.</p>
+  <h3>Curieux</h3>
+  <p>Une notification arrive : un coup d'œil, un point d'interrogation.</p>
   <code>emote curious</code>
 </article>
 <article class="pixcard">
   <div class="tank"><div class="sprite sp-proud"></div></div>
-  <h3>Proud</h3>
-  <p>Mission accomplished — chest out, golden sparks.</p>
+  <h3>Fier</h3>
+  <p>Mission accomplie — poitrail haut, étincelles dorées.</p>
   <code>emote proud</code>
 </article>
 <article class="pixcard">
   <div class="tank"><div class="sprite sp-celebrate"></div></div>
-  <h3>Celebrate</h3>
-  <p>The brain is back, a success: confetti.</p>
+  <h3>Fête</h3>
+  <p>Le cerveau est de retour, une réussite : confettis.</p>
   <code>emote celebrate</code>
 </article>
 <article class="pixcard">
   <div class="tank"><div class="sprite sp-worried"></div></div>
-  <h3>Worried</h3>
-  <p>A failure noted, an unreachable brain: brow down, a bead of sweat.</p>
+  <h3>Inquiet</h3>
+  <p>Un échec noté, un cerveau injoignable : sourcil bas, goutte au front.</p>
   <code>emote worried</code>
 </article>
 </div></section>
-<section class="group"><h2>The body</h2><p class="groupsub">At rest, he wears the state of the machine without being asked.</p><div class="grid">
+<section class="group"><h2>Le corps</h2><p class="groupsub">Au repos, il porte l'état de la machine sans qu'on le lui demande.</p><div class="grid">
 <article class="pixcard">
   <div class="tank"><div class="sprite sp-dnd"></div></div>
-  <h3>Do not disturb</h3>
-  <p>Headphones when the system DND is on. He hears nothing.</p>
-  <code>(system state)</code>
+  <h3>Ne pas déranger</h3>
+  <p>Le casque quand le DND du système est actif. Il n'entend rien.</p>
+  <code>(état du système)</code>
 </article>
 <article class="pixcard">
   <div class="tank"><div class="sprite sp-tired"></div></div>
-  <h3>Tired</h3>
-  <p>Battery under 20 % and discharging: heavy lids, he sinks a little.</p>
-  <code>(system state)</code>
+  <h3>Fatigué</h3>
+  <p>Batterie sous 20 % en décharge : paupières lourdes, il coule un peu.</p>
+  <code>(état du système)</code>
 </article>
 </div></section>
 
   <footer>
-    <p><strong>His life goes on without you</strong>: every 10 to 22 idle minutes he swims
-    off along the bottom edge and turns around; a notification earns him a curious glance;
-    at night he falls asleep on his own. On demand: <code>omarchy-shell macarchy.jarvis swim</code>,
-    <code>emote celebrate</code>, <code>reply "…"</code> — and a click on him is the push-to-talk press.</p>
+    <p><strong>Sa vie continue sans toi</strong> : toutes les 10 à 22 minutes d'oisiveté il part
+    nager le long du bord et fait demi-tour ; une notification lui vaut un coup d'œil curieux ;
+    la nuit il dort de lui-même. À la demande : <code>omarchy-shell macarchy.jarvis swim</code>,
+    <code>emote celebrate</code>, <code>reply "…"</code> — et un clic sur lui, c'est l'appui vocal.</p>
   </footer>
 </div>
 

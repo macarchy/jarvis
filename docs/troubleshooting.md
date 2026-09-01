@@ -1,6 +1,8 @@
 ---
 layout: default
 lang: en
+alt: /troubleshooting.fr.html
+altlang: fr
 title: When something is red
 description: One entry per line `omarchy-jarvis doctor` can print, in the order it prints them.
 ---

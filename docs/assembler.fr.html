@@ -1,5 +1,5 @@
 <meta charset="utf-8">
-<title>Build your Jarvis</title>
+<title>Assemble ton Jarvis</title>
 <link rel="alternate" hreflang="en" href="https://macarchy.github.io/jarvis/assembler.html">
 <link rel="alternate" hreflang="fr" href="https://macarchy.github.io/jarvis/assembler.fr.html">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
@@ -54,56 +54,56 @@ button:focus-visible{outline:3px solid var(--wave);outline-offset:4px}
 .langs a:focus-visible{outline:2px solid #F2C94C;outline-offset:3px}
 </style>
 <div class="wrap">
-<div class="langbar"><div class="langs"><span aria-current="true">EN</span><a href="assembler.fr.html" hreflang="fr" lang="fr">FR</a></div></div>
-<h1>Build your Jarvis</h1>
-<p class="lead">Four bodies, four eyes, four crests, four tails, eight colourways — 2,048 possible fish. Every part attaches to a fixed anchor — that is what lets any combination be animated by the same code. On the machine, the same thing is set from the Control Center (Jarvis › Appearance) — the plate matches the lines in SOUL.md.</p>
+<div class="langbar"><div class="langs"><a href="assembler.html" hreflang="en" lang="en">EN</a><span aria-current="true">FR</span></div></div>
+<h1>Assemble ton Jarvis</h1>
+<p class="lead">Quatre corps, quatre yeux, quatre crinières, quatre queues, huit couleurs — 2 048 poissons possibles. Chaque pièce se pose sur un ancrage fixe — c'est ce qui permettra d'animer n'importe quelle combinaison avec le même code. Sur la machine, la même chose se règle dans le Control Center (page Jarvis › Apparence) — la plaque correspond aux lignes de SOUL.md.</p>
 <div class="atelier">
   <div class="tank-col">
     <div class="tank">
       <canvas id="big" width="576" height="448" aria-label="Le poisson assemblé"></canvas>
-      <div class="plate"><span class="lat">Babelus jarvisii</span><code id="cfgline">corps=B1 oeil=E1 criniere=M1 queue=T1 couleur=or</code><button id="copy" type="button">Copy</button></div>
-      <div class="small"><canvas id="real" width="144" height="112"></canvas><span>actual size<br>on screen</span></div>
+      <div class="plate"><span class="lat">Babelus jarvisii</span><code id="cfgline">corps=B1 oeil=E1 criniere=M1 queue=T1 couleur=or</code><button id="copy" type="button">Copier</button></div>
+      <div class="small"><canvas id="real" width="144" height="112"></canvas><span>taille réelle<br>à l'écran</span></div>
     </div>
-    <button class="random" id="random" type="button">Random</button>
+    <button class="random" id="random" type="button">Au hasard</button>
   </div>
   <div class="tray">
-<section class="axis"><h2>The body</h2><div class="choices" role="radiogroup" aria-label="Le corps">
+<section class="axis"><h2>Le corps</h2><div class="choices" role="radiogroup" aria-label="Le corps">
 <label class="choice"><input type="radio" name="body" value="B1"><canvas class="thumb" width="144" height="112" data-axis="body" data-key="B1"></canvas><span class="name"><b>B1</b>Babel</span></label>
-<label class="choice"><input type="radio" name="body" value="B2"><canvas class="thumb" width="144" height="112" data-axis="body" data-key="B2"></canvas><span class="name"><b>B2</b>Round</span></label>
-<label class="choice"><input type="radio" name="body" value="B3"><canvas class="thumb" width="144" height="112" data-axis="body" data-key="B3"></canvas><span class="name"><b>B3</b>Slender</span></label>
-<label class="choice"><input type="radio" name="body" value="B4"><canvas class="thumb" width="144" height="112" data-axis="body" data-key="B4"></canvas><span class="name"><b>B4</b>Eel</span></label>
+<label class="choice"><input type="radio" name="body" value="B2"><canvas class="thumb" width="144" height="112" data-axis="body" data-key="B2"></canvas><span class="name"><b>B2</b>Rond</span></label>
+<label class="choice"><input type="radio" name="body" value="B3"><canvas class="thumb" width="144" height="112" data-axis="body" data-key="B3"></canvas><span class="name"><b>B3</b>Élancé</span></label>
+<label class="choice"><input type="radio" name="body" value="B4"><canvas class="thumb" width="144" height="112" data-axis="body" data-key="B4"></canvas><span class="name"><b>B4</b>Anguille</span></label>
 </div></section>
-<section class="axis"><h2>The eye</h2><div class="choices" role="radiogroup" aria-label="L'œil">
-<label class="choice"><input type="radio" name="eye" value="E1"><canvas class="thumb" width="144" height="112" data-axis="eye" data-key="E1"></canvas><span class="name"><b>E1</b>Wide</span></label>
-<label class="choice"><input type="radio" name="eye" value="E2"><canvas class="thumb" width="144" height="112" data-axis="eye" data-key="E2"></canvas><span class="name"><b>E2</b>Almond</span></label>
-<label class="choice"><input type="radio" name="eye" value="E3"><canvas class="thumb" width="144" height="112" data-axis="eye" data-key="E3"></canvas><span class="name"><b>E3</b>Round</span></label>
-<label class="choice"><input type="radio" name="eye" value="E4"><canvas class="thumb" width="144" height="112" data-axis="eye" data-key="E4"></canvas><span class="name"><b>E4</b>Ring</span></label>
+<section class="axis"><h2>L'œil</h2><div class="choices" role="radiogroup" aria-label="L'œil">
+<label class="choice"><input type="radio" name="eye" value="E1"><canvas class="thumb" width="144" height="112" data-axis="eye" data-key="E1"></canvas><span class="name"><b>E1</b>Grand</span></label>
+<label class="choice"><input type="radio" name="eye" value="E2"><canvas class="thumb" width="144" height="112" data-axis="eye" data-key="E2"></canvas><span class="name"><b>E2</b>Amande</span></label>
+<label class="choice"><input type="radio" name="eye" value="E3"><canvas class="thumb" width="144" height="112" data-axis="eye" data-key="E3"></canvas><span class="name"><b>E3</b>Rond</span></label>
+<label class="choice"><input type="radio" name="eye" value="E4"><canvas class="thumb" width="144" height="112" data-axis="eye" data-key="E4"></canvas><span class="name"><b>E4</b>Anneau</span></label>
 </div></section>
-<section class="axis"><h2>The crest</h2><div class="choices" role="radiogroup" aria-label="La crinière">
-<label class="choice"><input type="radio" name="crest" value="M1"><canvas class="thumb" width="144" height="112" data-axis="crest" data-key="M1"></canvas><span class="name"><b>M1</b>Fan</span></label>
-<label class="choice"><input type="radio" name="crest" value="M2"><canvas class="thumb" width="144" height="112" data-axis="crest" data-key="M2"></canvas><span class="name"><b>M2</b>Veil</span></label>
+<section class="axis"><h2>La crinière</h2><div class="choices" role="radiogroup" aria-label="La crinière">
+<label class="choice"><input type="radio" name="crest" value="M1"><canvas class="thumb" width="144" height="112" data-axis="crest" data-key="M1"></canvas><span class="name"><b>M1</b>Éventail</span></label>
+<label class="choice"><input type="radio" name="crest" value="M2"><canvas class="thumb" width="144" height="112" data-axis="crest" data-key="M2"></canvas><span class="name"><b>M2</b>Voile</span></label>
 <label class="choice"><input type="radio" name="crest" value="M3"><canvas class="thumb" width="144" height="112" data-axis="crest" data-key="M3"></canvas><span class="name"><b>M3</b>Mohawk</span></label>
-<label class="choice"><input type="radio" name="crest" value="M4"><canvas class="thumb" width="144" height="112" data-axis="crest" data-key="M4"></canvas><span class="name"><b>M4</b>Antennae</span></label>
+<label class="choice"><input type="radio" name="crest" value="M4"><canvas class="thumb" width="144" height="112" data-axis="crest" data-key="M4"></canvas><span class="name"><b>M4</b>Antennes</span></label>
 </div></section>
-<section class="axis"><h2>The tail</h2><div class="choices" role="radiogroup" aria-label="La queue">
-<label class="choice"><input type="radio" name="tail" value="T1"><canvas class="thumb" width="144" height="112" data-axis="tail" data-key="T1"></canvas><span class="name"><b>T1</b>Fork</span></label>
-<label class="choice"><input type="radio" name="tail" value="T2"><canvas class="thumb" width="144" height="112" data-axis="tail" data-key="T2"></canvas><span class="name"><b>T2</b>Fan</span></label>
-<label class="choice"><input type="radio" name="tail" value="T3"><canvas class="thumb" width="144" height="112" data-axis="tail" data-key="T3"></canvas><span class="name"><b>T3</b>Crescent</span></label>
-<label class="choice"><input type="radio" name="tail" value="T4"><canvas class="thumb" width="144" height="112" data-axis="tail" data-key="T4"></canvas><span class="name"><b>T4</b>Ribbon</span></label>
+<section class="axis"><h2>La queue</h2><div class="choices" role="radiogroup" aria-label="La queue">
+<label class="choice"><input type="radio" name="tail" value="T1"><canvas class="thumb" width="144" height="112" data-axis="tail" data-key="T1"></canvas><span class="name"><b>T1</b>Fourche</span></label>
+<label class="choice"><input type="radio" name="tail" value="T2"><canvas class="thumb" width="144" height="112" data-axis="tail" data-key="T2"></canvas><span class="name"><b>T2</b>Éventail</span></label>
+<label class="choice"><input type="radio" name="tail" value="T3"><canvas class="thumb" width="144" height="112" data-axis="tail" data-key="T3"></canvas><span class="name"><b>T3</b>Croissant</span></label>
+<label class="choice"><input type="radio" name="tail" value="T4"><canvas class="thumb" width="144" height="112" data-axis="tail" data-key="T4"></canvas><span class="name"><b>T4</b>Ruban</span></label>
 </div></section>
-<section class="axis"><h2>The colour</h2><div class="choices chips" role="radiogroup" aria-label="La couleur">
-<label class="chip"><input type="radio" name="pal" value="or"><span class="swatch"><i style="background:#FAE282"></i><i style="background:#F2C94C"></i><i style="background:#D99A2B"></i></span><span class="name">Gold</span></label>
-<label class="chip"><input type="radio" name="pal" value="corail"><span class="swatch"><i style="background:#FFB48F"></i><i style="background:#F08A5D"></i><i style="background:#C95C3A"></i></span><span class="name">Coral</span></label>
-<label class="chip"><input type="radio" name="pal" value="lagon"><span class="swatch"><i style="background:#9CEDE7"></i><i style="background:#4CC9C0"></i><i style="background:#2A9D96"></i></span><span class="name">Lagoon</span></label>
-<label class="chip"><input type="radio" name="pal" value="lavande"><span class="swatch"><i style="background:#D1C4FF"></i><i style="background:#A78BFA"></i><i style="background:#7C5CD6"></i></span><span class="name">Lavender</span></label>
-<label class="chip"><input type="radio" name="pal" value="menthe"><span class="swatch"><i style="background:#C0F2A6"></i><i style="background:#7ED957"></i><i style="background:#4FA83A"></i></span><span class="name">Mint</span></label>
-<label class="chip"><input type="radio" name="pal" value="perle"><span class="swatch"><i style="background:#FFFFFF"></i><i style="background:#ECE7DC"></i><i style="background:#BFB6A6"></i></span><span class="name">Pearl</span></label>
-<label class="chip"><input type="radio" name="pal" value="braise"><span class="swatch"><i style="background:#FFB3B3"></i><i style="background:#FF6B6B"></i><i style="background:#D64545"></i></span><span class="name">Ember</span></label>
-<label class="chip"><input type="radio" name="pal" value="encre"><span class="swatch"><i style="background:#A9C4FF"></i><i style="background:#5C8DFF"></i><i style="background:#3A64C8"></i></span><span class="name">Ink</span></label>
+<section class="axis"><h2>La couleur</h2><div class="choices chips" role="radiogroup" aria-label="La couleur">
+<label class="chip"><input type="radio" name="pal" value="or"><span class="swatch"><i style="background:#FAE282"></i><i style="background:#F2C94C"></i><i style="background:#D99A2B"></i></span><span class="name">Or</span></label>
+<label class="chip"><input type="radio" name="pal" value="corail"><span class="swatch"><i style="background:#FFB48F"></i><i style="background:#F08A5D"></i><i style="background:#C95C3A"></i></span><span class="name">Corail</span></label>
+<label class="chip"><input type="radio" name="pal" value="lagon"><span class="swatch"><i style="background:#9CEDE7"></i><i style="background:#4CC9C0"></i><i style="background:#2A9D96"></i></span><span class="name">Lagon</span></label>
+<label class="chip"><input type="radio" name="pal" value="lavande"><span class="swatch"><i style="background:#D1C4FF"></i><i style="background:#A78BFA"></i><i style="background:#7C5CD6"></i></span><span class="name">Lavande</span></label>
+<label class="chip"><input type="radio" name="pal" value="menthe"><span class="swatch"><i style="background:#C0F2A6"></i><i style="background:#7ED957"></i><i style="background:#4FA83A"></i></span><span class="name">Menthe</span></label>
+<label class="chip"><input type="radio" name="pal" value="perle"><span class="swatch"><i style="background:#FFFFFF"></i><i style="background:#ECE7DC"></i><i style="background:#BFB6A6"></i></span><span class="name">Perle</span></label>
+<label class="chip"><input type="radio" name="pal" value="braise"><span class="swatch"><i style="background:#FFB3B3"></i><i style="background:#FF6B6B"></i><i style="background:#D64545"></i></span><span class="name">Braise</span></label>
+<label class="chip"><input type="radio" name="pal" value="encre"><span class="swatch"><i style="background:#A9C4FF"></i><i style="background:#5C8DFF"></i><i style="background:#3A64C8"></i></span><span class="name">Encre</span></label>
 </div></section>
   </div>
 </div>
-<p class="note">Parts, bodies and palettes live in <code>sprites/parts.py</code> ; the layers are recoloured and composed here, exactly as the generator will do it.</p>
+<p class="note">Pièces, corps et palettes dans <code>sprites/parts.py</code> ; les calques sont recolorés et composés ici, exactement comme le générateur le fera.</p>
 </div>
 <script>
 (function(){
