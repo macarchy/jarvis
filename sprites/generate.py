@@ -65,6 +65,8 @@ PALETTE = {
     "3": (255, 214, 90, 235),    # confetti gold
     "4": (120, 190, 255, 235),   # confetti blue
     "G": (70, 70, 80, 255),      # headphone plastic
+    "D": (196, 128, 34, 255),    # back shade (counter-shading)
+    "L": (214, 236, 255, 255),   # eye catchlight
 }
 
 # ---------------------------------------------------------------- the fish
@@ -151,8 +153,10 @@ def sway_tail(rows):
             tail = row[19:]
             row = row[:19] + ["."] + tail[:-1]
         elif y in (11, 12):
-            tail = row[19:]
-            row = row[:19] + tail[1:] + ["."]
+            # Slice one column earlier: the lower prong's outline sits at
+            # col 19 and a cut there would swallow it (preview.py caught it).
+            tail = row[18:]
+            row = row[:18] + tail[1:] + ["."]
         out.append(row)
     return out
 
@@ -347,15 +351,16 @@ celebrate = [
     compose(plain, -3, confetti3),
 ]
 
-sheet("idle", idle)
-sheet("sleeping", sleeping)
-sheet("tired", tired)
-sheet("dnd", dnd)
-sheet("worried", worried)
-sheet("proud", proud)
-sheet("curious", curious)
-sheet("celebrate", celebrate)
-sheet("listening", listening)
-sheet("thinking", thinking)
-sheet("speaking", speaking)
-print(f"canvas {W}x{H}")
+if __name__ == "__main__":
+    sheet("idle", idle)
+    sheet("sleeping", sleeping)
+    sheet("tired", tired)
+    sheet("dnd", dnd)
+    sheet("worried", worried)
+    sheet("proud", proud)
+    sheet("curious", curious)
+    sheet("celebrate", celebrate)
+    sheet("listening", listening)
+    sheet("thinking", thinking)
+    sheet("speaking", speaking)
+    print(f"canvas {W}x{H}")
