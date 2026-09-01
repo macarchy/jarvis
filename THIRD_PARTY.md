@@ -32,23 +32,25 @@ on, and they are **not** the same:
 
 | Voice | Role | License | Dataset |
 |---|---|---|---|
-| `fr_FR-tom-medium` | **French, default** | **AGPL-3.0** | [French-tts-model-piper](https://git.bksp.space/Tjiho/French-tts-model-piper) |
+| `fr_FR-tom-medium` | French, opt-in | **AGPL-3.0** | [French-tts-model-piper](https://git.bksp.space/Tjiho/French-tts-model-piper) |
 | `en_GB-alan-medium` | English, default | see source | [mimic3-voices / apope](https://github.com/MycroftAI/mimic3-voices/blob/master/voices/en_UK/apope_low) |
-| `fr_FR-siwis-medium` | French, alternate | **CC-BY 4.0** | [SIWIS, Univ. of Edinburgh](https://datashare.is.ed.ac.uk/handle/10283/2353) |
+| `fr_FR-siwis-medium` | **French, default** | **CC-BY 4.0** | [SIWIS, Univ. of Edinburgh](https://datashare.is.ed.ac.uk/handle/10283/2353) |
 | `fr_FR-upmc-medium` | French, alternate | CC-BY-SA 4.0 | [upmc-pierre-data](https://github.com/marytts/upmc-pierre-data) |
 
-> **Worth knowing.** The default French voice is AGPL-3.0 — the strongest
-> copyleft of anything Jarvis touches. It is downloaded and run locally, never
-> redistributed here, and Jarvis is not a network service. But if you intend to
-> ship a bundle, or to run something like this as a hosted service, this is the
-> line to read carefully.
+> **Worth knowing.** `fr_FR-tom-medium` is AGPL-3.0 — the strongest copyleft
+> of anything Jarvis touches — so it is not what you get by default. Which
+> French voice speaks is a soul setting (`voix: siwis | tom | upmc` in
+> SOUL.md), `bootstrap.sh` fetches the one the soul asks for, and the default
+> is `siwis` under CC-BY 4.0. Nobody should have to reason about copyleft to
+> install a voice assistant.
 >
-> `fr_FR-siwis-medium` (CC-BY 4.0) is already fetched by
-> `./bootstrap.sh --all-voices` and is a drop-in replacement: change `VOICE_FR`
-> near the top of [`bin/jarvis`](bin/jarvis). It is a different voice, not a
-> worse one.
+> Choosing `tom` is one line, and it is yours to choose. It is downloaded and
+> run locally, never redistributed here, and Jarvis is not a network service —
+> but if you intend to ship a bundle, or to run something like this as a
+> hosted service, that is the line to read carefully.
 
-Only the two defaults are downloaded unless you pass `--all-voices`.
+Two voices are downloaded: the French one the soul names, and the English
+one. `--all-voices` fetches the other two French alternates as well.
 
 ## The ear
 

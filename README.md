@@ -122,8 +122,8 @@ subprocesses `claude` spawned for its own tools, which a bare pid never does.
 ## Making him yours
 
 [`SOUL.md`](SOUL.md) is who he is — tone, humour, whether he uses *tu* or
-*monsieur*, his language, his quiet hours, and the five pieces his fish is
-assembled from. Edit it freely; it takes effect on the next conversation.
+*monsieur*, his language, **which of the three French voices speaks**, his
+quiet hours, and the five pieces his fish is assembled from. Edit it freely; it takes effect on the next conversation.
 
 [`CLAUDE.md`](CLAUDE.md) is what he can do — the commands that are his hands,
 written as a prompt. Adding a capability usually means one paragraph there and

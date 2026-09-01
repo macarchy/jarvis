@@ -128,8 +128,8 @@ propres outils, ce qu'un pid nu ne fait jamais.
 ## Le faire tien
 
 [`SOUL.md`](SOUL.md), c'est qui il est — le ton, l'humour, le tutoiement ou le
-« monsieur », sa langue, ses heures de silence, et les cinq pièces dont son
-poisson est assemblé. Édite-le librement ; ça s'applique à la conversation
+« monsieur », sa langue, **laquelle des trois voix françaises le porte**, ses
+heures de silence, et les cinq pièces dont son poisson est assemblé. Édite-le librement ; ça s'applique à la conversation
 suivante.
 
 [`CLAUDE.md`](CLAUDE.md), c'est ce qu'il sait faire — les commandes qui sont ses
