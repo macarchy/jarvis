@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""generate — the sprite engine: one fish configuration in, the eleven
+"""generate — the sprite engine: one fish configuration in, the twelve
 animated sheets out.
 
 The fish is assembled from parts (sprites/parts.py: a body with anchors,
@@ -187,6 +187,21 @@ def sway_tail(rows, cfg):
     return text(g)
 
 
+def fold_tail(rows, cfg):
+    # The opposite of a stroke: every tail row past the attachment is
+    # drawn one column back toward the peduncle, so the fan closes
+    # against the body instead of trailing behind it. A fin that has
+    # stopped pushing — which is the whole reading of an abort.
+    g = grid(rows)
+    ax, ay = parts.anchors(cfg)["tail"]
+    w, h = parts.TAIL_BOX
+    x0 = ax + 3
+    for y in range(ay, min(ay + h, parts.BH)):
+        seg = g[y][x0:x0 + w]
+        g[y][x0:x0 + w] = (seg[1:] + ["."])[:len(seg)]
+    return text(g)
+
+
 def worried_brow(rows, cfg):
     # A slanted brow pressing on the eye, carved in the flesh above it.
     g = grid(rows)
@@ -219,15 +234,17 @@ def headphones(rows, cfg):
 # ----------------------------------------------------------- composition
 
 
-def frame(rows, dy=0, extra=None, pal=None):
-    """Body rows onto the canvas, bobbed by dy, plus canvas-coord fx."""
+def frame(rows, dy=0, extra=None, pal=None, dx=0):
+    """Body rows onto the canvas, bobbed by dy and shoved by dx, plus
+    canvas-coord fx. dx exists for the one gesture that is a displacement
+    of the whole fish rather than of one of his parts: backing off."""
     pal = pal or PALETTE
     img = Frame(W, H)
     for y, row in enumerate(rows):
         for x, c in enumerate(row):
             color = pal.get(c)
             if color and color[3]:
-                img.set(OX + x, OY + dy + y, color)
+                img.set(OX + dx + x, OY + dy + y, color)
     for (x, y, c) in (extra or []):
         img.set(x, y, pal[c])
     return img
@@ -253,6 +270,13 @@ def qmark(x, y, faint=False):
             (x + 3, y + 2, c), (x + 2, y + 3, c), (x + 2, y + 4, c), (x + 2, y + 6, c)]
 
 
+def wake(x, y, faint=False):
+    """Two short streaks of water left where the fish just was: the only
+    way a two-column shove reads as movement rather than as a jump cut."""
+    c = "b" if faint else "B"
+    return [(x + i, y, c) for i in range(4)] + [(x + 1 + i, y + 4, c) for i in range(4)]
+
+
 def sparkle(x, y):
     return [(x, y - 1, "3"), (x - 1, y, "3"), (x, y, "3"), (x + 1, y, "3"), (x, y + 1, "3")]
 
@@ -264,7 +288,7 @@ def build(cfg, out):
     plain = parts.compose(cfg)
     perked = parts.compose(cfg, crest_dy=-1)
     bare = parts.compose(cfg, crest=False)
-    F = lambda rows, dy=0, extra=None: frame(rows, dy, extra, pal)  # noqa: E731
+    F = lambda rows, dy=0, extra=None, dx=0: frame(rows, dy, extra, pal, dx)  # noqa: E731
 
     sheets = {}
     sheets["idle"] = [
@@ -291,6 +315,21 @@ def build(cfg, out):
         F(wide, 0, [(bx - 1, by, "B"), (bx + 1, by - 3, "b")]),
         F(half, 1, [(bx - 1, by - 2, "B")]),
         F(plain, 0),
+    ]
+    # The abort, in four beats. He flinches two rows up, shoves two
+    # columns back toward his own tail — leaving two streaks in the water
+    # off his snout, because a shove nothing trails is a jump cut — and
+    # the lids come down on a fin that has stopped pushing. The streaks
+    # ride the same bob as the head (hence the -1) and drift one column
+    # further out as they fade. Nothing on this sheet moves forward:
+    # that is the whole point of it.
+    wx, wy = OX + mx - 6, OY + ay + 2
+    lids, folded = half_eyes(plain, cfg), fold_tail(plain, cfg)
+    sheets["cancel"] = [
+        F(plain, -2),
+        F(folded, -1, wake(wx, wy - 1), dx=2),
+        F(fold_tail(lids, cfg), 0, wake(wx - 1, wy, True), dx=2),
+        F(lids, 0, dx=1),
     ]
     asleep = close_eye(plain, cfg)
     sheets["sleeping"] = [

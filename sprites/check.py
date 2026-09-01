@@ -55,6 +55,7 @@ def variants_of(cfg):
     plain = parts.compose(cfg)
     yield "plain", plain
     yield "sway", generate.sway_tail(plain, cfg)
+    yield "fold", generate.fold_tail(plain, cfg)
     yield "blink", generate.close_eye(plain, cfg)
     yield "eye_up", generate.eye_up(plain, cfg)
     yield "half", generate.half_eyes(plain, cfg)
@@ -83,7 +84,7 @@ def main():
         by.setdefault((f[0], f[2] if f[4] in ("plain", "perked") else f[3] if f[4] == "tail" else f[4]), []).append(f)
     for key, items in sorted(by.items()):
         print(f"{key[0]} × {key[1]}: {len(items)} — ex. {items[0][1]} {items[0][2]} {items[0][3]} {items[0][4]}: {items[0][5]}")
-    print(f"{len(fails)} échec(s) sur {4**4} configurations × 10 variantes")
+    print(f"{len(fails)} échec(s) sur {4**4} configurations × 11 variantes")
     return min(len(fails), 255)
 
 
