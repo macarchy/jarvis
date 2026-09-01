@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Something is red in `doctor`
+    url: https://github.com/macarchy/jarvis/blob/main/docs/troubleshooting.md
+    about: One entry per line doctor can print. Check here before opening an issue.
+  - name: What Jarvis sends, keeps and hears
+    url: https://github.com/macarchy/jarvis/blob/main/docs/privacy.md
+    about: The full accounting, with the source lines to check it against.
