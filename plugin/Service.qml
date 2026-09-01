@@ -5,16 +5,20 @@
 // brain thinks, and mouths along while the reply is spoken — with the
 // exchange shown in a comic philactère drawn in his own pixels: the ask
 // in pale ink, the reply typed out at reading speed while the voice
-// speaks, thinking dots while the brain works, and a thought bubble
-// (dashed, beads) for what he says in his sleep.
+// speaks, thinking dots while the brain works, a thought bubble (dashed,
+// beads) for what he says in his sleep, and a severed tail when you cut
+// him off mid-sentence.
 //
 // The voice pipeline (~/Work/jarvis/bin/jarvis) drives it over IPC:
-//   omarchy-shell macarchy.jarvis setState idle|listening|thinking|speaking
+//   omarchy-shell macarchy.jarvis setState idle|listening|thinking|speaking|cancelling
 //   omarchy-shell macarchy.jarvis heard "<transcript>"
 //   omarchy-shell macarchy.jarvis reply "<text>"
-// Clicking the fish is the same as the push-to-talk key. Clicking the
-// bubble reveals the rest of a reply still typing, then dismisses it.
-// Right-click hides the fish until `omarchy-shell macarchy.jarvis show`.
+//   omarchy-shell macarchy.jarvis abort
+// Clicking the fish is the same as the push-to-talk key, which is modal:
+// while he is busy it cancels. So does right-clicking him, clicking the
+// bubble while he speaks, and Escape in the prompt bar — every surface
+// that can start a request can take it back. Right-click on an idle fish
+// hides him until `omarchy-shell macarchy.jarvis show`.
 
 import QtQuick
 import Quickshell
@@ -33,9 +37,13 @@ Item {
   property var shell: null
   property var manifest: null
 
-  // idle | listening | thinking | speaking | sleeping
+  // idle | listening | thinking | speaking | sleeping | cancelling
   property string mood: "idle"
   property bool shown: true
+
+  // Anything but rest: a request is in flight and the surfaces that start
+  // one become the ones that take it back.
+  readonly property bool busy: mood !== "idle"
 
   // ------------------------------------------------------- the philactère
   //
@@ -103,8 +111,34 @@ Item {
 
   // Circadian rest: late at night an idle fish sleeps on his own. Waking
   // interactions (mood, emotes) still win — he is asleep, not gone.
+  //
+  // The hours are not the mascot's to decide. `silence` lives in SOUL.md
+  // and bash resolves it on every transition into $STATE_DIR/quiet, so a
+  // user who turns quiet hours off from the Control Center no longer gets
+  // a fish curling up asleep at 23:05 while Jarvis demonstrably is not.
+  // The clock below survives only as the fallback for a machine where the
+  // pipeline has not spoken yet.
   property int hourNow: new Date().getHours()
-  readonly property bool night: hourNow >= 23 || hourNow < 7
+  property string quietFlag: ""
+  readonly property bool night: quietFlag === ""
+    ? (hourNow >= 23 || hourNow < 7)
+    : quietFlag === "1"
+
+  readonly property string quietPath: (Quickshell.env("JARVIS_STATE")
+    || (Quickshell.env("HOME") + "/.local/state/jarvis")) + "/quiet"
+
+  FileView {
+    id: quietFile
+    path: service.quietPath
+    watchChanges: true
+    preload: true
+    // A machine that has never run the pipeline has no such file, and that
+    // is not worth a line in the shell's log every time it is looked at.
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: service.quietFlag = quietFile.text().trim()
+    onLoadFailed: service.quietFlag = ""
+  }
 
   Timer {
     interval: 60 * 1000
@@ -122,21 +156,47 @@ Item {
   property real swimX: 0
   property double lastGlance: 0
 
+  // Every write to swimX from OUTSIDE an animation eases: being called back
+  // mid-swim, and the shake's way home. The excursion's own NumberAnimations
+  // drive the property directly and are unaffected — an animation bypasses
+  // an interceptor.
+  Behavior on swimX {
+    NumberAnimation { duration: 420; easing.type: Easing.OutCubic }
+  }
+
   SequentialAnimation {
     id: excursion
     NumberAnimation { target: service; property: "swimX"; to: -Style.space(150); duration: 4600; easing.type: Easing.InOutSine }
     PauseAnimation { duration: 1100 }
-    ScriptAction { script: fishMirror.xScale = -1 }
+    // He turns around inside a squash-cut: the mirror flips at the bottom
+    // of the dip, where there is least of him to see it happen.
+    ScriptAction { script: fish.cut(function() { fishMirror.xScale = -1 }) }
     PauseAnimation { duration: 350 }
     NumberAnimation { target: service; property: "swimX"; to: 0; duration: 4600; easing.type: Easing.InOutSine }
-    ScriptAction { script: fishMirror.xScale = 1 }
+    ScriptAction { script: fish.cut(function() { fishMirror.xScale = 1 }) }
   }
 
+  // Being called back mid-swim used to teleport him into the corner in one
+  // frame, sometimes back-to-front. Now he turns around first and the
+  // Behavior on swimX carries him home over 420 ms; the mirror only comes
+  // back once he has arrived.
   function stopExcursion() {
     if (!excursion.running && swimX === 0) return
     excursion.stop()
+    if (swimX === 0) {
+      fishMirror.xScale = 1
+      return
+    }
+    fishMirror.xScale = -1
     swimX = 0
-    fishMirror.xScale = 1
+    swimHome.restart()
+  }
+
+  Timer {
+    id: swimHome
+    interval: 520
+    repeat: false
+    onTriggered: fishMirror.xScale = 1
   }
 
   onMoodChanged: if (mood !== "idle") stopExcursion()
@@ -153,11 +213,20 @@ Item {
     }
   }
 
+  // Only a notification ARRIVING is news. The handler fires on any change
+  // of the count, so dismissing one of three popups used to make him
+  // curious about a notification going away.
+  property int lastPopups: 0
+
   Connections {
     target: service.popupModel
     ignoreUnknownSignals: true
     function onCountChanged() {
-      if (!service.popupModel || service.popupModel.count === 0) return
+      if (!service.popupModel) return
+      var n = service.popupModel.count
+      var grew = n > service.lastPopups
+      service.lastPopups = n
+      if (!grew) return
       var now = Date.now()
       if (service.mood !== "idle" || now - service.lastGlance < 120000) return
       service.lastGlance = now
@@ -165,11 +234,64 @@ Item {
     }
   }
 
-  readonly property string sprite: mood !== "idle" ? mood
+  // ------------------------------------------------------ the interruption
+  //
+  // Cancelling is a gesture, and a gesture needs a body. Without one his
+  // whole answer to being aborted was to go on quietly typing out the reply
+  // for another twenty seconds — which reads as not having heard you at
+  // all. So: the sentence stops where the voice stopped, the philactère's
+  // tail is severed, and he recoils.
+  property bool aborting: false
+  property int swimHomeMs: 0
+
+  // The cancel sheet outlives the shake by a beat: an animation shorter
+  // than a blink is one the user is not sure he saw.
+  Timer {
+    id: abortHold
+    interval: 1300
+    repeat: false
+    onTriggered: service.aborting = false
+  }
+
+  // What is still un-typed was never said out loud, so it is dropped rather
+  // than written out after the fact, and the ellipsis says the answer was
+  // cut rather than finished. Truncating also stops the typewriter, whose
+  // `running` is bound to there being something left to type.
+  function clampReply() {
+    if (typeN >= replyTarget.length) return
+    replyTarget = replyTarget.substring(0, typeN) + " …"
+    typeN = replyTarget.length
+  }
+
+  function playAbort() {
+    clampReply()
+    bubbleStyle = "cut"
+    aborting = true
+    abortHold.restart()
+    restLinger()
+    // The shake rides the Translate the excursion already uses: he has one
+    // body and it only ever moves along the bottom edge. If he is still out
+    // there swimming, the first step of the shake is the way home.
+    swimHomeMs = Math.abs(swimX) > 1 ? 260 : 0
+    abortShake.restart()
+  }
+
+  SequentialAnimation {
+    id: abortShake
+    NumberAnimation { target: service; property: "swimX"; to: 0; duration: service.swimHomeMs; easing.type: Easing.OutCubic }
+    NumberAnimation { target: service; property: "swimX"; to: Style.space(9); duration: 60; easing.type: Easing.OutQuad }
+    NumberAnimation { target: service; property: "swimX"; to: -Style.space(7); duration: 70; easing.type: Easing.InOutQuad }
+    NumberAnimation { target: service; property: "swimX"; to: Style.space(4); duration: 60; easing.type: Easing.InOutQuad }
+    NumberAnimation { target: service; property: "swimX"; to: 0; duration: 70; easing.type: Easing.OutQuad }
+  }
+
+  // ---------------------------------------------------------- the drawing
+  readonly property string sprite: (aborting || mood === "cancelling") ? "cancel"
+    : (mood !== "idle" ? mood
     : (emote !== "" ? emote
     : (dnd ? "dnd"
     : (batteryLow ? "tired"
-    : (night ? "sleeping" : "idle"))))
+    : (night ? "sleeping" : "idle")))))
 
   // [frameCount, fps] per sheet.
   readonly property var sheets: ({
@@ -177,6 +299,7 @@ Item {
     listening: [2, 4],
     thinking: [3, 3],
     speaking: [4, 8],
+    cancel: [4, 6],
     sleeping: [4, 1.4],
     tired: [2, 1.6],
     dnd: [2, 2.2],
@@ -186,17 +309,30 @@ Item {
     celebrate: [3, 6]
   })
 
+  // Nothing may index this map blind: `setState` is public IPC and a name
+  // nobody drew would otherwise reach frameCount as undefined.
+  function sheetOf(name) {
+    return sheets.hasOwnProperty(name) ? sheets[name] : sheets.idle
+  }
+
+  // The six seconds an emotion lasts are six seconds of being SEEN: the
+  // timer only counts while the emote is the sprite actually drawn. He is
+  // told to be proud in the middle of his own answer, when the pipeline
+  // mood wins the body — the emotion used to expire unwatched, every time.
   Timer {
     id: emoteTimer
     interval: 6000
     repeat: false
+    running: service.emote !== "" && service.sprite === service.emote
     onTriggered: service.emote = ""
   }
 
+  // Clearing first re-arms the timer through its binding: restart() would
+  // write `running` by hand and throw that binding away.
   function playEmote(name) {
-    if (!sheets[name]) return
+    if (!sheets.hasOwnProperty(name)) return
+    emote = ""
     emote = name
-    emoteTimer.restart()
   }
 
   // The sheets live OUTSIDE the plugin folder (the shell hot-reloads
@@ -208,21 +344,44 @@ Item {
   // file. `omarchy-jarvis look` calls reload after every regeneration.
   property bool spriteBust: false
 
+  // The pipeline's vocabulary is the state machine's, not the sheet's: two
+  // of its seven states have no picture of their own and borrow one, and
+  // anything the machine has never heard of is refused rather than drawn as
+  // a hole.
+  readonly property var moodAlias: ({ transcribing: "thinking", followup: "listening" })
+  readonly property var moods: ["idle", "listening", "thinking", "speaking", "sleeping", "cancelling"]
+
   function setMood(next) {
-    var valid = ["idle", "listening", "thinking", "speaking", "sleeping"]
-    if (valid.indexOf(next) === -1) return
-    mood = next
-    if (next === "idle") restLinger()
+    var m = moodAlias.hasOwnProperty(next) ? moodAlias[next] : next
+    if (moods.indexOf(m) === -1) return
+    if (m === mood) return
+    // Leaving `speaking` means the voice has stopped, whether it finished,
+    // failed or was cut: from here on nothing more will be said, so nothing
+    // more is written either. (Only leaving it — the quiet path of `ask`
+    // never speaks at all, and the typewriter is the whole delivery there.)
+    if (mood === "speaking" || mood === "cancelling") clampReply()
+    // A body with something else to do is done being cancelled.
+    if (m !== "idle" && m !== "cancelling") {
+      aborting = false
+      abortHold.stop()
+    }
+    mood = m
+    if (m === "idle") restLinger()
     else bubbleLinger.stop()
   }
 
-  // The body clock: whenever Jarvis idles, tick him — the script decides
-  // between a nap (memory to digest) and a round (system health check),
-  // and owns every guard: conversation freshness and both cooldowns.
+  // The body clock: tick him — the script decides between a nap (memory to
+  // digest) and a round (system health check), and owns every guard:
+  // conversation freshness and both cooldowns.
+  //
+  // It used to run only while he idled, which meant one wedged request
+  // stopped all autonomy for the rest of the login session. It now runs
+  // always, and a systemd timer beats beside it so the pulse no longer
+  // depends on the shell being alive either.
   Timer {
     interval: 5 * 60 * 1000
     repeat: true
-    running: service.mood === "idle"
+    running: true
     onTriggered: Quickshell.execDetached(["omarchy-jarvis", "tick"])
   }
 
@@ -266,6 +425,11 @@ Item {
 
     // Punctual emotion over the idle body (celebrate, worried, tired, dnd).
     function emote(name: string): void { service.playEmote(String(name)) }
+
+    // A request was cancelled. `cancel` sends this last, after the state has
+    // already come down, so it must be legible on its own: the reply stops
+    // where the voice did, the tail is cut, and he recoils.
+    function abort(): void { service.playAbort() }
 
     // The written exchange: a small prompt bar (SUPER+ALT+K). Enter sends
     // to `ask --quiet`, the reply lands in the philactère.
@@ -333,7 +497,12 @@ Item {
         placeholderText: "Écris à Jarvis…"
         foreground: service.bubbleInk
         font.pixelSize: Style.font.body
-        Keys.onEscapePressed: service.promptOpen = false
+        // Escape puts the strip away — and takes back the question it
+        // asked, if that one is still in flight.
+        Keys.onEscapePressed: {
+          if (service.busy) Quickshell.execDetached(["omarchy-jarvis", "cancel"])
+          service.promptOpen = false
+        }
         onAccepted: {
           var t = text.trim()
           service.promptOpen = false
@@ -454,6 +623,12 @@ Item {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
         onClicked: {
+          // While he is speaking, the thing you want from the bubble is not
+          // to read it faster: it is for him to stop.
+          if (service.mood === "speaking") {
+            Quickshell.execDetached(["omarchy-jarvis", "cancel"])
+            return
+          }
           if (service.typing) service.typeN = service.replyTarget.length
           else service.clearBubble()
         }
@@ -470,8 +645,8 @@ Item {
       frameHeight: 56
       pixelScale: 2
       sheet: service.spriteBust ? "" : service.assetsDir + service.sprite + ".png"
-      frameCount: service.sheets[service.sprite][0]
-      fps: service.sheets[service.sprite][1]
+      frameCount: service.sheetOf(service.sprite)[0]
+      fps: service.sheetOf(service.sprite)[1]
 
       // The excursion glides him left and back; the mirror turns him
       // around for the return leg.
@@ -495,8 +670,16 @@ Item {
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         onClicked: function(mouse) {
-          if (mouse.button === Qt.RightButton) service.shown = false
-          else Quickshell.execDetached(["omarchy-jarvis", "listen"])
+          // Left click is the push-to-talk key, modal in bash: start,
+          // finish, barge in, or cancel, depending on where he is. Right
+          // click puts him away — unless he is busy, in which case putting
+          // him away would only hide a request that keeps running.
+          if (mouse.button !== Qt.RightButton)
+            Quickshell.execDetached(["omarchy-jarvis", "press"])
+          else if (service.busy)
+            Quickshell.execDetached(["omarchy-jarvis", "cancel"])
+          else
+            service.shown = false
         }
       }
     }
