@@ -77,7 +77,7 @@ REPLY_TXT="$RUN_DIR/reply.txt"
 # recording always targets this node when it exists.
 MIC_TARGET="${JARVIS_MIC:-effect_output.j493-mic}"
 
-mkdir -p "$RUN_DIR" "$STATE_DIR"
+mkdir -p "$RUN_DIR" "$STATE_DIR" "$HOME/.cache/jarvis"
 
 # The written exchange (`ask --quiet`): everything happens — brain,
 # bubble, notification, journal, Control Center banner — except the
