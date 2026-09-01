@@ -223,10 +223,12 @@ réalisés par la communauté d'Amara.org » est le grand classique. Montez
 `JARVIS_WAKE_THRESHOLD`, ou entraînez le vérificateur d'accent pour que le mot
 de réveil cesse de se déclencher sur le bruit ambiant.
 
-**Il parle dans la mauvaise langue.** La langue de la réponse est choisie une
-fois par réponse, depuis le réglage `langue` de `SOUL.md` (`fr`, `en`, ou
-`auto`). Épinglez-la plutôt que de la laisser sur `auto` — la détection n'est
-pas fiable sur les phrases courtes.
+**Il parle dans la mauvaise langue.** Le réglage `langue` de `SOUL.md` fixe
+la conversation entière — ce que ses oreilles attendent et la voix qui répond.
+Épinglez-le sur `fr` ou `en` plutôt que de le laisser sur `auto` : sous `auto`
+il devine, une fois par réponse, et la détection n'est pas fiable sur les
+phrases courtes. Le Control Center le règle d'un clic, et le changement
+s'applique à la phrase suivante.
 
 **Rien ne se passe du tout sur la touche.** Vérifiez que la liaison a bien
 atteint le compositeur : `hyprctl binds | grep -A2 jarvis`. Une liaison modifiée

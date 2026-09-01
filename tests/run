@@ -283,8 +283,69 @@ JARVIS_SOUL="$soul" "$JARVIS" say "Voilà, c'est fait."
 assert "une valeur inconnue retombe sur le défaut" grep -q 'fr_FR-siwis' "$FAKE_PIPER_LOG"
 
 : >"$FAKE_PIPER_LOG"
+printf -- '- langue: en\n' >"$soul"
 JARVIS_SOUL="$soul" "$JARVIS" say "Right away, sir."
-assert "l'anglais n'est pas concerné" grep -q 'en_GB-alan' "$FAKE_PIPER_LOG"
+assert "l'anglais a la sienne" grep -q 'en_GB-alan' "$FAKE_PIPER_LOG"
+
+# ---- la langue est un réglage, plus une devinette
+#
+# `langue` est une rangée de pastilles dans le Control Center, et le même
+# réglage épingle déjà les oreilles : il dit dans quelle langue se tient la
+# conversation. Ce que l'utilisateur a choisi doit donc gagner contre tout ce
+# que le texte peut suggérer — la devinette ne survit que sous `auto`, où il
+# n'y a rien à obéir.
+t "langue : le réglage décide de la voix, pas l'orthographe de la phrase"
+printf 'idle' >"$JARVIS_RUN/state"
+
+: >"$FAKE_PIPER_LOG"
+printf -- '- langue: fr\n' >"$soul"
+JARVIS_SOUL="$soul" "$JARVIS" say "Right away, sir."
+assert "épinglé en français, une phrase anglaise garde la voix française" \
+	grep -q 'fr_FR-siwis' "$FAKE_PIPER_LOG"
+assert "et ne touche jamais la voix anglaise" not grep -q 'en_GB-alan' "$FAKE_PIPER_LOG"
+
+: >"$FAKE_PIPER_LOG"
+printf -- '- langue: en\n' >"$soul"
+JARVIS_SOUL="$soul" "$JARVIS" say "Voilà, c'est fait."
+assert "épinglé en anglais, une phrase française garde la voix anglaise" \
+	grep -q 'en_GB-alan' "$FAKE_PIPER_LOG"
+
+# Sous `auto` il devine encore, parce qu'il n'a rien d'autre. C'est
+# exactement pourquoi le réglage existe.
+: >"$FAKE_PIPER_LOG"
+printf -- '- langue: auto\n' >"$soul"
+JARVIS_SOUL="$soul" "$JARVIS" say "Voilà, c'est fait."
+assert "auto : une phrase accentuée part en français" grep -q 'fr_FR-siwis' "$FAKE_PIPER_LOG"
+: >"$FAKE_PIPER_LOG"
+JARVIS_SOUL="$soul" "$JARVIS" say "Right away, sir."
+assert "auto : une phrase anglaise part en anglais" grep -q 'en_GB-alan' "$FAKE_PIPER_LOG"
+
+# Les phrases qu'aucun modèle n'a écrites suivent le même réglage. Sinon la
+# voix anglaise lit du français, ce qui s'entend exactement comme ça se lit.
+: >"$FAKE_PIPER_LOG"
+printf -- '- langue: en\n' >"$soul"
+printf 'thinking' >"$JARVIS_RUN/state"
+JARVIS_SOUL="$soul" "$JARVIS" cancel --say --from test
+assert "l'annulation se dit en anglais" grep -q 'Cancelled' "$FAKE_PIPER_LOG"
+assert "et pas en français" not grep -q 'Annulé' "$FAKE_PIPER_LOG"
+
+# Le vrai défaut que ce réglage supprime. La voix était choisie phrase par
+# phrase : deux des trois phrases de cette réponse française n'ont ni accent
+# ni mot-outil de la liste, et partaient donc en anglais — au milieu d'une
+# réponse dont la première phrase était déjà sortie en français. Une réponse
+# qui change d'accent en route est pire qu'une réponse dite en entier dans
+# la mauvaise langue : la première s'entend comme une panne.
+t "une réponse, une voix : l'accent ne change pas en cours de route"
+printf 'idle' >"$JARVIS_RUN/state"
+: >"$FAKE_PIPER_LOG"
+printf -- '- langue: auto\n' >"$soul"
+JARVIS_SOUL="$soul" FAKE_CLAUDE_STREAM="$FIX/mixed-lang.jsonl" \
+	"$JARVIS" ask "où en est mon disque"
+assert "les trois phrases sont dites" test "$(grep -c . "$FAKE_PIPER_LOG")" = 3
+assert "toutes par la même voix" \
+	test "$(cut -f1 "$FAKE_PIPER_LOG" | sort -u | wc -l)" = 1
+assert "et c'est la française, décidée sur la première phrase" \
+	grep -q 'fr_FR-siwis' "$FAKE_PIPER_LOG"
 
 t "presser et annuler ensemble : le micro ne reste pas ouvert derrière"
 printf 'idle' >"$JARVIS_RUN/state"

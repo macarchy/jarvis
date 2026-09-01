@@ -29,7 +29,7 @@ Claude Code is not installed or not on `PATH`. Install it from
 [claude.com/claude-code](https://claude.com/claude-code) and sign in — Jarvis
 never handles your credentials, it just runs `claude -p`.
 
-Green but he still says *« Je n'ai pas pu joindre mon cerveau »*? Check
+Green but he still says *"I could not reach my brain"*? Check
 `omarchy-jarvis status | grep brain`. `quota <epoch>` means you hit a usage
 limit and he will resume by himself; `down` means the last call failed. The
 reason is in `memory/trace/<today>.log`.
@@ -209,9 +209,11 @@ réalisés par la communauté d'Amara.org »* is the classic. Raise
 `JARVIS_WAKE_THRESHOLD`, or train the accent verifier so the wake word stops
 firing on ambient noise.
 
-**He speaks the wrong language.** The reply's language is chosen per reply from
-`SOUL.md`'s `langue` setting (`fr`, `en`, or `auto`). Pin it rather than
-leaving it on `auto` — detection is unreliable on short phrases.
+**He speaks the wrong language.** `SOUL.md`'s `langue` setting pins the whole
+conversation — what his ears expect and which voice answers. Set it to `fr` or
+`en` rather than leaving it on `auto`: under `auto` he guesses, once per reply,
+and detection is unreliable on short phrases. The Control Center sets it in one
+click, and the change applies to the next sentence.
 
 **Nothing at all happens on the key.** Check the binding reached the
 compositor: `hyprctl binds | grep -A2 jarvis`. A binding edited in

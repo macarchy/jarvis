@@ -1,0 +1,5 @@
+{"type": "stream_event", "event": {"type": "content_block_start", "content_block": {"type": "text"}}}
+{"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "J'ai regardé ton disque. "}}}
+{"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "Il te reste 47 minutes. "}}}
+{"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "Je n'ai pas pu joindre mon cerveau. "}}}
+{"type": "result", "subtype": "success", "is_error": false, "result": "J'ai regardé ton disque. Il te reste 47 minutes. Je n'ai pas pu joindre mon cerveau."}
