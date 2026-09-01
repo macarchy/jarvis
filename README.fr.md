@@ -4,7 +4,7 @@ Un assistant vocal bilingue (français / English) qui vit sur un seul portable,
 avec Claude comme cerveau, le shell comme mains, et un poisson de Babel en
 pixel art comme visage.
 
-> **[macarchy.github.io/jarvis](https://macarchy.github.io/jarvis)** — le site de documentation, avec la
+> **[macarchy.github.io/jarvis](https://macarchy.github.io/jarvis/index.fr.html)** — le site de documentation, avec la
 > machine à états pilotable.
 >
 > *English: [README.md](README.md)*
@@ -69,7 +69,7 @@ le relancer est la façon prévue de mettre à jour après un `git pull`.
 
 `doctor` est la réponse à « est-ce que ça marche ? » : chaque dépendance, vert
 ou rouge, sans deviner. Pour chaque ligne rouge,
-[docs/troubleshooting.md](docs/troubleshooting.md) explique quoi faire.
+[docs/troubleshooting.fr.md](docs/troubleshooting.fr.md) explique quoi faire.
 
 `claude` et `voxtype` s'installent à part : ils ont leurs propres comptes et
 leur propre configuration, ce n'est pas à Jarvis de les gérer.
@@ -77,7 +77,7 @@ leur propre configuration, ce n'est pas à Jarvis de les gérer.
 ## Ce qui quitte ta machine
 
 C'est plus important que la liste des fonctions, donc c'est ici et pas en
-annexe. La version longue est dans [docs/privacy.md](docs/privacy.md).
+annexe. La version longue est dans [docs/privacy.fr.md](docs/privacy.fr.md).
 
 - **Ta parole est transcrite en local.** Whisper tourne sur ton processeur.
   L'audio ne sort jamais de la machine, et l'enregistrement est écrasé par le
@@ -115,7 +115,7 @@ seulement 38 des 72 couples sont légaux. Elle est dans
 gelée dans `tests/fixtures/transitions.txt` : elle ne peut pas s'éloigner de sa
 propre documentation sans rendre un test rouge.
 
-**[La machine, en pilotable](https://macarchy.github.io/jarvis/machine.html)** —
+**[La machine, en pilotable](https://macarchy.github.io/jarvis/machine.fr.html)** —
 appuie sur les événements, regarde le poisson changer, et regarde les coups
 illégaux être refusés avec leur raison. Trente secondes là-bas valent mieux
 que cette section.

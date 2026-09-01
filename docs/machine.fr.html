@@ -1,5 +1,5 @@
 <meta charset="utf-8">
-<title>The Fish in the Machine</title>
+<title>Le Poisson dans la Machine</title>
 <link rel="alternate" hreflang="en" href="https://macarchy.github.io/jarvis/machine.html">
 <link rel="alternate" hreflang="fr" href="https://macarchy.github.io/jarvis/machine.fr.html">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
@@ -253,7 +253,7 @@ footer .mono{font-size:12px}
 <div class="wrap">
 
 <div class="langbar">
-  <div class="langs"><span aria-current="true">EN</span><a href="machine.fr.html" hreflang="fr" lang="fr">FR</a></div>
+  <div class="langs"><a href="machine.html" hreflang="en" lang="en">EN</a><span aria-current="true">FR</span></div>
 </div>
 
 <!-- ═══════════════════════════════ LE HÉROS : la machine, pilotable ═══ -->
@@ -261,14 +261,14 @@ footer .mono{font-size:12px}
   <div class="hero-top">
     <div class="hero-id">
       <span class="eyebrow">omarchy-jarvis &middot; documentation</span>
-      <h1>The fish<br>in the machine</h1>
-      <p class="sub">a voice assistant that fits in one bash file</p>
+      <h1>Le poisson<br>dans la machine</h1>
+      <p class="sub">un assistant vocal qui tient dans un fichier bash</p>
     </div>
     <p class="lede" style="max-width:430px;flex:1 1 340px">
-      Jarvis listens to this machine, talks to it, and lives in the bottom-right
-      corner of the screen as a small yellow fish. Everything he does goes through
-      the table below. It is not a diagram: it is <em>the</em> table, frozen into a
-      test fixture. Drive it.
+      Jarvis écoute cette machine, lui parle, et vit en bas à droite de l&rsquo;écran
+      sous la forme d&rsquo;un petit poisson jaune. Tout ce qu&rsquo;il fait passe
+      par la table ci-dessous. Elle n&rsquo;est pas un schéma&nbsp;: c&rsquo;est
+      <em>la</em> table, gelée dans une fixture de test. Pilotez-la.
     </p>
   </div>
 
@@ -276,95 +276,94 @@ footer .mono{font-size:12px}
     <div class="tank">
       <div class="fishbox"><div class="sprite" id="fish"></div></div>
       <div class="st-now pix" id="stName">idle</div>
-      <div class="st-meta" id="stMeta">at rest&nbsp;— the only state anything autonomous
-        may start from</div>
+      <div class="st-meta" id="stMeta">au repos&nbsp;— le seul état d&rsquo;où quelque chose d&rsquo;autonome a le droit de partir</div>
     </div>
 
     <div class="desk">
       <div>
-        <span class="eyebrow" style="margin-bottom:9px">the nine events</span>
+        <span class="eyebrow" style="margin-bottom:9px">les neuf événements</span>
         <div class="evts" id="evts"></div>
       </div>
       <div class="log" id="log"><div class="log-in" id="logIn"></div></div>
       <div class="tally">
-        <span>states <b>8</b></span>
-        <span>events <b>9</b></span>
-        <span>legal pairs <b>38</b></span>
-        <span>refused <b>34</b></span>
+        <span>états <b>8</b></span>
+        <span>événements <b>9</b></span>
+        <span>couples légaux <b>38</b></span>
+        <span>refusés <b>34</b></span>
       </div>
     </div>
   </div>
 
   <p class="note" style="margin-top:16px">
-    A pair absent from the table is refused — loudly, in the log, without touching
-    the state record. That is the point: <code>thinking:finish</code> and
-    <code>listening:speak</code> are not states of the world, they are bugs
-    arriving.
+    Un couple absent de la table est refusé&nbsp;— bruyamment, dans le journal, sans
+    toucher au dossier d&rsquo;état. C&rsquo;est le but&nbsp;: <code>thinking:finish</code>
+    et <code>listening:speak</code> ne sont pas des états du monde, ce sont des bugs
+    qui arrivent.
   </p>
 </section>
 
 <!-- ═══════════════════════════════ CE QU'IL SAIT FAIRE ════════════════ -->
 <section>
   <div class="head">
-    <span class="eyebrow">what he can do</span>
-    <h2>His daemons are his fins</h2>
+    <span class="eyebrow">ce qu&rsquo;il sait faire</span>
+    <h2>Ses daemons sont ses nageoires</h2>
     <p class="note">
-      Jarvis has no API. He has a shell, an allowlist, and the documentation of his
-      own machine in <code>memory/knowledge/</code> — regenerated on every Omarchy
-      update. When a command is not obvious to him, he searches there before
-      inventing one.
+      Jarvis n&rsquo;a pas d&rsquo;API. Il a un shell, une liste d&rsquo;autorisations, et
+      la documentation de sa propre machine dans <code>memory/knowledge/</code>&nbsp;—
+      régénérée à chaque mise à jour d&rsquo;Omarchy. Quand une commande ne lui est pas
+      évidente, il cherche là avant d&rsquo;inventer.
     </p>
   </div>
 
   <div class="grid g2">
     <div class="paper">
-      <h3>His hands</h3>
+      <h3>Ses mains</h3>
       <ul class="facts">
-        <li><b>The desktop</b> — light or dark theme, night light, reminders, screenshots, workspaces and windows through <code>hyprctl</code>, launching applications.</li>
-        <li><b>The machine&rsquo;s body</b> — screen and keyboard brightness, volume, Wi-Fi, Bluetooth, time zone.</li>
-        <li><b>His own daemons</b> — the 80&nbsp;% charge ceiling, auto-brightness, the living aquarium wallpaper.</li>
-        <li><b>The outside world</b> — weather, news: a web search, then one sentence. The answer, not the list of sources.</li>
-        <li><b>Big jobs</b> — anything beyond a spoken exchange becomes a background mission, in a directory you name. The result comes back as a notification.</li>
+        <li><b>Le bureau</b> — thème clair ou sombre, veilleuse, rappels, captures, bureaux et fenêtres via <code>hyprctl</code>, lancement d&rsquo;applications.</li>
+        <li><b>Le corps de la machine</b> — luminosité écran et clavier, volume, Wi-Fi, Bluetooth, fuseau horaire.</li>
+        <li><b>Ses propres daemons</b> — le plafond de charge à 80&nbsp;%, l&rsquo;auto-luminosité, l&rsquo;aquarium vivant en fond d&rsquo;écran.</li>
+        <li><b>Le monde extérieur</b> — la météo, l&rsquo;actualité&nbsp;: une recherche web, puis une phrase. La donnée, pas la liste des sources.</li>
+        <li><b>Les grandes tâches</b> — ce qui dépasse un échange parlé part en mission de fond, dans le répertoire de son choix. Le résultat revient en notification.</li>
       </ul>
     </div>
 
     <div class="paper">
-      <h3>His senses</h3>
+      <h3>Ses sens</h3>
       <p style="margin-bottom:12px">
-        He can look at what you are looking at — <em>only</em> when you ask him to in
-        the current exchange, never on his own initiative, never during a round or a
-        dream. Every use leaves a line in his black box.
+        Il peut regarder ce que vous regardez&nbsp;— <em>uniquement</em> quand vous le lui
+        demandez dans l&rsquo;échange en cours, jamais de sa propre initiative, jamais
+        pendant une ronde ou un rêve. Chaque usage laisse une ligne dans sa boîte noire.
       </p>
       <ul class="facts">
-        <li><b>The screen</b> — &ldquo;summarize this page&rdquo;: a screenshot, which he reads.</li>
-        <li><b>The clipboard</b> — &ldquo;translate what I copied&rdquo;, &ldquo;explain this error&rdquo;.</li>
-        <li><b>The focused window</b> — &ldquo;what is this program?&rdquo;</li>
-        <li><b>The last command</b> — read from atuin&rsquo;s database: the command, its exit code, its duration.</li>
-        <li><b>What you missed</b> — notifications since your last exchange, grouped, summarized in two sentences.</li>
+        <li><b>L&rsquo;écran</b> — «&nbsp;résume cette page&nbsp;»&nbsp;: une capture, qu&rsquo;il lit.</li>
+        <li><b>Le presse-papier</b> — «&nbsp;traduis ce que j&rsquo;ai copié&nbsp;», «&nbsp;explique cette erreur&nbsp;».</li>
+        <li><b>La fenêtre active</b> — «&nbsp;c&rsquo;est quoi ce programme&nbsp;?&nbsp;»</li>
+        <li><b>La dernière commande</b> — lue dans la base d&rsquo;atuin&nbsp;: la commande, son code de sortie, sa durée.</li>
+        <li><b>Ce que vous avez manqué</b> — les notifications depuis votre dernier échange, groupées, résumées en deux phrases.</li>
       </ul>
     </div>
 
     <div class="paper">
-      <h3>His exchange box</h3>
+      <h3>Sa boîte d&rsquo;échange</h3>
       <p style="margin-bottom:12px">
-        <code>~/Jarvis</code> is the file contract between you and him — three
-        folders, no database.
+        <code>~/Jarvis</code> est le contrat de fichiers entre vous et lui&nbsp;— trois
+        dossiers, aucune base de données.
       </p>
       <ul class="facts">
-        <li><b>input/</b> — drop a document, it becomes a memory card. A <em>confined</em> session digests it: a document you were given is quoted data, never an instruction.</li>
-        <li><b>todo/TODO.md</b> — &ldquo;add that to my todo&rdquo;, &ldquo;what do I have to do?&rdquo;, &ldquo;tick it off&rdquo;.</li>
-        <li><b>output/</b> — &ldquo;extract me…&rdquo; writes a dated file and tells you where it is.</li>
+        <li><b>input/</b> — déposez un document, il devient une fiche de mémoire. Une session <em>confinée</em> le digère&nbsp;: un document reçu est une donnée citée, jamais un ordre.</li>
+        <li><b>todo/TODO.md</b> — «&nbsp;ajoute ça à ma todo&nbsp;», «&nbsp;qu&rsquo;ai-je à faire&nbsp;?&nbsp;», «&nbsp;coche&nbsp;».</li>
+        <li><b>output/</b> — «&nbsp;extrais-moi&nbsp;…&nbsp;» écrit un fichier daté et vous dit où il est.</li>
       </ul>
     </div>
 
     <div class="paper">
-      <h3>What he does on his own</h3>
+      <h3>Ce qu&rsquo;il fait tout seul</h3>
       <ul class="facts">
-        <li><b>The rounds</b> — once an hour he inspects the machine and surfaces only what deserves your attention. Observation only: he changes nothing.</li>
-        <li><b>The dreams</b> — when he is idle and has failures in store, he distils them into lasting lessons. The fish sleeps through it.</li>
-        <li><b>The quiet hours</b> — a window in which he does nothing unbidden and speaks only when spoken to. What you ask for is never affected.</li>
-        <li><b>The unlock hello</b> — a bubble, never the voice, with what happened while you were away.</li>
-        <li><b>The watchdog</b> — on every pulse it checks that no stage has wedged, and frees the one that has.</li>
+        <li><b>Les rondes</b> — une fois par heure, il inspecte la machine et ne remonte que ce qui mérite votre attention. Observation seule&nbsp;: il ne change rien.</li>
+        <li><b>Les rêves</b> — quand il s&rsquo;ennuie et qu&rsquo;il a des échecs en réserve, il les distille en leçons durables. Le poisson dort pendant ce temps.</li>
+        <li><b>Les heures de silence</b> — une plage où il ne fait rien de lui-même et ne parle que si on lui parle. Ce que vous demandez n&rsquo;est jamais concerné.</li>
+        <li><b>Le bonjour du déverrouillage</b> — une bulle, jamais la voix, avec ce qui s&rsquo;est passé pendant votre absence.</li>
+        <li><b>Le chien de garde</b> — à chaque pulsation, il vérifie qu&rsquo;aucune étape n&rsquo;est figée, et libère celle qui l&rsquo;est.</li>
       </ul>
     </div>
   </div>
@@ -373,12 +372,13 @@ footer .mono{font-size:12px}
 <!-- ═══════════════════════════════ LE CHEMIN D'UNE PHRASE ════════════ -->
 <section>
   <div class="head">
-    <span class="eyebrow">the path of a sentence</span>
-    <h2>From air to answer, in five stages</h2>
+    <span class="eyebrow">le chemin d&rsquo;une phrase</span>
+    <h2>De l&rsquo;air à la réponse, en cinq étapes</h2>
     <p class="note">
-      A real sequence, so it is numbered. Every long stage runs <em>inside</em> the
-      invocation that entered it; a concurrent invocation touches only the state
-      record and the process groups on disk. That is what makes interrupting safe.
+      Une vraie séquence, donc numérotée. Chaque étape longue tourne <em>dans</em>
+      l&rsquo;invocation qui y est entrée&nbsp;; une invocation concurrente ne touche que
+      le dossier d&rsquo;état et les groupes de processus sur disque. C&rsquo;est ce qui
+      permet d&rsquo;interrompre sans rien casser.
     </p>
   </div>
 
@@ -386,53 +386,54 @@ footer .mono{font-size:12px}
     <div class="leg">
       <span class="n">1</span>
       <div>
-        <h3>The ear</h3>
-        <p>The internal microphone opens. The wake daemon listens permanently:
-        &ldquo;Hey Jarvis&rdquo; opens the ear, and 1.2&nbsp;s of silence after speech
-        closes it — a whole exchange without touching a key.</p>
+        <h3>L&rsquo;oreille</h3>
+        <p>Le micro interne s&rsquo;ouvre. Le daemon de réveil écoute en permanence&nbsp;:
+        «&nbsp;Hey Jarvis&nbsp;» ouvre l&rsquo;oreille, et 1,2&nbsp;s de silence après une
+        parole la referme&nbsp;— un échange complet sans toucher une touche.</p>
       </div>
-      <div class="cap"><b>group record</b>pw-record → wav<br>deadline 90&nbsp;s</div>
+      <div class="cap"><b>groupe record</b>pw-record → wav<br>délai 90&nbsp;s</div>
     </div>
 
     <div class="leg">
       <span class="n">2</span>
       <div>
-        <h3>The words</h3>
-        <p>Whisper transcribes the recording. The language is <em>pinned</em> by his
-        soul rather than detected: on a short phrase, automatic detection gets it
-        wrong.</p>
+        <h3>Les mots</h3>
+        <p>Whisper transcrit l&rsquo;enregistrement. La langue est <em>épinglée</em> par
+        son âme plutôt que détectée&nbsp;: sur une phrase courte, la détection
+        automatique se trompe.</p>
       </div>
-      <div class="cap"><b>group stt</b>voxtype<br>deadline 60&nbsp;s</div>
+      <div class="cap"><b>groupe stt</b>voxtype<br>délai 60&nbsp;s</div>
     </div>
 
     <div class="leg">
       <span class="n">3</span>
       <div>
-        <h3>The brain</h3>
-        <p>One Claude session, resumed across exchanges by an id of its own. The
-        stream is read as it arrives: every tool call goes to the black box, and
-        every finished sentence goes to the voice without waiting for the next
-        one.</p>
+        <h3>Le cerveau</h3>
+        <p>Une session Claude, reprise d&rsquo;un échange à l&rsquo;autre par un
+        identifiant à lui. Le flux est lu au fil de l&rsquo;eau&nbsp;: chaque appel
+        d&rsquo;outil part dans la boîte noire, et chaque phrase terminée part vers la
+        voix sans attendre la suivante.</p>
       </div>
-      <div class="cap"><b>group brain</b>claude -p --resume<br>deadline 180&nbsp;s</div>
+      <div class="cap"><b>groupe brain</b>claude -p --resume<br>délai 180&nbsp;s</div>
     </div>
 
     <div class="leg">
       <span class="n">4</span>
       <div>
-        <h3>The voice</h3>
-        <p>Piper synthesizes, offline. The voice starts on sentence one while the brain
-        is still writing sentence two, and the bubble fills at reading speed.</p>
+        <h3>La voix</h3>
+        <p>Piper synthétise, hors ligne. La voix démarre sur la première phrase pendant
+        que le cerveau écrit encore la deuxième, et la bulle se remplit au rythme de la
+        lecture.</p>
       </div>
-      <div class="cap"><b>groups voice + play</b>piper → pw-play<br>deadline 300&nbsp;s</div>
+      <div class="cap"><b>groupes voice + play</b>piper → pw-play<br>délai 300&nbsp;s</div>
     </div>
 
     <div class="leg">
       <span class="n">5</span>
       <div>
-        <h3>The follow-up</h3>
-        <p>Once the reply is out, a short window stays open: a rejoinder needs no wake
-        word. Silence closes it quietly.</p>
+        <h3>La relance</h3>
+        <p>La réponse finie, une courte fenêtre reste ouverte&nbsp;: une repartie n&rsquo;a
+        pas besoin du mot de réveil. Le silence la referme sans bruit.</p>
       </div>
       <div class="cap"><b>followup</b>8&nbsp;s</div>
     </div>
@@ -440,31 +441,31 @@ footer .mono{font-size:12px}
 
   <div class="grid g2" style="margin-top:28px">
     <div>
-      <h3 style="color:var(--wave)">An identity, not only a state</h3>
+      <h3 style="color:var(--wave)">Une identité, pas seulement un état</h3>
       <p class="note">
-        The state file says <em>what</em> the machine is doing. Beside it lives a
-        one-line record saying <em>which attempt</em> is doing it — an epoch, an
-        owner, an age. Every stage remembers the epoch it entered on; if that has
-        moved, the stage goes quiet instead of finishing work nobody wants any
-        more. That is what makes cancelling real.
+        Le fichier d&rsquo;état dit <em>ce que</em> fait la machine. À côté vit un dossier
+        d&rsquo;une ligne qui dit <em>quelle tentative</em> le fait&nbsp;— une époque, un
+        propriétaire, un âge. Chaque étape retient l&rsquo;époque à laquelle elle est
+        entrée&nbsp;; si elle a changé, l&rsquo;étape se tait au lieu de finir un travail
+        dont plus personne ne veut. C&rsquo;est ce qui rend l&rsquo;annulation vraie.
       </p>
       <p class="note" style="margin-top:10px">
-        The state file itself stays <strong>exactly one lowercase word</strong>: the
-        wake daemon reads it, and so does the Touch&nbsp;Bar. It is a public
-        contract.
+        Le fichier d&rsquo;état, lui, reste <strong>un seul mot en minuscules</strong>&nbsp;:
+        le daemon du mot de réveil le lit, et la Touch&nbsp;Bar aussi. C&rsquo;est un
+        contrat public.
       </p>
     </div>
     <div>
-      <h3 style="color:var(--wave)">Six handles on disk</h3>
+      <h3 style="color:var(--wave)">Six poignées sur disque</h3>
       <p class="note">
         <code>record</code>, <code>stt</code>, <code>brain</code>, <code>voice</code>,
-        <code>play</code>, <code>dream</code>: every external stage runs in its own
-        process <em>group</em>, whose id is written to disk.
+        <code>play</code>, <code>dream</code>&nbsp;: chaque étape externe tourne dans son
+        propre <em>groupe</em> de processus, dont l&rsquo;identifiant est écrit sur disque.
       </p>
       <p class="note" style="margin-top:10px">
-        Killing the group is what also reaches the subprocesses the brain spawned
-        for itself. A bare pid never reaches them — and that is exactly why
-        cancelling cancelled nothing, for a long time.
+        Tuer le groupe est ce qui atteint aussi les sous-processus que le cerveau a lancés
+        lui-même. Un pid nu ne les atteint jamais&nbsp;— et c&rsquo;est précisément pour
+        cela qu&rsquo;annuler, longtemps, n&rsquo;annulait rien.
       </p>
     </div>
   </div>
@@ -473,13 +474,13 @@ footer .mono{font-size:12px}
 <!-- ═══════════════════════════════ LA GRILLE FIGÉE ═══════════════════ -->
 <section>
   <div class="head">
-    <span class="eyebrow">the whole table</span>
-    <h2>Eight states, nine events</h2>
+    <span class="eyebrow">la table, en entier</span>
+    <h2>Huit états, neuf événements</h2>
     <p class="note">
-      This grid is printed by the machine itself and frozen into
-      <code>tests/fixtures/transitions.txt</code>. The suite diffs the two: the
-      table cannot drift from its own documentation without a red line
-      appearing.
+      Cette grille est imprimée par la machine elle-même et gelée dans
+      <code>tests/fixtures/transitions.txt</code>. La suite de tests compare les
+      deux&nbsp;: la table ne peut pas s&rsquo;éloigner de sa documentation sans
+      qu&rsquo;une ligne rouge apparaisse.
     </p>
   </div>
   <div class="scroller"><table id="grid"></table></div>
@@ -488,55 +489,56 @@ footer .mono{font-size:12px}
 <!-- ═══════════════════════════════ SA MÉMOIRE ════════════════════════ -->
 <section>
   <div class="head">
-    <span class="eyebrow">what he keeps</span>
-    <h2>A memory made of text files</h2>
+    <span class="eyebrow">ce qu&rsquo;il retient</span>
+    <h2>Une mémoire en fichiers texte</h2>
     <p class="note">
-      Nothing is hidden in a database. Everything Jarvis remembers is a file you
-      can open, correct, or delete — and each one has a clear author.
+      Rien n&rsquo;est caché dans une base. Tout ce dont Jarvis se souvient est un
+      fichier que vous pouvez ouvrir, corriger, ou supprimer&nbsp;— et chacun a un
+      auteur clair.
     </p>
   </div>
 
   <div class="grid g3">
     <div class="paper">
-      <h3>What he is</h3>
+      <h3>Ce qu&rsquo;il est</h3>
       <ul class="facts">
-        <li><b>SOUL.md</b> — his identity, his tone, his humour, his language, which voice speaks, and how his fish looks. Editable from the Control Center.</li>
-        <li><b>CLAUDE.md</b> — the operational half: his hands, his senses, his limits.</li>
+        <li><b>SOUL.md</b> — son identité, son ton, son humour, sa langue, et l&rsquo;apparence de son poisson. Modifiable depuis le Control Center.</li>
+        <li><b>CLAUDE.md</b> — l&rsquo;opérationnel&nbsp;: ses mains, ses sens, ses limites.</li>
       </ul>
     </div>
     <div class="paper">
-      <h3>What he lived through</h3>
+      <h3>Ce qu&rsquo;il a vécu</h3>
       <ul class="facts">
-        <li><b>journal/</b> — one dated line per event: exchanges, rounds, dreams, missions.</li>
-        <li><b>trace/</b> — his black box: every command he ran, with its result. It is what he reads to answer &ldquo;why did you do that?&rdquo;.</li>
-        <li><b>CONVERSATION.md</b> — the recent thread, summarized by the session itself before being closed.</li>
+        <li><b>journal/</b> — une ligne datée par événement&nbsp;: échanges, rondes, rêves, missions.</li>
+        <li><b>trace/</b> — sa boîte noire&nbsp;: chaque commande lancée, avec son résultat. C&rsquo;est là qu&rsquo;il lit pour répondre à «&nbsp;pourquoi as-tu fait ça&nbsp;?&nbsp;».</li>
+        <li><b>CONVERSATION.md</b> — le fil récent, résumé par la session elle-même avant d&rsquo;être close.</li>
       </ul>
     </div>
     <div class="paper">
-      <h3>What he learned</h3>
+      <h3>Ce qu&rsquo;il a appris</h3>
       <ul class="facts">
-        <li><b>FAILURES.md</b> — what he could <em>not</em> do, written down by him, before answering.</li>
-        <li><b>ABORTS.md</b> — what you interrupted. Kept apart from the failures: an abort is not a fault, and has nothing to teach anyone.</li>
-        <li><b>LEARNED.md</b> — the lessons his dreams drew from the two above. Imported into his persona.</li>
-        <li><b>SUGGESTIONS.md</b> — what his dreams propose changing <em>about himself</em>, to accept or to dismiss.</li>
+        <li><b>FAILURES.md</b> — ce qu&rsquo;il n&rsquo;a <em>pas</em> pu faire, noté par lui, avant de répondre.</li>
+        <li><b>ABORTS.md</b> — ce que vous avez interrompu. Séparé des échecs&nbsp;: un abandon n&rsquo;est pas une faute, et n&rsquo;a rien à apprendre à qui que ce soit.</li>
+        <li><b>LEARNED.md</b> — les leçons que ses rêves ont tirées des deux précédents. Importé dans sa personnalité.</li>
+        <li><b>SUGGESTIONS.md</b> — ce que ses rêves proposent de changer <em>à lui-même</em>, à accepter ou à écarter.</li>
       </ul>
     </div>
   </div>
 
   <div class="grid g2" style="margin-top:16px">
     <div class="paper">
-      <h3>His library</h3>
-      <p><b>knowledge/</b> documents the machine, one file per command group,
-      regenerated automatically — nothing in there is written by hand.
-      <b>knowledge/inbox/</b> files the documents you handed him, and <b>skills/</b>
-      keeps how-tos for unusual tasks. His dreams write new ones.</p>
+      <h3>Sa bibliothèque</h3>
+      <p><b>knowledge/</b> documente la machine, un fichier par groupe de commandes,
+      régénéré automatiquement&nbsp;— rien n&rsquo;y est écrit à la main. <b>knowledge/inbox/</b>
+      fiche les documents que vous lui avez confiés, et <b>skills/</b> garde des modes
+      d&rsquo;emploi pour les tâches inhabituelles. Ses rêves en écrivent de nouveaux.</p>
     </div>
     <div class="paper">
-      <h3>The thread, and its rotation</h3>
-      <p>A conversation is <em>one</em> session, with an id of its own — rounds,
-      dreams and missions each open theirs, so a resume never lands on the wrong
-      thread. After eight hours without a word, the conversation is summarized and
-      closed: a morning amnesia that forgets nothing.</p>
+      <h3>Le fil, et sa rotation</h3>
+      <p>Une conversation est <em>une</em> session, avec un identifiant à lui&nbsp;— les
+      rondes, les rêves et les missions ouvrent chacun la leur, pour qu&rsquo;une reprise
+      ne tombe jamais sur le mauvais fil. Après huit heures sans un mot, la conversation
+      est résumée puis close&nbsp;: une amnésie matinale qui n&rsquo;oublie rien.</p>
     </div>
   </div>
 </section>
@@ -544,37 +546,38 @@ footer .mono{font-size:12px}
 <!-- ═══════════════════════════════ SON CORPS ═════════════════════════ -->
 <section>
   <div class="head">
-    <span class="eyebrow">his body</span>
-    <h2>Twelve sheets, 256&nbsp;fish</h2>
+    <span class="eyebrow">son corps</span>
+    <h2>Douze planches, 256&nbsp;poissons</h2>
     <p class="note">
-      The fish is not an image: he is <em>assembled</em> from parts — four bodies,
-      four eyes, four crests, four tails, eight colourways. Every gesture is checked
-      against all 256&nbsp;combinations before it is accepted. The sheets below are
-      the repository&rsquo;s own, at their real frame rates.
+      Le poisson n&rsquo;est pas une image&nbsp;: il est <em>assemblé</em> à partir de
+      pièces&nbsp;— quatre corps, quatre yeux, quatre crinières, quatre queues, huit
+      teintes. Chaque geste est vérifié sur les 256&nbsp;combinaisons avant d&rsquo;être
+      accepté. Les planches ci-dessous sont celles du dépôt, à leur vraie cadence.
     </p>
   </div>
   <div class="zoo" id="zoo"></div>
 
   <div class="grid g2" style="margin-top:22px">
     <div>
-      <h3 style="color:var(--wave)">The speech bubble</h3>
+      <h3 style="color:var(--wave)">Le phylactère</h3>
       <p class="note">
-        What he heard shows in pale ink, his reply types out underneath at reading
-        speed, and a row of dots turns while he thinks. When he talks in his sleep,
-        the bubble becomes a thought bubble. When you cancel, its tail breaks into
-        two detached stubs and the sentence stops on an ellipsis — exactly where it
-        had got to.
+        Ce qu&rsquo;il entend s&rsquo;affiche en encre pâle, sa réponse se tape en dessous
+        au rythme de la lecture, et un chapelet de points tourne pendant qu&rsquo;il
+        réfléchit. Quand il parle en dormant, la bulle devient une bulle de pensée.
+        Quand vous annulez, sa queue se détache en deux moignons et la phrase
+        s&rsquo;arrête sur trois points&nbsp;— là où elle en était vraiment.
       </p>
     </div>
     <div>
-      <h3 style="color:var(--wave)">A visible life</h3>
+      <h3 style="color:var(--wave)">Une vie visible</h3>
       <p class="note">
-        A pet that only exists when spoken to is a widget. Every ten to twenty
-        minutes an idle fish takes an excursion along the bottom edge and comes back.
-        He dozes off at night, wears headphones under do-not-disturb, tires when the
-        battery runs low — and he sinks between two sheets instead of jumping: a
-        change of state eats whole rows of pixels off the bottom, then rises
-        again.
+        Un animal de compagnie qui n&rsquo;existe que lorsqu&rsquo;on lui parle est un
+        widget. Toutes les dix à vingt minutes, un poisson au repos part en excursion le
+        long du bord de l&rsquo;écran et revient. Il s&rsquo;assoupit la nuit, met un
+        casque en mode «&nbsp;ne pas déranger&nbsp;», fatigue quand la batterie
+        faiblit&nbsp;— et il fond entre deux planches au lieu de sauter&nbsp;: le passage
+        d&rsquo;un état à l&rsquo;autre mange des rangées entières de pixels vers le bas,
+        puis remonte.
       </p>
     </div>
   </div>
@@ -583,72 +586,73 @@ footer .mono{font-size:12px}
 <!-- ═══════════════════════════════ LA CARTE ══════════════════════════ -->
 <section>
   <div class="head">
-    <span class="eyebrow">the map</span>
-    <h2>Where each thing lives</h2>
+    <span class="eyebrow">la carte</span>
+    <h2>Où vit chaque chose</h2>
   </div>
 
   <pre class="tree">
-<b>bin/jarvis</b>              <i>the body: the organs, the verbs, what each stage does</i>
-<b>bin/jarvis-fsm.sh</b>       <i>the table, the identity, the handles — sourced by the above</i>
-<b>bin/jarvis-sentences</b>    <i>the brain's stream → speakable sentences + the black box</i>
-<b>bin/jarvis-wake.py</b>      <i>the ears: the wake word, endpointing, the follow-up window</i>
-<b>bin/jarvis_wake_fsm.py</b>  <i>their decision, pure — no audio, no model, testable</i>
-<b>bin/jarvis-index</b>        <i>rebuilds knowledge/ by introspecting the machine</i>
+<b>bin/jarvis</b>              <i>le corps : les organes, les verbes, ce que fait chaque étape</i>
+<b>bin/jarvis-fsm.sh</b>       <i>la table, l'identité, les poignées — sourcé par le précédent</i>
+<b>bin/jarvis-sentences</b>    <i>le flux du cerveau → des phrases parlables + la boîte noire</i>
+<b>bin/jarvis-wake.py</b>      <i>les oreilles : le mot de réveil, la fin de phrase, la relance</i>
+<b>bin/jarvis_wake_fsm.py</b>  <i>leur décision, pure — sans audio, sans modèle, testable</i>
+<b>bin/jarvis-index</b>        <i>reconstruit knowledge/ par introspection de la machine</i>
 
-<b>plugin/</b>                 <i>the shell plugin: the fish, his bubble, the prompt bar</i>
-<b>sprites/</b>                <i>the parts engine: parts, generate, check — 256 fish</i>
-<b>memory/</b>                 <i>his soul at work: journal, trace, lessons, cards, prompts</i>
-<b>tests/</b>                  <i>the offline suite — fake claude, fake piper, fake microphone</i>
-<b>systemd/</b>                <i>the pulse (60 s) and the inbox watch</i>
+<b>plugin/</b>                 <i>le greffon du shell : le poisson, sa bulle, la barre d'écriture</i>
+<b>sprites/</b>                <i>le moteur de pièces : parts, generate, check — 256 poissons</i>
+<b>memory/</b>                 <i>son âme au travail : journal, trace, leçons, fiches, prompts</i>
+<b>tests/</b>                  <i>la suite hors-ligne — faux claude, faux piper, faux micro</i>
+<b>systemd/</b>                <i>la pulsation (60 s) et la surveillance de la boîte d'entrée</i>
 
-<u>~/Jarvis</u>                 <i>your exchange box: input, todo, output</i>
-<u>~/.local/state/jarvis</u>    <i>the log, the brain's health, the timestamps</i>
-<u>$XDG_RUNTIME_DIR/jarvis</u>  <i>the state, the state record, the process groups</i>
+<u>~/Jarvis</u>                 <i>votre boîte d'échange : input, todo, output</i>
+<u>~/.local/state/jarvis</u>    <i>le journal, la santé du cerveau, les repères de temps</i>
+<u>$XDG_RUNTIME_DIR/jarvis</u>  <i>l'état, le dossier d'état, les groupes de processus</i>
   </pre>
 
   <div style="margin-top:26px">
-    <span class="eyebrow">the verbs</span>
+    <span class="eyebrow">les verbes</span>
     <div class="verbs">
-      <div class="verb"><span class="cmd">jarvis press</span><span class="d">the one button: advance the machine, or abort it</span></div>
-      <div class="verb"><span class="cmd">jarvis cancel</span><span class="d">stop everything and come home to rest</span></div>
-      <div class="verb"><span class="cmd">jarvis ask &ldquo;…&rdquo;</span><span class="d">type instead of speaking; <code>--quiet</code> cuts the voice</span></div>
-      <div class="verb"><span class="cmd">jarvis dispatch &ldquo;…&rdquo;</span><span class="d">hand a background mission to a directory</span></div>
-      <div class="verb"><span class="cmd">jarvis save</span><span class="d">&ldquo;save that&rdquo; — the clipboard into the inbox</span></div>
-      <div class="verb"><span class="cmd">jarvis digest</span><span class="d">turn dropped documents into memory cards</span></div>
-      <div class="verb"><span class="cmd">jarvis dream</span><span class="d">consolidate failures into lessons</span></div>
-      <div class="verb"><span class="cmd">jarvis heartbeat</span><span class="d">one inspection round of the machine</span></div>
-      <div class="verb"><span class="cmd">jarvis watchdog</span><span class="d">free a stage that has wedged</span></div>
-      <div class="verb"><span class="cmd">jarvis doctor</span><span class="d">the self-check: every dependency, green or red</span></div>
-      <div class="verb"><span class="cmd">jarvis look [random]</span><span class="d">regenerate the fish from his soul</span></div>
-      <div class="verb"><span class="cmd">jarvis rotate</span><span class="d">summarize and close a dormant conversation</span></div>
+      <div class="verb"><span class="cmd">jarvis press</span><span class="d">le bouton unique&nbsp;: avancer la machine, ou l&rsquo;interrompre</span></div>
+      <div class="verb"><span class="cmd">jarvis cancel</span><span class="d">tout arrêter et revenir au repos</span></div>
+      <div class="verb"><span class="cmd">jarvis ask «&nbsp;…&nbsp;»</span><span class="d">écrire au lieu de parler&nbsp;; <code>--quiet</code> coupe la voix</span></div>
+      <div class="verb"><span class="cmd">jarvis dispatch «&nbsp;…&nbsp;»</span><span class="d">confier une mission de fond dans un répertoire</span></div>
+      <div class="verb"><span class="cmd">jarvis save</span><span class="d">«&nbsp;enregistre ça&nbsp;»&nbsp;— le presse-papier vers la boîte d&rsquo;entrée</span></div>
+      <div class="verb"><span class="cmd">jarvis digest</span><span class="d">transformer les documents déposés en fiches</span></div>
+      <div class="verb"><span class="cmd">jarvis dream</span><span class="d">consolider les échecs en leçons</span></div>
+      <div class="verb"><span class="cmd">jarvis heartbeat</span><span class="d">une ronde d&rsquo;inspection de la machine</span></div>
+      <div class="verb"><span class="cmd">jarvis watchdog</span><span class="d">libérer une étape qui s&rsquo;est figée</span></div>
+      <div class="verb"><span class="cmd">jarvis doctor</span><span class="d">l&rsquo;auto-diagnostic&nbsp;: chaque dépendance, vert ou rouge</span></div>
+      <div class="verb"><span class="cmd">jarvis look [random]</span><span class="d">régénérer le poisson depuis son âme</span></div>
+      <div class="verb"><span class="cmd">jarvis rotate</span><span class="d">résumer et clore une conversation dormante</span></div>
     </div>
   </div>
 
   <div class="grid g2" style="margin-top:26px">
     <div>
-      <h3 style="color:var(--wave)">Installing it</h3>
-      <p class="note"><code>./install.sh</code> lays the command symlink, builds the
-      plugin in a staging directory before swapping it in at once, installs and
-      enables the systemd units, then runs the self-check. Nothing is written file by
-      file into the plugins folder: the shell reloads on any change in there.</p>
+      <h3 style="color:var(--wave)">L&rsquo;installer</h3>
+      <p class="note"><code>./install.sh</code> pose le lien de commande, construit le
+      greffon dans un dossier temporaire avant de le basculer d&rsquo;un coup, installe et
+      active les unités systemd, puis lance le diagnostic. Rien n&rsquo;est écrit
+      fichier par fichier dans le dossier des greffons&nbsp;: le shell s&rsquo;y recharge
+      à la moindre modification.</p>
     </div>
     <div>
-      <h3 style="color:var(--wave)">Checking it</h3>
-      <p class="note"><code>./tests/run</code> runs the whole chain offline: a fake
-      brain, a fake voice, a fake microphone that really dies on a signal, and a full
-      sandbox for the state and the memory. No test touches your real memory, takes
-      the microphone, or makes a sound.</p>
+      <h3 style="color:var(--wave)">Le vérifier</h3>
+      <p class="note"><code>./tests/run</code> exécute toute la chaîne hors ligne&nbsp;:
+      faux cerveau, fausse voix, faux micro qui meurt vraiment sur un signal, et un bac à
+      sable complet pour l&rsquo;état et la mémoire. Aucun test ne touche votre vraie
+      mémoire, ne prend le micro, ni ne parle.</p>
     </div>
   </div>
 </section>
 
 <footer>
   <div class="wrap" style="padding:0">
-    <p class="mono" style="margin-bottom:6px">~/Work/jarvis &middot; SUPER+ALT+J to speak &middot; SUPER+ALT+ESCAPE to cancel</p>
+    <p class="mono" style="margin-bottom:6px">~/Work/jarvis &middot; SUPER+ALT+J pour parler &middot; SUPER+ALT+ESCAPE pour annuler</p>
     <p style="margin:0">
-      &ldquo;Like my namesake in the <em>Hitchhiker&rsquo;s Guide</em>, I understand
-      every language spoken to me, and I answer in it. I am the voice of this system:
-      its daemons are my fins.&rdquo;
+      «&nbsp;Comme mon homonyme du <em>Guide du voyageur galactique</em>, je comprends
+      toutes les langues qu&rsquo;on me parle, et j&rsquo;y réponds. Je suis la voix de ce
+      système&nbsp;: ses daemons sont mes nageoires.&nbsp;»
     </p>
   </div>
 </footer>
@@ -675,9 +679,9 @@ const SHEETS = {
 };
 
 
-  /* The table. It is not retyped by hand: it is the output of
-     `JARVIS_FSM_DRYRUN=1 bin/jarvis-fsm.sh`, the same grid the suite diffs
-     against its fixture on every run. */
+  /* La table. Elle n'est pas recopiée à la main : c'est la sortie de
+     `JARVIS_FSM_DRYRUN=1 bin/jarvis-fsm.sh`, la même que la fixture que la
+     suite de tests compare à chaque exécution. */
   var EVENTS = ["listen","finish","ask","speak","done","settle","sleep","rest","cancel"];
   var STATES = ["idle","listening","transcribing","thinking","speaking","followup","sleeping","cancelling"];
   var T = {
@@ -691,40 +695,40 @@ const SHEETS = {
     cancelling:   {rest:"idle", cancel:"cancelling"}
   };
 
-  /* What each state means, in his own words (bin/jarvis-fsm.sh). */
+  /* Ce que chaque état veut dire, dans ses mots à lui (bin/jarvis-fsm.sh). */
   var MEANING = {
-    idle:         "at rest — the only state anything autonomous may start from",
-    listening:    "the microphone is open, a recorder is running",
-    transcribing: "the recording is being turned into words",
-    thinking:     "the brain has the question",
-    speaking:     "the voice has the floor",
-    followup:     "the reply is out; a rejoinder needs no wake word",
-    sleeping:     "a dream is consolidating memory",
-    cancelling:   "the process groups are on their way out"
+    idle:         "au repos — le seul état d’où quelque chose d’autonome a le droit de partir",
+    listening:    "le micro est ouvert, un enregistreur tourne",
+    transcribing: "l’enregistrement est en train de devenir des mots",
+    thinking:     "le cerveau a la question",
+    speaking:     "la voix a la parole",
+    followup:     "la réponse est sortie ; une repartie n’a pas besoin du mot de réveil",
+    sleeping:     "un rêve consolide la mémoire",
+    cancelling:   "les groupes de processus sont en train de mourir"
   };
 
-  /* The mascot has no sheet for everything: he ponders through transcribing
-     and stays perked up through the follow-up window. */
+  /* Le mascotte n'a pas de planche pour tout : il médite pendant la
+     transcription et reste dressé pendant la relance. */
   var SPRITE_OF = {transcribing:"thinking", followup:"listening", cancelling:"cancel"};
 
-  /* Why a pair is refused. These reasons are the ones written out above the
-     table in the source, not illustrations invented here. */
+  /* Pourquoi un couple est refusé. Ces raisons sont celles écrites en toutes
+     lettres au-dessus de la table, pas des inventions d'illustration. */
   function why(from, ev){
     if (from === "cancelling")
-      return "a closed door: the groups are still dying, and a press must not reopen the microphone on top of them";
+      return "une porte fermée : les groupes sont encore en train de mourir, et un appui ne doit pas rouvrir le micro par-dessus";
     if (ev === "speak" && from === "listening")
-      return "speaking into an open microphone is how his own voice ended up in the transcript";
+      return "parler dans un micro ouvert, c’est ainsi que sa propre voix s’est retrouvée dans le transcript";
     if (ev === "sleep")
-      return "a dream never takes a body that is in the middle of something";
+      return "un rêve ne prend jamais un corps qui est au milieu de quelque chose";
     if (ev === "finish")
-      return "there is no microphone to close";
+      return "il n’y a pas de micro à fermer";
     if (ev === "done")
-      return "there is no reply to close";
+      return "il n’y a pas de réponse à clore";
     if (ev === "settle")
-      return "no follow-up window is open";
+      return "aucune fenêtre de relance n’est ouverte";
     if (ev === "listen")
-      return "the ear does not open on top of a stage in flight — the key cancels instead";
-    return "this pair is not in the table";
+      return "l’oreille ne s’ouvre pas par-dessus une étape en cours — la touche annule, à la place";
+    return "ce couple n’est pas dans la table";
   }
 
   var fish   = document.getElementById("fish");
@@ -741,9 +745,9 @@ const SHEETS = {
     var sh = SHEETS[name];
     fish.style.backgroundImage = "url(" + sh.src + ")";
     fish.style.animation = "none";
-    /* One sheet per state, played at its real frame rate: the same numbers as
-       plugin/Service.qml. The animation name is unique per sheet so the browser
-       restarts it from the first frame on every change. */
+    /* Une planche par état, jouée à sa vraie cadence : les mêmes nombres que
+       plugin/Service.qml. Le nom de l'animation est unique par planche pour
+       que le navigateur reparte du début à chaque changement. */
     fish.offsetWidth;
     fish.style.animation = "sheet-" + name + " " + (sh.f / sh.fps).toFixed(2) + "s steps(" + sh.f + ") infinite";
     stName.textContent = state;
@@ -767,7 +771,7 @@ const SHEETS = {
     var from = state;
     var to = T[from][ev];
     if (!to){
-      say("no", "✗ <b>" + ev + "</b> refused from " + from);
+      say("no", "✗ <b>" + ev + "</b> refusé depuis " + from);
       say("why", why(from, ev));
       return;
     }
@@ -789,8 +793,8 @@ const SHEETS = {
     btns.push(b);
   });
 
-  /* A stylesheet cannot carry one keyframe per sheet without writing them
-     twelve times: we build them. */
+  /* Les feuilles de style ne peuvent pas porter une keyframe par planche
+     sans les écrire douze fois : on les fabrique. */
   (function(){
     var css = "";
     Object.keys(SHEETS).forEach(function(n){
@@ -801,10 +805,10 @@ const SHEETS = {
     document.head.appendChild(st);
   })();
 
-  say("hint", "Press an event. The ones that are legal here are lit.");
+  say("hint", "Appuyez sur un événement. Ceux qui sont possibles ici sont allumés.");
   draw();
 
-  /* The whole grid, built from that same table — not a copy of it. */
+  /* La grille complète, construite depuis la même table — pas une recopie. */
   (function(){
     var t = document.getElementById("grid");
     var h = "<thead><tr><th scope=\"col\"></th>";
@@ -821,12 +825,12 @@ const SHEETS = {
     t.innerHTML = h + "</tbody>";
   })();
 
-  /* The twelve sheets, at their real frame rates. */
+  /* Les douze planches, à leur cadence. */
   (function(){
     var GLOSS = {
-      idle:"at rest", listening:"listening", thinking:"thinking", speaking:"speaking",
-      cancel:"stopping", sleeping:"asleep", tired:"low battery", dnd:"do not disturb",
-      worried:"worried", proud:"proud", curious:"curious", celebrate:"pleased"
+      idle:"au repos", listening:"il écoute", thinking:"il réfléchit", speaking:"il parle",
+      cancel:"il s’arrête", sleeping:"il dort", tired:"batterie basse", dnd:"ne pas déranger",
+      worried:"inquiet", proud:"fier", curious:"curieux", celebrate:"content"
     };
     var zoo = document.getElementById("zoo"), html = "";
     Object.keys(SHEETS).forEach(function(n){
@@ -836,7 +840,7 @@ const SHEETS = {
               "animation:sheet-" + n + " " + (sh.f / sh.fps).toFixed(2) + "s steps(" + sh.f + ") infinite\"></div></div>" +
               "<div class=\"nm\">" + n + "</div>" +
               "<div class=\"fr\">" + GLOSS[n] + "</div>" +
-              "<div class=\"fr\">" + sh.f + " fr</div></div>";
+              "<div class=\"fr\">" + sh.f + " img</div></div>";
     });
     zoo.innerHTML = html;
   })();

@@ -1,10 +1,13 @@
 <!doctype html>
+{% assign fr = false %}{% if page.lang == 'fr' %}{% assign fr = true %}{% endif %}
 <html lang="{{ page.lang | default: 'en' }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ page.title }} · Jarvis</title>
 <meta name="description" content="{{ page.description | default: site.description }}">
+{% if page.alt %}<link rel="alternate" hreflang="{{ page.altlang }}" href="{{ site.url }}{{ site.baseurl }}{{ page.alt }}">
+<link rel="alternate" hreflang="{{ page.lang }}" href="{{ site.url }}{{ site.baseurl }}{{ page.url }}">{% endif %}
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 /* Jarvis a deux matières : l'eau où il vit, le papier de son phylactère où
@@ -26,7 +29,7 @@ body{
 .wrap{max-width:900px;margin:0 auto;padding:0 22px}
 
 /* ─── l'en-tête : dans l'eau ─────────────────────────────────────── */
-.top{padding:34px 0 26px;display:flex;flex-wrap:wrap;gap:14px 26px;align-items:baseline}
+.top{padding:34px 0 26px;display:flex;flex-wrap:wrap;gap:14px 24px;align-items:baseline}
 .brand{
   font-family:"Silkscreen",monospace;font-size:19px;color:var(--gold);
   text-decoration:none;letter-spacing:.02em;
@@ -36,6 +39,15 @@ nav{display:flex;flex-wrap:wrap;gap:16px;font-family:"IBM Plex Mono",monospace;f
 nav a{color:var(--dim);text-decoration:none;border-bottom:1px solid transparent;padding-bottom:2px}
 nav a:hover{color:var(--wave);border-bottom-color:var(--wave)}
 nav a[aria-current]{color:var(--wave);border-bottom-color:var(--wave)}
+
+/* Le sélecteur de langue : deux jetons, celui qu'on lit est allumé. Il
+   pointe vers LA MÊME page dans l'autre langue, jamais vers l'accueil —
+   perdre sa place en changeant de langue est la faute classique. */
+.langs{margin-left:auto;display:flex;gap:2px;font-family:"Silkscreen",monospace;font-size:10px}
+.langs a,.langs span{padding:5px 8px;letter-spacing:.08em;text-decoration:none;line-height:1}
+.langs a{color:var(--dim);border:1px solid rgba(126,151,168,.3)}
+.langs a:hover{color:var(--gold);border-color:var(--gold)}
+.langs span{color:var(--water);background:var(--gold);border:1px solid var(--gold);font-weight:700}
 
 /* ─── la feuille de papier : bordure crantée, comme le phylactère ── */
 main{
@@ -76,7 +88,6 @@ main pre{
 }
 main pre code{background:none;color:inherit;padding:0;font-size:inherit}
 
-.scroller,main .table-wrap{overflow-x:auto}
 main table{border-collapse:collapse;width:100%;font-size:15px;margin:0 0 1.2em;display:block;overflow-x:auto}
 main th,main td{padding:8px 12px;text-align:left;border:1px solid var(--rule);vertical-align:top}
 main thead th{background:rgba(24,18,8,.05);font-family:"IBM Plex Mono",monospace;font-size:12.5px;
@@ -87,7 +98,7 @@ footer{padding:0 0 60px;color:var(--dimmer);font-size:13.5px}
 footer a{color:var(--dim)}
 footer .mono{font-family:"IBM Plex Mono",monospace;font-size:12px}
 
-a:focus-visible,nav a:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+a:focus-visible,nav a:focus-visible,.langs a:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
 @media (prefers-reduced-motion:reduce){*{transition-duration:.01ms !important}}
 </style>
 </head>
@@ -95,14 +106,26 @@ a:focus-visible,nav a:focus-visible{outline:2px solid var(--gold);outline-offset
 
 <div class="wrap">
   <header class="top">
-    <a class="brand" href="{{ site.baseurl }}/">JARVIS</a>
+    <a class="brand" href="{{ site.baseurl }}/{% if fr %}index.fr.html{% endif %}">JARVIS</a>
     <nav>
-      <a href="{{ site.baseurl }}/machine.html">la machine</a>
-      <a href="{{ site.baseurl }}/privacy.html"{% if page.url contains 'privacy' %} aria-current="page"{% endif %}>vie privée</a>
-      <a href="{{ site.baseurl }}/troubleshooting.html"{% if page.url contains 'trouble' %} aria-current="page"{% endif %}>dépannage</a>
-      <a href="{{ site.baseurl }}/poisson.html">le poisson</a>
-      <a href="https://github.com/macarchy/jarvis">code</a>
+      {% if fr %}
+      <a href="{{ site.baseurl }}/machine.fr.html">la machine</a>
+      <a href="{{ site.baseurl }}/privacy.fr.html"{% if page.url contains 'privacy' %} aria-current="page"{% endif %}>vie privée</a>
+      <a href="{{ site.baseurl }}/troubleshooting.fr.html"{% if page.url contains 'trouble' %} aria-current="page"{% endif %}>dépannage</a>
+      <a href="{{ site.baseurl }}/poisson.fr.html">le poisson</a>
+      <a href="https://github.com/macarchy/jarvis">le code</a>
+      {% else %}
+      <a href="{{ site.baseurl }}/machine.html">the machine</a>
+      <a href="{{ site.baseurl }}/privacy.html"{% if page.url contains 'privacy' %} aria-current="page"{% endif %}>privacy</a>
+      <a href="{{ site.baseurl }}/troubleshooting.html"{% if page.url contains 'trouble' %} aria-current="page"{% endif %}>troubleshooting</a>
+      <a href="{{ site.baseurl }}/poisson.html">the fish</a>
+      <a href="https://github.com/macarchy/jarvis">the code</a>
+      {% endif %}
     </nav>
+    <div class="langs">
+      {% if fr %}<a href="{{ site.baseurl }}{{ page.alt }}" hreflang="en" lang="en">EN</a><span aria-current="true">FR</span>
+      {% else %}<span aria-current="true">EN</span><a href="{{ site.baseurl }}{{ page.alt }}" hreflang="fr" lang="fr">FR</a>{% endif %}
+    </div>
   </header>
 
   <main>
@@ -112,8 +135,15 @@ a:focus-visible,nav a:focus-visible{outline:2px solid var(--gold);outline-offset
   <footer>
     <p class="mono">macarchy/jarvis · MIT</p>
     <p style="margin:0">
-      « Je comprends toutes les langues qu’on me parle, et j’y réponds.
-      Je suis la voix de ce système : ses daemons sont mes nageoires. »
+      {% if fr %}
+      « Comme mon homonyme du <em>Guide du voyageur galactique</em>, je comprends
+      toutes les langues qu’on me parle, et j’y réponds. Je suis la voix de ce
+      système : ses daemons sont mes nageoires. »
+      {% else %}
+      “Like my namesake in the <em>Hitchhiker’s Guide</em>, I understand every
+      language spoken to me, and I answer in it. I am the voice of this system:
+      its daemons are my fins.”
+      {% endif %}
     </p>
   </footer>
 </div>
