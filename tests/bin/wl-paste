@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 [[ ${1:-} == --list-types ]] && { echo text/plain; exit 0; }
+[[ ${1:-} == --primary ]] && { printf '%s' "${FAKE_PRIMARY:-}"; exit 0; }
 printf '%s' "${FAKE_CLIP:-}"
