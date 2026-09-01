@@ -20,7 +20,7 @@ Control Center, le reste t'appartient. Après une modification, la nouvelle
 - corps: B1
 - oeil: E1
 - criniere: M1
-- queue: T1
+- queue: T2
 - couleur: or
 
 ## Identité
