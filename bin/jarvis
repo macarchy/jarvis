@@ -58,8 +58,11 @@ BRAIN_STATUS="$STATE_DIR/brain"
 # by voice; output/ receives requested extractions. JARVIS_BOX overrides
 # for tests.
 BOX_DIR="${JARVIS_BOX:-$HOME/Jarvis}"
-# The installed mascot plugin: `look` regenerates its sprite sheets.
-PLUGIN_DIR="${JARVIS_PLUGIN:-$HOME/.config/omarchy/plugins/macarchy.jarvis}"
+# Where `look` writes the mascot's sprite sheets. NOT inside the plugin
+# directory: the shell watches its plugin folders and hot-reloads the
+# whole shell on any change there — which closed the Control Center on
+# every appearance click. The plugin reads from here.
+SPRITES_DIR="${JARVIS_SPRITES:-$HOME/.local/share/jarvis/sprites}"
 
 PIPER="$JARVIS_DIR/piper/piper"
 VOICE_FR="$JARVIS_DIR/models/fr_FR-tom-medium.onnx"
@@ -803,9 +806,10 @@ look)
 		set_setting queue "$(pick T1 T2 T3 T4)"
 		set_setting couleur "$(pick or corail lagon lavande menthe perle braise encre)"
 	fi
+	mkdir -p "$SPRITES_DIR"
 	if ! python3 "$JARVIS_DIR/sprites/generate.py" \
 		--body "$(setting corps B1)" --eye "$(setting oeil E1)" --crest "$(setting criniere M1)" \
-		--tail "$(setting queue T1)" --pal "$(setting couleur or)" --out "$PLUGIN_DIR/assets" >>"$LOG" 2>&1; then
+		--tail "$(setting queue T1)" --pal "$(setting couleur or)" --out "$SPRITES_DIR" >>"$LOG" 2>&1; then
 		notify "Jarvis" "Impossible de générer le poisson — voyez le journal."
 		exit 1
 	fi

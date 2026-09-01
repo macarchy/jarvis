@@ -197,7 +197,10 @@ Item {
     emoteTimer.restart()
   }
 
-  readonly property url assetsDir: Qt.resolvedUrl("assets/")
+  // The sheets live OUTSIDE the plugin folder (the shell hot-reloads
+  // itself on any change in there): `omarchy-jarvis look` writes them to
+  // the user's data dir and pings `reload`.
+  readonly property url assetsDir: "file://" + Quickshell.env("HOME") + "/.local/share/jarvis/sprites/"
   // Flipping this drops the sheet URL for one tick, which — with
   // Image.cache off — makes the sprite re-read the freshly generated
   // file. `omarchy-jarvis look` calls reload after every regeneration.
