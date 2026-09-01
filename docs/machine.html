@@ -32,8 +32,8 @@
   --ink-soft:#4A3F26;
   --gold:#F2C94C;
   --wave:#78BEFF;
-  --dim:#7E97A8;
-  --dimmer:#4E6576;
+  --dim:#97ABBA;
+  --dimmer:#728DA1;
   --refuse:#D96A5C;
   --px:4px;
   color-scheme:dark;
@@ -81,7 +81,7 @@ em{font-style:italic;color:#C6D6E1}
 .langbar{display:flex;justify-content:flex-end;padding:20px 0 0}
 .langs{display:flex;gap:2px;font-family:"Silkscreen",monospace;font-size:10px}
 .langs a,.langs span{padding:5px 8px;letter-spacing:.08em;text-decoration:none;line-height:1}
-.langs a{color:var(--dim);border:1px solid rgba(126,151,168,.3)}
+.langs a{color:var(--dim);border:1px solid rgba(151,171,186,.35)}
 .langs a:hover{color:var(--gold);border-color:var(--gold)}
 .langs span{color:var(--water);background:var(--gold);border:1px solid var(--gold);font-weight:700}
 .langs a:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
@@ -156,7 +156,6 @@ code{
 }
 .evt:hover:not(:disabled){background:rgba(120,190,255,.14);border-color:var(--wave)}
 .evt:active:not(:disabled){transform:translateY(1px)}
-.evt:disabled{color:var(--dimmer);border-color:rgba(126,151,168,.2);cursor:not-allowed}
 .evt:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .evt.hot{background:rgba(242,201,76,.16);border-color:var(--gold);color:var(--gold)}
 
@@ -262,13 +261,29 @@ footer .mono{font-size:12px}
   .sprite{animation:none !important}
   *{transition-duration:.01ms !important}
 }
+
+/* ─── l'en-tête commun : les pages faites main partageaient le sélecteur de
+   langue mais pas la navigation, ce qui faisait d'elles des culs-de-sac —
+   or machine.html est justement la page que le README met en avant. */
+.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:baseline;padding:26px 0 22px}
+.top .brand{font-family:"Silkscreen","Courier New",monospace;font-size:19px;color:#F2C94C;
+  text-decoration:none;letter-spacing:.02em}
+.top .brand:hover{color:#FFE07A}
+.top nav{display:flex;flex-wrap:wrap;gap:16px;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px}
+.top nav a{color:#97ABBA;text-decoration:none;border-bottom:1px solid transparent;padding-bottom:2px}
+.top nav a:hover{color:#78BEFF;border-bottom-color:#78BEFF}
+.top nav a[aria-current]{color:#78BEFF;border-bottom-color:#78BEFF}
+.top .langs{margin-left:auto}
+.top nav a:focus-visible,.top .brand:focus-visible{outline:2px solid #F2C94C;outline-offset:3px}
 </style>
 
 <div class="wrap">
 
-<div class="langbar">
+<header class="top">
+  <a class="brand" href="index.html">JARVIS</a>
+  <nav><a href="machine.html" aria-current="page">the machine</a><a href="privacy.html">privacy</a><a href="troubleshooting.html">troubleshooting</a><a href="poisson.html">the fish</a><a href="assembler.html">build one</a><a href="https://github.com/macarchy/jarvis">the code</a></nav>
   <div class="langs"><span aria-current="true">EN</span><a href="machine.fr.html" hreflang="fr" lang="fr">FR</a></div>
-</div>
+</header>
 
 <!-- ═══════════════════════════════ LE HÉROS : la machine, pilotable ═══ -->
 <section class="hero">

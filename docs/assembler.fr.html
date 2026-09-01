@@ -66,9 +66,27 @@ button:focus-visible{outline:3px solid var(--wave);outline-offset:4px}
 .langs a:hover{color:#F2C94C;border-color:#F2C94C}
 .langs span{color:#152430;background:#F2C94C;border:1px solid #F2C94C;font-weight:700}
 .langs a:focus-visible{outline:2px solid #F2C94C;outline-offset:3px}
+
+/* ─── l'en-tête commun : les pages faites main partageaient le sélecteur de
+   langue mais pas la navigation, ce qui faisait d'elles des culs-de-sac —
+   or machine.html est justement la page que le README met en avant. */
+.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:baseline;padding:26px 0 22px}
+.top .brand{font-family:"Silkscreen","Courier New",monospace;font-size:19px;color:#F2C94C;
+  text-decoration:none;letter-spacing:.02em}
+.top .brand:hover{color:#FFE07A}
+.top nav{display:flex;flex-wrap:wrap;gap:16px;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px}
+.top nav a{color:#97ABBA;text-decoration:none;border-bottom:1px solid transparent;padding-bottom:2px}
+.top nav a:hover{color:#78BEFF;border-bottom-color:#78BEFF}
+.top nav a[aria-current]{color:#78BEFF;border-bottom-color:#78BEFF}
+.top .langs{margin-left:auto}
+.top nav a:focus-visible,.top .brand:focus-visible{outline:2px solid #F2C94C;outline-offset:3px}
 </style>
 <div class="wrap">
-<div class="langbar"><div class="langs"><a href="assembler.html" hreflang="en" lang="en">EN</a><span aria-current="true">FR</span></div></div>
+<header class="top">
+  <a class="brand" href="index.fr.html">JARVIS</a>
+  <nav><a href="machine.fr.html">la machine</a><a href="privacy.fr.html">vie privée</a><a href="troubleshooting.fr.html">dépannage</a><a href="poisson.fr.html">le poisson</a><a href="assembler.fr.html" aria-current="page">l’assembler</a><a href="https://github.com/macarchy/jarvis">le code</a></nav>
+  <div class="langs"><a href="assembler.html" hreflang="en" lang="en">EN</a><span aria-current="true">FR</span></div>
+</header>
 <h1>Assemble ton Jarvis</h1>
 <p class="lead">Quatre corps, quatre yeux, quatre crinières, quatre queues, huit couleurs — 2 048 poissons possibles. Chaque pièce se pose sur un ancrage fixe — c'est ce qui permettra d'animer n'importe quelle combinaison avec le même code. Sur la machine, la même chose se règle dans le Control Center (page Jarvis › Apparence) — la plaque correspond aux lignes de SOUL.md.</p>
 <div class="atelier">
