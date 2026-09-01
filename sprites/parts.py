@@ -296,10 +296,40 @@ def anchors(config):
     return BODIES[config["body"]][2]
 
 
+def grounded_crest(body, part, ax, ay, dy=0):
+    """The crest with two rules applied against the body it sits on:
+    perking (dy<0) stretches the filaments — the row above the base is
+    repeated, so the tips rise while the base keeps contact; and any
+    column whose lowest cell has no body under it (within one column)
+    is pruned — a fan trims itself to a narrow head instead of floating
+    past it."""
+    rows = [list(r) for r in part]
+    while rows and not any(c != "." for c in rows[-1]):
+        rows.pop()
+    width = max(len(r) for r in rows)
+    rows = [r + ["."] * (width - len(r)) for r in rows]
+    if dy < 0 and len(rows) > 1:
+        top, base = rows[:-1], rows[-1]
+        rows = top + [list(top[-1])] * (-dy) + [base]
+        ay += dy
+    keep = set()
+    for x in range(width):
+        lowest = None
+        for y, r in enumerate(rows):
+            if r[x] != ".":
+                lowest = y
+        if lowest is None:
+            continue
+        by = ay + lowest + 1
+        if 0 <= by < BH and any(0 <= ax + x + d < BW and body[by][ax + x + d] != "." for d in (-1, 0, 1)):
+            keep.add(x)
+    return ["".join(c if x in keep else "." for x, c in enumerate(r)) for r in rows], ay
+
+
 def compose(config, only=None, crest=True, crest_dy=0):
     """Stack tail, body, crest, eye on the body's anchors. `only` renders
     a single layer (for the configurator); crest=False leaves the crown
-    bare (headphones); crest_dy lifts the crest (listening perk)."""
+    bare (headphones); crest_dy<0 perks the crest (listening)."""
     body = BODIES[config["body"]][1]
     anc = anchors(config)
     rows = blank()
@@ -311,7 +341,8 @@ def compose(config, only=None, crest=True, crest_dy=0):
         elif name == "crest":
             if crest:
                 x, y = anc["crest"]
-                rows = place(rows, CRESTS[config["crest"]][1], x, y + crest_dy)
+                part, y = grounded_crest(body, CRESTS[config["crest"]][1], x, y, crest_dy)
+                rows = place(rows, part, x, y)
         else:
             lib = TAILS if name == "tail" else EYES
             rows = place(rows, lib[config[name]][1], *anc[name])
