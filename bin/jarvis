@@ -27,6 +27,7 @@
 #   jarvis digest         turn ~/Jarvis/input drops into memory fiches
 #   jarvis doctor         deterministic self-check of every dependency
 #   jarvis rotate         summarize and close a stale conversation
+#   jarvis look [random]  regenerate the mascot from the soul's look settings
 #
 # The persona is CLAUDE.md (operational) + SOUL.md (identity, editable from
 # the Control Center); both live next to this script's parent directory.
@@ -57,6 +58,8 @@ BRAIN_STATUS="$STATE_DIR/brain"
 # by voice; output/ receives requested extractions. JARVIS_BOX overrides
 # for tests.
 BOX_DIR="${JARVIS_BOX:-$HOME/Jarvis}"
+# The installed mascot plugin: `look` regenerates its sprite sheets.
+PLUGIN_DIR="${JARVIS_PLUGIN:-$HOME/.config/omarchy/plugins/macarchy.jarvis}"
 
 PIPER="$JARVIS_DIR/piper/piper"
 VOICE_FR="$JARVIS_DIR/models/fr_FR-tom-medium.onnx"
@@ -121,6 +124,16 @@ setting() {
 	local v
 	v=$(grep -m1 "^- $1:" "$JARVIS_DIR/SOUL.md" 2>/dev/null | sed "s/^- $1: *//; s/ *$//")
 	printf '%s' "${v:-$2}"
+}
+
+# Write one soul setting (the Control Center does the same with sed).
+set_setting() {
+	local soul="$JARVIS_DIR/SOUL.md"
+	if grep -q "^- $1:" "$soul"; then
+		sed -i "s/^- $1: .*/- $1: $2/" "$soul"
+	else
+		sed -i "/^- langue:/a - $1: $2" "$soul"
+	fi
 }
 
 # The quiet hours (`silence: 23-7`, or `non`): no rounds, no dreams, no
@@ -777,6 +790,28 @@ digest)
 	done
 	((digested)) && "$JARVIS_DIR/bin/jarvis-index" --inbox >/dev/null 2>&1
 	;;
+look)
+	# The fish's appearance: regenerate the mascot's sprite sheets from
+	# the soul's look settings (corps, oeil, criniere, queue, couleur)
+	# and make the plugin reload them — the fish on screen IS the
+	# preview. `look random` rolls a new fish first.
+	if [[ ${2:-} == random ]]; then
+		pick() { local -a v=("$@"); echo "${v[RANDOM % ${#v[@]}]}"; }
+		set_setting corps "$(pick B1 B2 B3 B4)"
+		set_setting oeil "$(pick E1 E2 E3 E4)"
+		set_setting criniere "$(pick M1 M2 M3 M4)"
+		set_setting queue "$(pick T1 T2 T3 T4)"
+		set_setting couleur "$(pick or corail lagon lavande menthe perle braise encre)"
+	fi
+	if ! python3 "$JARVIS_DIR/sprites/generate.py" \
+		--body "$(setting corps B1)" --eye "$(setting oeil E1)" --crest "$(setting criniere M1)" \
+		--tail "$(setting queue T1)" --pal "$(setting couleur or)" --out "$PLUGIN_DIR/assets" >>"$LOG" 2>&1; then
+		notify "Jarvis" "Impossible de générer le poisson — voyez le journal."
+		exit 1
+	fi
+	log "look: $(setting corps B1) $(setting oeil E1) $(setting criniere M1) $(setting queue T1) $(setting couleur or)"
+	mascot reload
+	;;
 index)
 	# Rebuild the knowledge base from live introspection (deterministic).
 	out=$("$JARVIS_DIR/bin/jarvis-index" 2>>"$LOG")
@@ -915,6 +950,7 @@ status)
 	printf 'brain=%s\n' "$(brain_status)"
 	printf 'quiet=%s\n' "$(quiet_now && echo oui || echo non)"
 	printf 'rondes=%s\nreves=%s\nsilence=%s\n' "$(setting rondes oui)" "$(setting reves oui)" "$(setting silence 23-7)"
+	printf 'corps=%s\noeil=%s\ncriniere=%s\nqueue=%s\ncouleur=%s\n' "$(setting corps B1)" "$(setting oeil E1)" "$(setting criniere M1)" "$(setting queue T1)" "$(setting couleur or)"
 	printf 'now=%s\nlast_ask_at=%s\nlast_heartbeat=%s\nnext_heartbeat=%s\nlast_dream=%s\n' \
 		"$now" "$last_ask" "$last_hb" "$next_hb" "$(stat -c %Y "$STATE_DIR/last-dream" 2>/dev/null || echo 0)"
 	printf 'last_ask=%s\n' "$(tr '\n' ' ' 2>/dev/null <"$LAST_ASK")"
@@ -958,7 +994,7 @@ suggestion)
 	fi
 	;;
 *)
-	echo "usage: jarvis [press|cancel|reset|settle|ask [--quiet] <text>|say <text>|state|status|dispatch [--dir <dir>] <task>|dream [--quiet]|maybe-dream|heartbeat|tick|digest|doctor|rotate|index|note <text>|suggestions|suggestion <n> accept|reject]" >&2
+	echo "usage: jarvis [press|cancel|reset|settle|ask [--quiet] <text>|say <text>|state|status|dispatch [--dir <dir>] <task>|dream [--quiet]|maybe-dream|heartbeat|tick|digest|doctor|rotate|look [random]|index|note <text>|suggestions|suggestion <n> accept|reject]" >&2
 	exit 1
 	;;
 esac
