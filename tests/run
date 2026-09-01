@@ -103,11 +103,11 @@ assert "aucun wav synthétisé" bash -c "! ls '$JARVIS_RUN/'reply*.wav 2>/dev/nu
 
 # ---- look
 t "look: génère les onze planches depuis l'âme"
-export JARVIS_PLUGIN="$SB/plugin"; mkdir -p "$JARVIS_PLUGIN/assets"
+export JARVIS_SPRITES="$SB/sprites"
 "$JARVIS" look
-assert "onze planches" test "$(ls "$JARVIS_PLUGIN/assets"/*.png | wc -l)" = 11
-assert "canevas 72 de large" bash -c "python3 '$TESTS_DIR/../sprites/preview.py' --no-ascii --scale 1 --out /dev/null '$JARVIS_PLUGIN/assets/tired.png' | grep -q '144x56'"
-unset JARVIS_PLUGIN
+assert "onze planches" test "$(ls "$JARVIS_SPRITES"/*.png | wc -l)" = 11
+assert "canevas 72 de large" bash -c "python3 '$TESTS_DIR/../sprites/preview.py' --no-ascii --scale 1 --out /dev/null '$JARVIS_SPRITES/tired.png' | grep -q '144x56'"
+unset JARVIS_SPRITES
 
 # ---- rotate
 t "rotate: résume et clôt la conversation"
