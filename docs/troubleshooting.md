@@ -1,3 +1,10 @@
+---
+layout: default
+lang: en
+title: When something is red
+description: One entry per line `omarchy-jarvis doctor` can print, in the order it prints them.
+---
+
 # When something is red
 
 `omarchy-jarvis doctor` names every dependency, green or red, with no

@@ -1,3 +1,10 @@
+---
+layout: default
+lang: en
+title: What Jarvis knows, keeps, and sends
+description: A plain accounting of what leaves your machine, what is kept, and how to turn each part off.
+---
+
 # What Jarvis knows, keeps, and sends
 
 Jarvis holds a microphone open, reads your screen when asked, and hands your

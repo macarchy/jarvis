@@ -4,6 +4,9 @@ A bilingual (français / English) voice assistant that lives on one laptop,
 with Claude as its brain, the shell as its hands, and a pixel-art Babel fish
 as its face.
 
+> **[macarchy.github.io/jarvis](https://macarchy.github.io/jarvis)** — the documentation site, with the
+> state machine you can drive.
+>
 > *Français : [README.fr.md](README.fr.md)*
 
 ```
@@ -107,10 +110,9 @@ Underneath is an explicit state machine — eight states, nine events, and only
 and it is frozen into `tests/fixtures/transitions.txt` so it cannot drift from
 its own documentation without turning a test red.
 
-**[web/documentation.html](web/documentation.html) is that machine, drivable.**
-Open it in a browser: press the events, watch the fish change, and watch the
-illegal ones be refused with the reason. Thirty seconds there beats reading
-this section.
+**[The machine, drivable](https://macarchy.github.io/jarvis/machine.html)** —
+press the events, watch the fish change, and watch the illegal pairs be
+refused with the reason. Thirty seconds there beats reading this section.
 
 The part worth stealing if you build something similar: the state file records
 *what* the machine is doing, and a record beside it records *which attempt* is

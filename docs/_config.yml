@@ -1,0 +1,22 @@
+# GitHub Pages builds this folder. No theme and no plugins: the layout in
+# _layouts/default.html is the whole design, written in Jarvis's own palette,
+# so the site looks like the thing it documents rather than like Jekyll.
+title: Jarvis
+description: A bilingual voice assistant that lives on one laptop, with Claude as its brain and a pixel-art Babel fish as its face.
+url: https://macarchy.github.io
+baseurl: /jarvis
+
+# The bespoke pages (index, machine, poisson, assembler) carry no front
+# matter, so Jekyll copies them through untouched — which is exactly right:
+# they are self-contained documents with their own stylesheets.
+exclude:
+  - README.md
+
+# Kramdown with GitHub-flavoured tables, which the two prose documents use
+# heavily.
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false
+  syntax_highlighter_opts:
+    disable: true
