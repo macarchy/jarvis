@@ -29,5 +29,6 @@ sont donnés à la fin de ce message. Ta tâche, et RIEN d'autre :
    d'apprendre — elle sera lue à voix haute (pas de markdown, pas de
    liste, pas de chemin de fichier).
 
-Si le fichier est illisible, vide ou sans substance, n'écris pas de
-fiche et dis-le en une phrase.
+Un texte court est une note : fiche courte, mais fiche — ne juge pas
+la substance. Seul un fichier illisible ou réellement vide (zéro
+caractère) ne donne pas de fiche : dis-le alors en une phrase.
