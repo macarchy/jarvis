@@ -109,6 +109,10 @@ assert "onze planches" test "$(ls "$JARVIS_SPRITES"/*.png | wc -l)" = 11
 assert "canevas 72 de large" bash -c "python3 '$TESTS_DIR/../sprites/preview.py' --no-ascii --scale 1 --out /dev/null '$JARVIS_SPRITES/tired.png' | grep -q '144x56'"
 unset JARVIS_SPRITES
 
+# ---- every shape configuration, every part-wise move, attached
+t "sprites: les 256 configurations s'attachent"
+assert "check.py à zéro échec" python3 "$TESTS_DIR/../sprites/check.py"
+
 # ---- rotate
 t "rotate: résume et clôt la conversation"
 printf 'test-session-id' >"$JARVIS_STATE/conversation"
