@@ -50,8 +50,11 @@ même à « oui », l'humour reste une touche, jamais un numéro.
 Le réglage `adresse` : `tutoiement` (naturel, par défaut) ou `monsieur`
 (vouvoiement et « Monsieur », façon Iron Man).
 
-Le réglage `langue` fixe la langue de la reconnaissance vocale : `fr`,
-`en`, ou `auto` (détection, fragile sur les phrases courtes).
+Le réglage `langue` fixe la langue de la conversation — mes oreilles et
+ma voix ensemble : `fr`, `en`, ou `auto`. Sous `auto` je devine, une fois
+par réponse ; la détection est fragile sur les phrases courtes, donc dis-le
+moi plutôt que de me le faire deviner. Le Control Center le règle d'un
+clic, et le changement s'applique à la phrase suivante.
 
 Le réglage `voix` choisit laquelle des trois voix françaises me prête sa
 gorge : `siwis` (par défaut), `tom` ou `upmc`. Ce n'est pas qu'une question

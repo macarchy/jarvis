@@ -381,11 +381,19 @@ brain_check() {
 	brain_set ok
 }
 
-# What Jarvis says out loud instead of a broken answer.
+# What Jarvis says out loud instead of a broken answer. Like the other
+# sentences no model wrote, it is spoken in the language `langue` pins —
+# the voice reading it was chosen by that same setting.
 brain_excuse() {
+	local h
 	case "$(brain_status)" in
-	quota\ *) echo "Mon cerveau a atteint son quota. Retour vers $(date -d "@$(brain_status | cut -d' ' -f2)" +%-H) heures." ;;
-	*) echo "Je n'ai pas pu joindre mon cerveau. Voyez le journal." ;;
+	quota\ *)
+		h=$(date -d "@$(brain_status | cut -d' ' -f2)" +%-H)
+		fixed "Mon cerveau a atteint son quota. Retour vers $h heures." \
+			"My brain has hit its quota. Back around $h."
+		;;
+	*) fixed "Je n'ai pas pu joindre mon cerveau. Voyez le journal." \
+		"I could not reach my brain. The log knows why." ;;
 	esac
 }
 
@@ -501,14 +509,38 @@ voice_fr() {
 	printf '%s' "$JARVIS_DIR/models/fr_FR-$name-medium.onnx"
 }
 
-# Crude but effective: French replies carry accents or French function words.
-voice_for() {
+# The one guess left, and it now runs at most once per reply. Crude but
+# effective on a whole utterance: French carries accents or French function
+# words. It used to run per sentence, which is how "Je n'ai pas pu joindre
+# mon cerveau" — no accent, none of these words — came out in English in the
+# middle of an otherwise French answer.
+guess_lang() {
 	local text=${1,,}
 	if [[ $text == *[éèêàçùôîû]* || $text =~ (^|[[:space:]])(le|la|les|est|c\'est|voilà|activé|activée|fait|batterie|monsieur)([[:space:]]|[.,!]|$) ]]; then
-		voice_fr
+		printf 'fr'
 	else
-		echo "$VOICE_EN"
+		printf 'en'
 	fi
+}
+
+# Which voice speaks. `langue` is a row of pills in the Control Center, and
+# the same setting already pins the ears — so it says what language this
+# conversation is in, and a language the user has chosen beats anything this
+# file could infer from the text. Guessing survives only under `auto`, where
+# there is nothing to obey. Read fresh, so a pill pressed mid-conversation
+# applies to the next thing he says.
+voice_for() {
+	local lang
+	lang=$(setting langue auto)
+	case "$lang" in fr | en) ;; *) lang=$(guess_lang "$1") ;; esac
+	if [[ $lang == en ]]; then printf '%s' "$VOICE_EN"; else voice_fr; fi
+}
+
+# The two things he says that no model wrote. They are French literals, and
+# under `langue: en` they would otherwise be handed to the English voice as
+# French text — which sounds exactly as bad as it reads.
+fixed() {
+	if [[ $(setting langue auto) == en ]]; then printf '%s' "$2"; else printf '%s' "$1"; fi
 }
 
 # Where speaking lands when it ends naturally: the follow-up window (the
@@ -553,7 +585,7 @@ do_speak() {
 # writes the rest. The bubble grows sentence by sentence. A barge-in (the
 # state moved off speaking) drops whatever is still in the pipe.
 speak_sentences() {
-	local sentence wav tried=0 spoken=0 acc=""
+	local sentence wav tried=0 spoken=0 acc="" model=""
 	if ((QUIET)); then
 		while IFS= read -r sentence; do
 			[[ -n ${sentence// /} ]] || continue
@@ -582,7 +614,11 @@ speak_sentences() {
 		acc+="${acc:+ }$sentence"
 		mascot reply "$acc"
 		wav="$RUN_DIR/reply-$((tried % 2)).wav"
-		if ! printf '%s' "$sentence" | group_run voice "$PIPER" --model "$(voice_for "$sentence")" --output_file "$wav" 2>>"$LOG"; then
+		# One voice per answer, decided on the first sentence and kept. Even
+		# where the language really is in doubt, an answer that changes accent
+		# halfway through is worse than one spoken wrong from end to end.
+		[[ -n $model ]] || model=$(voice_for "$sentence")
+		if ! printf '%s' "$sentence" | group_run voice "$PIPER" --model "$model" --output_file "$wav" 2>>"$LOG"; then
 			mine || return 0
 			# A dropped sentence is not a skip: the answer he speaks would be
 			# missing a clause the bubble still shows, and half an answer can
@@ -914,7 +950,7 @@ do_finish() {
 	log "heard: $text"
 	if [[ -z ${text// /} ]]; then
 		note_failure "transcript vide : la reconnaissance vocale n'a rien produit"
-		do_speak "Je n'ai rien entendu."
+		do_speak "$(fixed "Je n'ai rien entendu." "I did not catch that.")"
 		return 1
 	fi
 	# Nobody said that. It is not a failure either — there is nothing to
@@ -988,7 +1024,7 @@ do_cancel() {
 	case "$was" in idle | cancelling) ;; *) note_abort "$was" "$held" "$trigger" ;; esac
 	notify "Jarvis" "Annulé."
 	transition rest
-	((say)) && do_speak "Annulé."
+	((say)) && do_speak "$(fixed "Annulé." "Cancelled.")"
 	return 0
 }
 
