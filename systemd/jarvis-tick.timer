@@ -1,0 +1,20 @@
+[Unit]
+Description=Jarvis — le pouls, toutes les minutes
+
+[Timer]
+# The heartbeat used to live in the mascot's QML, behind `running: mood ===
+# "idle"`: the one thing that could repair a wedged machine was the one thing
+# a wedged machine stopped, and a shell reload took the body clock with it.
+# Here it survives both — and a machine whose plugin is not even installed.
+OnActiveSec=60
+OnUnitActiveSec=60
+# The pulse is upkeep, not an appointment: a minute either way costs nothing
+# and letting systemd group the wakeups costs less battery.
+AccuracySec=20s
+# Missed while suspended is missed: the next tick is a minute away anyway,
+# and a lid opened at noon does not owe the machine four hundred catch-up
+# rounds.
+Persistent=false
+
+[Install]
+WantedBy=timers.target

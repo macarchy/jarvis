@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# The fake ear. Whisper prints its progress before the transcript and the
+# pipeline keeps the last line (`| tail -1`), so this prints a decoy first.
+#   FAKE_TRANSCRIPT=<text>   what was heard (empty: nothing was heard)
+printf '%s\n' "$*" >>"${FAKE_VOXTYPE_LOG:-/dev/null}"
+printf '%s\n' "[00:00.000 --> 00:02.000] (decoding)"
+printf '%s\n' "${FAKE_TRANSCRIPT-}"

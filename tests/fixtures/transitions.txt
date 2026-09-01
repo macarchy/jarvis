@@ -1,0 +1,9 @@
+             listen        finish        ask           speak         done          settle        sleep         rest          cancel
+idle         listening     -             thinking      speaking      -             -             sleeping      idle          cancelling
+listening    listening     transcribing  thinking      -             -             -             -             idle          cancelling
+transcribing -             -             thinking      speaking      -             -             -             idle          cancelling
+thinking     -             -             thinking      speaking      -             -             -             idle          cancelling
+speaking     listening     -             thinking      speaking      followup      -             -             idle          cancelling
+followup     listening     -             thinking      speaking      -             idle          -             idle          cancelling
+sleeping     listening     -             thinking      speaking      -             -             -             idle          cancelling
+cancelling   -             -             -             -             -             -             -             idle          cancelling

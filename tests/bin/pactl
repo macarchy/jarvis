@@ -1,2 +1,11 @@
 #!/usr/bin/env bash
+# The audio graph, seen from outside: `pactl list sources short` is how the
+# FSM decides whether the internal microphone node exists. There is none here,
+# so it lists nothing.
+#
+# FAKE_PACTL_SLEEP holds the answer back. That is not a whim: this call sits
+# between taking the machine and opening the ear, and holding it is what makes
+# « a press that has already been overruled » a moment a test can arrive in
+# rather than a race it has to win.
+[[ -n ${FAKE_PACTL_SLEEP:-} ]] && sleep "$FAKE_PACTL_SLEEP"
 exit 0

@@ -1,2 +1,12 @@
 #!/usr/bin/env bash
+# The mascot channel, recorded instead of dropped: every setState, heard,
+# reply, emote, abort and reload the FSM sends lands in $FAKE_SHELL_LOG.
+# Without it the whole fish side of the pipeline was invisible to the suite.
+#
+# FAKE_SHELL_SLEEP holds the answer back, the way a busy shell would. The
+# bubble is sent between taking the machine and calling the brain, so holding
+# it there is how a test arrives inside that window on purpose instead of
+# racing for it.
+printf '%s\n' "$*" >>"${FAKE_SHELL_LOG:-/dev/null}"
+[[ -n ${FAKE_SHELL_SLEEP:-} ]] && sleep "$FAKE_SHELL_SLEEP"
 exit 0

@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
 # omarchy-jarvis — the voice of this machine.
 #
-# An explicit state machine. The state lives in one file and every entry
-# point is an event against it:
-#
-#     idle ── press ──▶ listening ── press ──▶ transcribing ─▶ thinking
-#       ▲                   │ cancel                              │
-#       │                                     streamed sentences  │
-#       ├─ settle ── followup ◀──── done ── speaking ◀────────────┘
-#       │  (silence)     │ speech onset ──▶ listening (no wake word)
-#       └────────────────┴── press (barge-in: stop the voice, listen)
+# An explicit state machine. Its table — the eight states, the nine events,
+# every legal couple and what each one means — lives in bin/jarvis-fsm.sh,
+# written out in prose above the code and frozen into
+# tests/fixtures/transitions.txt so it cannot drift. This file is the body
+# around it: the organs, the verbs, and what each stage does while it holds
+# the machine.
 #
 # Long stages (transcribe, brain, speak) run inside the invocation that
-# entered them; a concurrent invocation only touches the state file and the
-# recorded pids, so a press while speaking can barge in safely. The mascot
+# entered them; a concurrent invocation only touches the state record and
+# the process groups on disk, so a press while speaking can barge in safely
+# — and the barged-in invocation, whose epoch has moved on, goes quiet
+# instead of finishing a job nobody wants any more. The mascot
 # (macarchy.jarvis shell plugin) mirrors every state over IPC.
 #
-#   jarvis press          the one button: advance the machine
+#   jarvis press          the one button: advance the machine, or abort it
 #   jarvis cancel         back to idle, discard everything in flight
+#   jarvis watchdog       the pulse's first move: free a stage that wedged
 #   jarvis reset          forget the conversation (new soul applies here)
 #   jarvis ask "text"     text in, spoken reply out (--quiet: no voice)
 #   jarvis say "text"     just speak
@@ -44,8 +44,6 @@ RUN_DIR="${JARVIS_RUN:-${XDG_RUNTIME_DIR:-/tmp}/jarvis}"
 STATE_DIR="${JARVIS_STATE:-$HOME/.local/state/jarvis}"
 LOG="$STATE_DIR/jarvis.log"
 WAV="$RUN_DIR/utterance.wav"
-RECORD_PID="$RUN_DIR/record.pid"
-PLAY_PID="$RUN_DIR/play.pid"
 STATE_FILE="$RUN_DIR/state"
 CONV_FLAG="$STATE_DIR/conversation"
 LAST_ASK="$RUN_DIR/last-ask"
@@ -67,7 +65,13 @@ BOX_DIR="${JARVIS_BOX:-$HOME/Jarvis}"
 # every appearance click. The plugin reads from here.
 SPRITES_DIR="${JARVIS_SPRITES:-$HOME/.local/share/jarvis/sprites}"
 
-PIPER="$JARVIS_DIR/piper/piper"
+# The two organs of the voice path. They are named, not hardcoded, for the
+# same reason as the directories above: an absolute path to a binary that
+# only exists on this machine is a path the test suite cannot walk, and
+# everything downstream of it — recording, transcription, speaking — went
+# untested because of it. JARVIS_PIPER/JARVIS_VOXTYPE swap in the fakes.
+PIPER="${JARVIS_PIPER:-$JARVIS_DIR/piper/piper}"
+VOXTYPE="${JARVIS_VOXTYPE:-voxtype}"
 VOICE_FR="$JARVIS_DIR/models/fr_FR-tom-medium.onnx"
 VOICE_EN="$JARVIS_DIR/models/en_GB-alan-medium.onnx"
 STT_CONFIG="$JARVIS_DIR/voxtype.toml"
@@ -76,8 +80,77 @@ REPLY_TXT="$RUN_DIR/reply.txt"
 # default source has been seen wandering off to the FaceTime camera, so
 # recording always targets this node when it exists.
 MIC_TARGET="${JARVIS_MIC:-effect_output.j493-mic}"
+# The abort journal. Deliberately NOT FAILURES.md: see note_abort.
+ABORTS="$MEMORY_DIR/ABORTS.md"
 
 mkdir -p "$RUN_DIR" "$STATE_DIR" "$HOME/.cache/jarvis"
+
+# The state machine proper: the transition table, the ownership record
+# (claim/mine) and the process groups (group_run/kill_group). Everything
+# below is written against it. Read that file first — it is where the
+# machine is described.
+# shellcheck source=bin/jarvis-fsm.sh
+. "$JARVIS_DIR/bin/jarvis-fsm.sh"
+
+# ---------------------------------------------------------- the deadlines
+#
+# How long the machine may stay in each state before `watchdog` decides that
+# nobody is coming back. Every number below is a measured worst case with
+# room to spare, not a guess, and every one is overridable — that is what
+# lets the suite make a wedge happen in a tenth of a second instead of three
+# minutes:
+#
+#   transcribing   60 s   whisper on the longest utterance the wake daemon
+#                         allows (a 20 s window) runs in about eight seconds
+#                         here; a minute means voxtype is not coming back
+#   thinking      180 s   a sonnet answer with three tool calls has been
+#                         timed at seventy seconds. Past three minutes the
+#                         network is gone, not slow — and the grace
+#                         extension below covers a brain that is visibly
+#                         still working
+#   speaking      300 s   the longest reply ever spoken on this machine was
+#                         forty seconds of audio, and synthesis happens
+#                         sentence by sentence inside this same state
+#   listening      90 s   the daemon caps a listening window at twenty
+#                         seconds. Ninety means there is no daemon and the
+#                         user walked away with the microphone open
+#   followup        8 s   the daemon's own window is six seconds; this is
+#                         the same exit two seconds later, for when the
+#                         daemon is dead — which is exactly how the follow-up
+#                         window used to stay open until logout
+#   sleeping      600 s   a dream reads the whole failure journal and
+#                         rewrites three files
+#   cancelling      5 s   five kills and one file removed. If THAT hangs,
+#                         the machine is in worse shape than the request the
+#                         abort was serving
+deadline_for() {
+	case "$1" in
+	listening) echo "${JARVIS_DEADLINE_LISTENING:-90}" ;;
+	transcribing) echo "${JARVIS_DEADLINE_TRANSCRIBING:-60}" ;;
+	thinking) echo "${JARVIS_DEADLINE_THINKING:-180}" ;;
+	speaking) echo "${JARVIS_DEADLINE_SPEAKING:-300}" ;;
+	followup) echo "${JARVIS_DEADLINE_FOLLOWUP:-8}" ;;
+	sleeping) echo "${JARVIS_DEADLINE_SLEEPING:-600}" ;;
+	cancelling) echo "${JARVIS_DEADLINE_CANCELLING:-5}" ;;
+	*) echo 0 ;;
+	esac
+}
+
+# And how long it has been there, in seconds: the watchdog's clock, and the
+# doctor's. The record is the truth. A mirror with no record beside it — an
+# upgrade that landed mid-conversation, a state file left by a session that
+# never came back — is dated by its own mtime, which is exactly the case that
+# most deserves a watchdog.
+state_age() {
+	local now
+	rec_read
+	if ((REC_SINCE > 0)); then
+		echo $((($(date +%s%3N) - REC_SINCE) / 1000))
+	else
+		now=$(date +%s)
+		echo $((now - $(stat -c %Y "$STATE_FILE" 2>/dev/null || echo "$now")))
+	fi
+}
 
 # The written exchange (`ask --quiet`): everything happens — brain,
 # bubble, notification, journal, Control Center banner — except the
@@ -90,6 +163,50 @@ notify() { notify-send -a "Jarvis" -t 5000 "$1" "${2-}" 2>/dev/null || true; }
 
 # Animate the Babel fish; harmless when the shell or plugin is not running.
 mascot() { omarchy-shell macarchy.jarvis "$@" >/dev/null 2>&1 || true; }
+
+# Everything the body says about the CURRENT exchange goes through mascot()
+# directly. Everything else — an emotion Jarvis chose to punctuate a reply
+# with, a mission report, a dream's summary, the unlock hello — is an aside,
+# and an aside sent while he is working is worse than no aside at all: the
+# pipeline's own sprite always wins, so `emote proud` fired mid-answer was
+# never once seen on screen, and a mission report dropped into the bubble
+# mid-reply wiped the text being typed out and made the typewriter restart
+# from the first character. So an aside waits its turn: parked in
+# $STATE_DIR while he is busy, played by the way back to rest.
+mascot_emote() {
+	if [[ $(state) == idle ]]; then
+		mascot emote "$1"
+	else
+		printf '%s' "$1" >"$STATE_DIR/emote-pending"
+	fi
+}
+
+mascot_aside() {
+	if [[ $(state) == idle ]]; then
+		mascot reply "$1"
+	else
+		printf '%s' "$1" >"$STATE_DIR/aside-pending"
+	fi
+}
+
+# Flushed by on_state_change on the way to idle. Five minutes late is not an
+# emotion any more, it is a ghost: a worried fish about a mission that ended
+# half an hour ago says nothing true.
+mascot_flush() {
+	local kind file text
+	for kind in emote aside; do
+		file="$STATE_DIR/$kind-pending"
+		[[ -e $file ]] || continue
+		text=$(cat "$file" 2>/dev/null)
+		if [[ -n $text && -n $(find "$file" -mmin -5 2>/dev/null) ]]; then
+			case "$kind" in
+			emote) mascot emote "$text" ;;
+			aside) mascot reply "$text" ;;
+			esac
+		fi
+		rm -f "$file"
+	done
+}
 
 # The black box: one compact line per event in memory/trace/YYYY-MM-DD.log.
 # The FSM writes the anchors (ask, reply, failures, missions); the stream
@@ -108,6 +225,47 @@ note_failure() {
 	printf -- '- [%s] %s\n' "$(date +%FT%H:%M)" "$1" >>"$FAILURES"
 	log "note: $1"
 	trace "✗ échec noté : $1"
+}
+
+# A state, said the way a French sentence needs it: « figé pendant sa
+# réflexion », « annulé pendant la transcription ». One table for both,
+# because the watchdog's notification and the abort journal want the same
+# words about the same moment.
+stage_fr() {
+	case "$1" in
+	listening) echo "son écoute" ;;
+	transcribing) echo "la transcription" ;;
+	thinking) echo "sa réflexion" ;;
+	speaking) echo "sa réponse" ;;
+	followup) echo "sa fenêtre de relance" ;;
+	sleeping) echo "son rêve" ;;
+	cancelling) echo "son annulation" ;;
+	*) echo "son repos" ;;
+	esac
+}
+
+# An abort is not a failure, and this is the whole reason it gets a journal
+# of its own. Interrupting a request you no longer want is the system doing
+# its job — but every barge-in used to land in FAILURES.md, and ONE line
+# there is enough for maybe-dream to schedule a sonnet consolidation whose
+# job is to distil lessons into LEARNED.md, which CLAUDE.md then imports as
+# persona. Pressing a key to stop an answer therefore manufactured permanent
+# changes to who Jarvis is. Here instead: the stage, how long it had been
+# running and what asked for the abort, so a dream can recognise a REPEATED
+# pattern (« il coupe toujours pendant la transcription ») and ignore the
+# rest. Under two seconds nothing is recorded at all: that is not a pattern,
+# it is a fumbled press.
+note_abort() {
+	local stage="$1" ms="${2:-0}" trigger="${3:-commande}" secs
+	[[ $ms =~ ^[0-9]+$ ]] || ms=0
+	((ms >= 2000)) || return 0
+	secs=$((ms / 1000))
+	mkdir -p "$MEMORY_DIR"
+	[[ -e $ABORTS ]] || printf '# ABORTS.md — journal des annulations\n\n' >"$ABORTS"
+	printf -- '- [%s] annulé pendant %s après %s s (%s)\n' \
+		"$(date +%FT%H:%M)" "$(stage_fr "$stage")" "$secs" "$trigger" >>"$ABORTS"
+	log "abort: $stage after ${secs}s ($trigger)"
+	trace "— annulé pendant $(stage_fr "$stage") après $secs s ($trigger) —"
 }
 
 # One dated line into today's journal (memory/journal/YYYY-MM-DD.md):
@@ -130,6 +288,15 @@ setting() {
 	local v
 	v=$(grep -m1 "^- $1:" "$JARVIS_DIR/SOUL.md" 2>/dev/null | sed "s/^- $1: *//; s/ *$//")
 	printf '%s' "${v:-$2}"
+}
+
+# The five settings the fish is assembled from, on one line. `look` stamps
+# this beside the generated sheets and doctor compares the two: a colour
+# changed from the Control Center whose regeneration then failed is otherwise
+# completely invisible — the old fish keeps swimming and nothing says why.
+look_signature() {
+	printf '%s %s %s %s %s\n' "$(setting corps B1)" "$(setting oeil E1)" \
+		"$(setting criniere M1)" "$(setting queue T1)" "$(setting couleur or)"
 }
 
 # Write one soul setting (the Control Center does the same with sed).
@@ -177,9 +344,9 @@ brain_set() {
 	trace "$([[ $now == ok ]] && echo ✓ || echo ✗) $msg"
 	journal "$msg"
 	if [[ $now == ok ]]; then
-		mascot emote celebrate
+		mascot_emote celebrate
 	else
-		mascot emote worried
+		mascot_emote worried
 		notify "Jarvis" "$msg"
 	fi
 }
@@ -232,24 +399,50 @@ box_init() {
 
 # ------------------------------------------------------------ the machine
 
-state() { cat "$STATE_FILE" 2>/dev/null || echo idle; }
-
-set_state() {
-	printf '%s' "$1" >"$STATE_FILE"
+# The body's half of a transition. bin/jarvis-fsm.sh knows nothing of fish,
+# Touch Bars or quiet hours; it writes the record, releases its lock, and
+# then calls this — so none of what follows can ever be holding the lock
+# while it waits on the shell's IPC.
+on_state_change() {
+	local sprite=$1 pid
 	# The mascot has no transcribing or followup sprite; it ponders through
-	# the one and stays perked up through the other.
-	local sprite=$1
+	# the one and stays perked up through the other. `cancelling` sends
+	# nothing at all: the abort has an animation of its own (`mascot abort`,
+	# fired by do_cancel), and a setState landing on top of it would trade
+	# the one gesture that says « I heard you » for a sprite that would be
+	# on screen for a few hundred milliseconds.
 	[[ $1 == transcribing ]] && sprite=thinking
 	[[ $1 == followup ]] && sprite=listening
-	mascot setState "$sprite"
+	[[ $1 == cancelling ]] || mascot setState "$sprite"
 	# The Touch Bar key wears the state too (omarchy-dfr renders it on USR1).
-	pid=$(cat "${XDG_RUNTIME_DIR:-/tmp}/omarchy-dfr/daemon.pid" 2>/dev/null) && kill -USR1 "$pid" 2>/dev/null
-	log "state: $1"
+	# JARVIS_NO_DESKTOP keeps the suite's hundreds of transitions off the
+	# real Touch Bar: that daemon lives outside every sandbox.
+	if [[ -z ${JARVIS_NO_DESKTOP:-} ]]; then
+		pid=$(cat "${XDG_RUNTIME_DIR:-/tmp}/omarchy-dfr/daemon.pid" 2>/dev/null) && kill -USR1 "$pid" 2>/dev/null
+	fi
+	# One truth about the quiet hours, and it is this one: the mascot used to
+	# hardcode its own 23-7 night and curled up asleep whatever the soul said.
+	printf '%s' "$(quiet_now && echo 1 || echo 0)" >"$STATE_DIR/quiet"
+	[[ $1 == idle ]] && mascot_flush
+	return 0
 }
 
 # The follow-up window only makes sense if the wake daemon is there to
 # watch it (it detects the speech onset and settles the timeout).
-wake_alive() { pgrep -f "jarvis-wake.py" >/dev/null 2>&1; }
+#
+# The launcher (bin/jarvis-wake) holds a flock on wake.lock for the whole
+# life of the daemon, so failing to take that lock IS the daemon being
+# alive. `pgrep -f jarvis-wake.py` used to answer this and lied both ways:
+# an editor with the file open, or this very grep, counted as a daemon.
+# JARVIS_WAKE=0|1 answers for the tests, which have no daemon at all.
+wake_alive() {
+	case "${JARVIS_WAKE:-}" in
+	1) return 0 ;;
+	0) return 1 ;;
+	esac
+	[[ -e $RUN_DIR/wake.lock ]] || return 1
+	! flock -n "$RUN_DIR/wake.lock" true 2>/dev/null
+}
 
 # Which brain answers: a plain command goes to haiku, an open question —
 # long, interrogative, or explicitly reflective — escalates to sonnet.
@@ -286,29 +479,36 @@ voice_for() {
 # after a real exchange, plain idle otherwise or when nobody is watching.
 after_speaking() {
 	if [[ ${1:-} == followup ]] && wake_alive; then
-		set_state followup
+		transition done
 	else
-		set_state idle
+		transition rest
 	fi
 }
 
-# Speak, interruptibly: the player pid is on disk so a barge-in press can
-# stop it. Only fall back to rest if nothing barged in meanwhile.
+# Speak, interruptibly: the player runs in a group of its own, so a barge-in
+# press from another invocation can reach it. Every step is behind `mine` —
+# synthesis takes seconds, and an answer the user cancelled halfway through
+# must not take the speakers back when its wav is finally ready.
 do_speak() {
-	local text="$1" follow="${2:-}" wav="$RUN_DIR/reply.wav" pid
+	local text="$1" follow="${2:-}" wav="$RUN_DIR/reply.wav"
 	[[ -n $text ]] || return 0
+	mine || return 0
 	if ((QUIET)); then
-		[[ $(state) == thinking || $(state) == speaking ]] && set_state idle
+		case "$(state)" in thinking | speaking) transition rest ;; esac
 		return 0
 	fi
-	printf '%s' "$text" | "$PIPER" --model "$(voice_for "$text")" --output_file "$wav" 2>>"$LOG" || return 1
-	set_state speaking
-	pw-play "$wav" 2>>"$LOG" &
-	pid=$!
-	echo "$pid" >"$PLAY_PID"
-	wait "$pid" 2>/dev/null
-	rm -f "$PLAY_PID"
+	if ! printf '%s' "$text" | group_run voice "$PIPER" --model "$(voice_for "$text")" --output_file "$wav" 2>>"$LOG"; then
+		# Being cut off mid-synthesis is not a failure of the voice.
+		mine || return 0
+		note_failure "voix : synthèse impossible pour « $text »"
+		return 1
+	fi
+	mine || return 0
+	transition speak || return 1
+	group_run play pw-play "$wav" 2>>"$LOG"
+	mine || return 0
 	[[ $(state) == speaking ]] && after_speaking "$follow"
+	return 0
 }
 
 # Speak a stream: one sentence per stdin line, synthesized and played as
@@ -316,38 +516,60 @@ do_speak() {
 # writes the rest. The bubble grows sentence by sentence. A barge-in (the
 # state moved off speaking) drops whatever is still in the pipe.
 speak_sentences() {
-	local sentence wav pid n=0 acc=""
+	local sentence wav tried=0 spoken=0 acc=""
 	if ((QUIET)); then
 		while IFS= read -r sentence; do
 			[[ -n ${sentence// /} ]] || continue
+			mine || return 0
 			acc+="${acc:+ }$sentence"
 			mascot reply "$acc"
-			n=$((n + 1))
+			tried=$((tried + 1))
 		done
-		((n > 0)) && [[ $(state) == thinking ]] && set_state idle
+		((tried > 0)) && [[ $(state) == thinking ]] && transition rest
 		return 0
 	fi
 	while IFS= read -r sentence; do
 		[[ -n ${sentence// /} ]] || continue
-		if ((n == 0)); then
+		mine || return 0
+		if ((tried == 0)); then
 			[[ $(state) == thinking ]] || break
-			set_state speaking
+			transition speak || break
 		elif [[ $(state) != speaking ]]; then
 			break
 		fi
+		# Attempts and successes are two different counts. Conflating them is
+		# what left him frozen mid-answer: the sentence that failed to
+		# synthesize never incremented anything, so the closing transition,
+		# hidden behind that same count, never ran either.
+		tried=$((tried + 1))
 		acc+="${acc:+ }$sentence"
 		mascot reply "$acc"
-		wav="$RUN_DIR/reply-$((n % 2)).wav"
-		printf '%s' "$sentence" | "$PIPER" --model "$(voice_for "$sentence")" --output_file "$wav" 2>>"$LOG" || continue
+		wav="$RUN_DIR/reply-$((tried % 2)).wav"
+		if ! printf '%s' "$sentence" | group_run voice "$PIPER" --model "$(voice_for "$sentence")" --output_file "$wav" 2>>"$LOG"; then
+			mine || return 0
+			# A dropped sentence is not a skip: the answer he speaks would be
+			# missing a clause the bubble still shows, and half an answer can
+			# mean the opposite of the whole one. Stop and let him be read.
+			note_failure "voix : synthèse impossible pour « $sentence »"
+			break
+		fi
+		mine || return 0
 		[[ $(state) == speaking ]] || break
-		pw-play "$wav" 2>>"$LOG" &
-		pid=$!
-		echo "$pid" >"$PLAY_PID"
-		wait "$pid" 2>/dev/null
-		n=$((n + 1))
+		group_run play pw-play "$wav" 2>>"$LOG"
+		spoken=$((spoken + 1))
 	done
-	rm -f "$PLAY_PID"
-	((n > 0)) && [[ $(state) == speaking ]] && after_speaking followup
+	# Coming down matters more than where to: if the state is still ours,
+	# a voice that got out earns the follow-up window, while one that never
+	# did (piper failing on the first sentence) goes straight to rest rather
+	# than leaving the fish stuck mid-sentence forever.
+	mine || return 0
+	if [[ $(state) == speaking ]]; then
+		if ((spoken > 0)); then
+			after_speaking followup
+		else
+			transition rest
+		fi
+	fi
 }
 
 # The conversation is ONE claude session with an id of our own, kept in
@@ -394,42 +616,66 @@ stream_brain() {
 	local text="$1" model="$2"
 	local -a args
 	cd "$JARVIS_DIR" || return 1
-	rm -f "$REPLY_TXT" "$REPLY_TXT.error"
+	rm -f "$REPLY_TXT" "$REPLY_TXT.error" "$REPLY_TXT.interrupted"
 	mapfile -t args < <(conv_args)
-	claude -p "${args[@]}" --model "$model" \
+	# The last look before the money is spent. Everything between taking the
+	# machine and this line — a bubble sent to the fish, a model chosen, a
+	# session id read — is tens of milliseconds during which the group does
+	# not exist yet, so an abort arriving there has nothing to kill and the
+	# question would be asked anyway: paid for, answered into a void.
+	mine || return 0
+	group_run brain claude -p "${args[@]}" --model "$model" \
 		--output-format stream-json --include-partial-messages --verbose \
 		-- "$text" 2>>"$LOG" |
 		"$JARVIS_DIR/bin/jarvis-sentences" "$REPLY_TXT" |
 		speak_sentences
+	# A barge-in closes the voice's end of the pipe, and the stream parser
+	# says so instead of dying silently — which used to look exactly like a
+	# brain that had answered nothing, and sent run_exchange off to ask the
+	# same question a second time.
+	if [[ -e $REPLY_TXT.interrupted ]]; then
+		log "brain: stream interrupted"
+		trace "✗ flux interrompu"
+	fi
+	mine || return 0
 	[[ -s $REPLY_TXT ]] && printf '%s' "${args[1]}" >"$CONV_FLAG"
+	return 0
 }
 
-# transcribing → thinking → speaking → followup/idle, from an utterance.
+# thinking → speaking → followup/idle, from a question. The caller owns the
+# machine and has already moved it into `thinking`; every step here is behind
+# `mine`, because each one of them is seconds long and the user may have said
+# stop in the middle of any of them.
 run_exchange() {
-	local text="$1" reply model
+	local text="$1" reply model err
+	mine || return 0
 	log "ask: $text"
 	printf '%s' "$text" >"$LAST_ASK"
 	# Every ask shows in the philactère — spoken, typed from the Control
 	# Center, or piped through the CLI alike.
 	mascot heard "$text"
-	set_state thinking
 	model=$(pick_model "$text")
 	log "model: $model"
 	trace "ask($model) « $text »"
 	stream_brain "$text" "$model"
+	mine || return 0
 	reply=$(cat "$REPLY_TXT" 2>/dev/null)
 	if [[ -z $reply ]]; then
 		# The stream produced nothing. Either the brain told us why (a
 		# usage limit — no point retrying) or the remembered session is
 		# stale: one fresh, non-streaming retry before declaring it down.
+		# The retry keeps the session id: brain() already holds the correct
+		# one-shot fallback for a session that is genuinely gone, and
+		# throwing the id away here erased a whole morning's conversation
+		# every time a single turn failed transiently.
 		err=$(cat "$REPLY_TXT.error" 2>/dev/null)
 		if [[ -n $err ]] && ! brain_check "$err"; then
 			reply=""
 		else
-			rm -f "$CONV_FLAG"
 			reply=$(brain "$text" "$model")
 			brain_check "$reply" || reply=""
 		fi
+		mine || return 0
 		if [[ -z $reply ]]; then
 			[[ $(brain_status) == quota* ]] || note_failure "cerveau injoignable pour : « $text »"
 			reply=$(brain_excuse)
@@ -445,6 +691,7 @@ run_exchange() {
 	else
 		brain_set ok
 	fi
+	mine || return 0
 	log "reply: $reply"
 	printf '%s' "$reply" >"$LAST_REPLY"
 	trace "reply « $reply »"
@@ -452,59 +699,178 @@ run_exchange() {
 	notify "$text" "$reply"
 }
 
+# Open the ear. The argument, when there is one, is a barge-in — a press
+# while he is still speaking — and it is the French word that says who asked,
+# exactly as `cancel --from` takes: the abort journal is read by the user and
+# by the dreams, and both read French.
 do_listen() {
-	rm -f "$WAV"
-	local target=()
+	local trigger="${1:-}" target=() was="" held=0
+	# How long the reply had been running has to be read BEFORE the claim:
+	# claiming moves `since` to now.
+	if [[ -n $trigger ]]; then
+		was=$(state)
+		held=$(held_ms)
+	fi
+	# Taking the machine IS opening the ear: one gesture, one lock, so a
+	# second press arriving a millisecond later finds the move already made
+	# instead of bumping the epoch out from under this one.
+	claim_transition listen || return 1
+	# Talking over an answer is a legitimate gesture, not a defect of the
+	# machine — so it goes to the abort journal and never to FAILURES.md,
+	# whose entries schedule the dreams that rewrite who he is.
+	[[ -n $trigger ]] && note_abort "$was" "$held" "$trigger"
+	# Nothing else may be holding an organ while the ear is open: a player
+	# still talking would be recorded as the user's own question, and a
+	# second recorder would fight the first for the microphone and orphan it
+	# — there is one pid file per group, so the first became unkillable.
+	stop_everything
 	pactl list sources short 2>/dev/null | grep -q "$MIC_TARGET" && target=(--target "$MIC_TARGET")
-	pw-record "${target[@]}" --rate 16000 --channels 1 --format s16 "$WAV" 2>>"$LOG" &
-	echo $! >"$RECORD_PID"
-	set_state listening
-	notify "Listening…" "Press again when you're done."
+	# The ear is the one stage that is started in the background — a recorder
+	# outlives the press that opened it on purpose — and that is what made it
+	# the one stage an abort could miss entirely. Between taking the machine
+	# and the recorder naming itself there were a `pactl` and two forks, and
+	# an abort arriving anywhere in there killed a group that did not exist
+	# yet: the microphone then stayed open for the rest of the session with
+	# nothing on disk to reach it by. Measured at one press in two when the
+	# two gestures were fired together.
+	#
+	# So both halves of the answer, in this order. The handle is reserved
+	# first, in the foreground, so a kill arriving from here on has something
+	# to aim at and waits for the id (kill_group already knows how). Then the
+	# ownership is checked, so a press that has ALREADY been overruled never
+	# opens a microphone at all — and hands its reservation back rather than
+	# leaving a kill to spin on it.
+	group_reserve record
+	if ! mine; then
+		group_release record
+		return 0
+	fi
+	group_run record pw-record "${target[@]}" --rate 16000 --channels 1 --format s16 "$WAV" 2>>"$LOG" &
+	notify "J'écoute…" "Appuie à nouveau quand tu as fini."
+	return 0
 }
 
 do_finish() {
-	local pid text
-	pid=$(cat "$RECORD_PID" 2>/dev/null)
-	rm -f "$RECORD_PID"
-	[[ -n $pid ]] && kill -INT "$pid" 2>/dev/null
+	local text lang pgid
+	# Claim and leave `listening` FIRST, before the recorder is even
+	# signalled. The kill and the header grace below take between a tenth of
+	# a second and a full second, and for all of it the machine used to
+	# still read `listening`: a second press landing in that window — the
+	# button and the wake daemon's silence timer together — transcribed the
+	# same utterance twice and asked the brain the same question twice.
+	claim_transition finish || return 1
+	stage_guard
+	pgid=$(group_pgid record)
+	kill_group record INT
 	# Give pw-record a beat to finalize the WAV header.
-	for _ in 1 2 3 4 5 6 7 8 9 10; do
-		kill -0 "$pid" 2>/dev/null || break
-		sleep 0.1
-	done
+	group_gone "$pgid"
+	# That grace is up to a full second, and « stop, no, cancel » is a very
+	# ordinary pair of gestures to make inside it. Whisper is the expensive
+	# organ in this file after the brain, and there is no point spending it
+	# on a recording nobody wants any more.
+	mine || return 0
 	if [[ ! -s $WAV ]]; then
-		set_state idle
-		notify "Jarvis" "No audio captured."
+		transition rest
+		notify "Jarvis" "Je n'ai rien entendu."
 		return 1
 	fi
-	set_state transcribing
-	notify "Thinking…"
+	notify "Je réfléchis…"
 	# The soul's `langue` setting pins the STT language (fr | en | auto):
 	# whisper's auto-detection is unreliable on short clips. The effective
 	# config is derived fresh so a settings change applies immediately.
 	lang=$(grep -m1 '^- langue:' "$JARVIS_DIR/SOUL.md" 2>/dev/null | sed 's/^- langue: *//; s/ *$//')
 	case "$lang" in fr | en) ;; *) lang=auto ;; esac
 	sed "s/^language = .*/language = \"$lang\"/" "$STT_CONFIG" >"$RUN_DIR/voxtype.toml"
-	text=$(voxtype -c "$RUN_DIR/voxtype.toml" transcribe "$WAV" 2>>"$LOG" | tail -1)
+	text=$(group_run stt "$VOXTYPE" -c "$RUN_DIR/voxtype.toml" transcribe "$WAV" 2>>"$LOG" | tail -1)
+	mine || return 0
+	rm -f "$WAV"
 	log "heard: $text"
 	if [[ -z ${text// /} ]]; then
 		note_failure "transcript vide : la reconnaissance vocale n'a rien produit"
 		do_speak "Je n'ai rien entendu."
 		return 1
 	fi
+	transition ask || return 1
 	run_exchange "$text"
 }
 
+# Every handle, in one gesture. The recorder gets INT so its WAV header is
+# finalized on the way out; everything else gets TERM. Killing the GROUP is
+# what makes this real: `claude` runs its own Bash tool subprocesses, and
+# the bare pid this used to signal never reached a single one of them.
 stop_everything() {
-	local pid
-	pid=$(cat "$RECORD_PID" 2>/dev/null) && kill -INT "$pid" 2>/dev/null
-	pid=$(cat "$PLAY_PID" 2>/dev/null) && kill "$pid" 2>/dev/null
-	rm -f "$RECORD_PID" "$PLAY_PID"
+	local name
+	kill_group record INT
+	for name in stt brain voice play dream; do
+		kill_group "$name"
+	done
+	# A cancelled recording left on disk was transcribed by the next press.
+	rm -f "$WAV"
 }
 
 # -------------------------------------------------------------- the events
 
+# The abort. It is the one gesture in the system that is not allowed to fail,
+# so it does nothing that can: it never asks the brain anything, never waits
+# on anything, and lands on idle even if every single kill misses.
+#
+# The claim comes first, and it is what actually cancels: from that line on
+# the running invocation is no longer the owner, so every `mine` inside it
+# fails and it stops writing to the world in the moment before its process
+# group even dies — no notification with the answer you just refused, no
+# journal line, no theme changed three seconds later. Then the fish (its own
+# animation, not a state sprite), the groups, the abort journal, and home.
+#
+#   --say         speak the confirmation. For the abort the user cannot see
+#                 — the wake word, from across the room. A press already has
+#                 its own answer: the silence that follows it.
+#   --from <mot>  who asked, for the journal: touche, voix, commande.
+do_cancel() {
+	local say=0 trigger=commande was held
+	while (($#)); do
+		case "$1" in
+		--say) say=1 ;;
+		--from)
+			trigger="${2:-commande}"
+			shift
+			;;
+		esac
+		shift
+	done
+	was=$(state)
+	held=$(held_ms)
+	claim_transition cancel || return 1
+	stage_guard
+	mascot abort
+	stop_everything
+	# Nothing was under way: the key still answers, but there is no gesture
+	# to record — an abort journal full of « annulé pendant son repos » would
+	# hide the pattern it exists to show.
+	case "$was" in idle | cancelling) ;; *) note_abort "$was" "$held" "$trigger" ;; esac
+	notify "Jarvis" "Annulé."
+	transition rest
+	((say)) && do_speak "Annulé."
+	return 0
+}
+
+# The one button — and it is modal, which is the whole of workstream 3. There
+# is exactly one of it, three surfaces reach it (the push-to-talk key, the
+# Touch Bar button, a click on the fish), and for the two states where the
+# machine is working on your behalf it used to do precisely nothing: while he
+# transcribed or thought, no key, no button and no click in the entire system
+# could stop him. So the same press aborts there, and the three surfaces are
+# armed by this one arm with no change outside this file.
 on_press() {
+	# A quarter of a second of dead time on every press. Two events a
+	# fraction of a second apart — the button under a thumb and the wake
+	# daemon's silence timer firing together — are one gesture, not two, and
+	# treating them as two is what asked the brain the same question twice.
+	if ! held_for 250; then
+		log "press ignored: $(state) for less than 250 ms"
+		return 0
+	fi
+	# The state read here is only a hint: do_listen and do_finish decide for
+	# real, under the lock, and refuse what the table refuses.
 	case "$(state)" in
 	idle | followup)
 		do_listen
@@ -513,19 +879,35 @@ on_press() {
 		do_finish
 		;;
 	speaking)
-		# Barge-in: cut the voice and listen. The speaking invocation's
-		# wait returns and leaves the state alone since it moved on. An
-		# interrupted reply often means it missed the mark — remember it.
-		note_failure "réponse interrompue (barge-in) après : « $(cat "$LAST_ASK" 2>/dev/null) »"
-		stop_everything
-		do_listen
-		;;
-	sleeping)
-		# Waking him mid-dream: the dream finishes quietly in its own
-		# invocation and leaves any newer state alone.
-		do_listen
+		# Barge-in: the speaking invocation wakes from its player, finds the
+		# epoch moved, and writes nothing more. `touche` is the same word the
+		# modal arm below files, because it is the same gesture on the same
+		# three surfaces — only the moment it lands in differs.
+		do_listen touche
 		;;
 	transcribing | thinking)
+		# The modal arm. A second and a half of dead time, and it is a
+		# different number from the one above on purpose: this press does not
+		# advance anything, it destroys work in progress, so a fumbled
+		# double-press — a thumb that bounced on the key that STARTED this
+		# request — must not be able to abort it one second in. Past that,
+		# the gesture is deliberate and it is obeyed.
+		if held_for 1500; then
+			do_cancel --from touche
+		else
+			log "press ignored: $(state) for less than 1.5 s"
+		fi
+		;;
+	sleeping)
+		# Waking him mid-dream. The abort first, and it means it now — the
+		# dream's session runs in a group of its own — then the ear, because
+		# what the user wanted was to talk, not to watch a fish wake up.
+		do_cancel --from touche
+		do_listen
+		;;
+	cancelling)
+		# An abort is already under way and it takes milliseconds. Pressing
+		# through it would open the microphone on top of groups still dying.
 		log "press ignored while $(state)"
 		;;
 	esac
@@ -536,17 +918,94 @@ press | listen)
 	on_press
 	;;
 cancel)
-	stop_everything
-	set_state idle
-	notify "Jarvis" "Cancelled."
+	# SUPER+ALT+ESCAPE, the fish's right click, the prompt bar's Escape, the
+	# wake word while he works (`cancel --say --from voix`), and on_press's
+	# modal arm all end here.
+	shift
+	do_cancel "$@"
 	;;
 reset)
 	rm -f "$CONV_FLAG"
 	notify "Jarvis" "Nouvelle conversation — l'âme a été relue."
 	;;
 settle)
-	# The wake daemon closes an unused follow-up window quietly.
-	[[ $(state) == followup ]] && set_state idle
+	# The wake daemon closes an unused follow-up window quietly. It never
+	# claimed anything, so the table alone decides: `settle` is legal from
+	# `followup` and from nowhere else, and a window that already closed
+	# leaves a refusal in the log rather than an idle written over a state
+	# somebody else owns.
+	transition settle || true
+	;;
+watchdog)
+	# The chien de garde, run by the pulse. Cancelling answers « the user
+	# wants out »; this answers « the stage never came back ». The Wi-Fi
+	# drops mid-question and he ponders forever: no timeout anywhere, every
+	# input a no-op, and — because the mascot's pulse only ran while idle —
+	# the entire body clock stopped behind it. No rounds, no dreams, no
+	# retry of parked documents, no conversation rotation, silently, until
+	# logout. With `since` and `owner` in the record it costs thirty lines,
+	# and it is what makes the more aggressive press grammar safe: every
+	# wedge becomes an ordinary abort with a French explanation.
+	age=$(state_age)
+	rec_read
+	stuck=$REC_STATE
+	seen=$REC_EPOCH
+	deadline=$(deadline_for "$stuck")
+	# idle has no deadline, and neither has anything the table does not know.
+	((deadline)) || exit 0
+	# The owner is the other half of the answer: an invocation that died —
+	# killed, a terminal closed on it, an OOM — is never coming back
+	# whatever the clock says. It is only ever ASKED whether it exists; it
+	# is not a kill target, since an invocation launched from a shell shares
+	# that shell's process group. And `listening` and `followup` are judged
+	# by the clock alone: those two are deliberately handed on to the next
+	# press and to the wake daemon, so their owner is EXPECTED to be gone —
+	# they are the same two finish_stage leaves alone, for the same reason.
+	gone=0
+	case "$stuck" in
+	listening | followup) ;;
+	*) ((REC_OWNER > 1)) && ! kill -0 "-$REC_OWNER" 2>/dev/null && gone=1 ;;
+	esac
+	# One grace extension, on a sign of life and nothing else: the black box
+	# takes a line per tool call the brain makes, so a trace that grew in
+	# the last thirty seconds is a brain visibly still working — a long
+	# answer with six tool calls is slow, not stuck. It buys one deadline,
+	# once, never a second. (stat rather than `find -newermt`: find is bfs
+	# on this machine and its timestamps are integer minutes only.)
+	moved=$(stat -c %Y "$MEMORY_DIR/trace/$(date +%F).log" 2>/dev/null || echo 0)
+	if ((!gone && age > deadline && $(date +%s) - moved < 30)); then
+		log "watchdog: $stuck past ${deadline}s but the trace is still moving — one extension"
+		deadline=$((deadline * 2))
+	fi
+	((gone || age > deadline)) || exit 0
+	# The follow-up window is not a wedge, it is a window nobody closed. The
+	# wake daemon settles it in six seconds when it is alive; this is the
+	# same exit two seconds later, and it is why killing that daemon can no
+	# longer leave the fish perked up until logout. Nothing is killed,
+	# nothing is noted, nothing is said.
+	if [[ $stuck == followup ]]; then
+		log "watchdog: follow-up window closed after ${age}s"
+		transition settle || true
+		exit 0
+	fi
+	((gone)) && why="propriétaire disparu" || why="délai dépassé"
+	log "watchdog: $stuck for ${age}s — $why (deadline ${deadline}s, owner $REC_OWNER)"
+	# Claim only if the machine is still the one judged above: between the
+	# reading and here it may have come back by itself, and killing then
+	# would kill an exchange that is doing nothing wrong.
+	claim_if "$seen" cancel || exit 0
+	# The freeing itself is now a stage like any other, and the one stage
+	# with nobody behind it to notice: if the pulse's own unit is stopped
+	# mid-abort, `cancelling` would sit there until the next pulse found it
+	# and freed it in turn. It heals either way; this makes it immediate.
+	stage_guard
+	stop_everything
+	# A wedge IS a failure — unlike an abort, which is the user changing his
+	# mind — so it belongs in the journal a dream reads for root causes.
+	note_failure "chien de garde : figé pendant $(stage_fr "$stuck") depuis $age s ($why), retour au repos"
+	transition rest
+	mascot_emote worried
+	notify "Jarvis" "Jarvis s'était figé pendant $(stage_fr "$stuck") ; il est revenu au repos."
 	;;
 dispatch)
 	# A background mission: work too big for a spoken exchange (coding,
@@ -588,13 +1047,13 @@ dispatch)
 		if [[ -z ${summary// /} ]]; then
 			summary="La mission a échoué — voyez le journal des missions."
 			note_failure "mission échouée dans $dir : « $task » ($mission)"
-			mascot emote worried
+			mascot_emote worried
 		else
-			mascot emote celebrate
+			mascot_emote celebrate
 		fi
 		journal "mission terminée : $summary"
 		trace "mission terminée : $summary"
-		mascot reply "$summary"
+		mascot_aside "$summary"
 		notify "Jarvis — mission terminée" "$summary"
 		[[ $(state) == idle ]] && ! quiet_now && "$0" say "$summary"
 	) >/dev/null 2>&1 &
@@ -607,10 +1066,21 @@ ask)
 		QUIET=1
 		shift
 	fi
+	# A typed question is a fresh start: it takes the machine, and taking the
+	# machine means nothing else is still holding an organ — an ear left open
+	# by a press, a player, a brain still streaming the previous answer.
+	# The guard goes up with the claim and not after the killing, as it does
+	# at every other entry point: the stop is not instant, and a question
+	# killed while it clears the floor would leave `thinking` behind it.
+	claim_transition ask || exit 1
+	stage_guard
+	stop_everything
 	run_exchange "$*"
 	;;
 say)
 	shift
+	claim
+	stage_guard
 	do_speak "$*"
 	;;
 note)
@@ -626,11 +1096,24 @@ dream)
 	quiet=0
 	[[ ${2:-} == --quiet ]] && quiet=1
 	touch "$STATE_DIR/last-dream"
-	set_state sleeping
+	# The body is only taken when the body is free: `sleep` is legal from
+	# `idle` and from nowhere else, so a dream asked for while he is
+	# answering someone — the Control Center's button, or the idle nap
+	# racing an exchange that just started — consolidates in the background
+	# and never once touches the state, the bubble or the voice. It never
+	# claimed, and `mine` is false for an invocation that did not.
+	if claim_transition sleep; then
+		stage_guard
+	fi
 	notify "Jarvis" "Jarvis rêve — consolidation de la mémoire…"
 	cd "$JARVIS_DIR" || exit 1
 	trace "— rêve —"
-	claude -p --model "${JARVIS_DREAM_MODEL:-sonnet}" \
+	# In a group of its own, under a name of its own: a dream is the one
+	# autonomous session that can hold the body, so the abort and the
+	# watchdog both need a handle on it. Waking him mid-dream used to
+	# silence the dream without ever stopping it — it went on rewriting
+	# LEARNED.md for a minute after the fish had opened its ear.
+	group_run dream claude -p --model "${JARVIS_DREAM_MODEL:-sonnet}" \
 		--output-format stream-json --include-partial-messages --verbose \
 		-- "$(cat "$MEMORY_DIR/DREAM_PROMPT.md")" 2>>"$LOG" |
 		"$JARVIS_DIR/bin/jarvis-sentences" --quiet "$RUN_DIR/dream.txt"
@@ -639,16 +1122,18 @@ dream)
 	if ! brain_check "${summary:-$(cat "$RUN_DIR/dream.txt.error" 2>/dev/null)}"; then
 		# The brain reported on itself (brain_set already told the user);
 		# a usage notice is not a dream worth journaling or speaking.
-		[[ $(state) == sleeping ]] && set_state idle
+		mine && transition rest
 		exit 1
 	fi
 	[[ -n ${summary:-} ]] && journal "rêve : $summary"
 	notify "Jarvis" "${summary:-Le rêve a tourné court. Voyez le journal.}"
 	if [[ -n ${summary:-} ]]; then
-		mascot reply "$summary"
+		mascot_aside "$summary"
 		(( quiet )) || do_speak "$summary"
 	fi
-	[[ $(state) == sleeping || $(state) == speaking ]] && set_state idle
+	if mine; then
+		case "$(state)" in sleeping | speaking) transition rest ;; esac
+	fi
 	;;
 heartbeat)
 	# The proactive round: Jarvis inspects the machine against his
@@ -669,8 +1154,8 @@ heartbeat)
 	brain_check "${report:-$(cat "$RUN_DIR/heartbeat.txt.error" 2>/dev/null)}" ronde || exit 1
 	if [[ -n ${report:-} && $report != "RAS" && ${report:0:4} != "RAS." ]]; then
 		journal "ronde : $report"
-		mascot emote worried
-		mascot reply "$report"
+		mascot_emote worried
+		mascot_aside "$report"
 		notify "Jarvis — ronde" "$report"
 	fi
 	;;
@@ -775,7 +1260,7 @@ digest)
 			journal "digestion : $base → knowledge/inbox/$(basename "$fiche")"
 			trace "✓ digéré : $base → $(basename "$fiche")"
 			digested=1
-			mascot emote curious
+			mascot_emote curious
 			notify "Jarvis — document digéré" "${summary:-$base}"
 			[[ $(state) == idle ]] && ! quiet_now && "$0" say "$summary"
 		elif ((brain_ok)); then
@@ -856,7 +1341,7 @@ save)
 		fi
 	fi
 	log "save: $what"
-	mascot emote curious
+	mascot_emote curious
 	notify "Jarvis" "Je digère $what."
 	;;
 greet)
@@ -869,12 +1354,18 @@ greet)
 	since=$(stat -c %Y "$LAST_ASK" 2>/dev/null || echo 0)
 	[[ -e $stamp ]] && (($(stat -c %Y "$stamp") > since)) && since=$(stat -c %Y "$stamp")
 	touch "$stamp"
-	lines=$(awk -v since="$(date -d "@$since" +%H:%M)" -v today="$(date +%F)" '
+	# The journal carries clock faces, not dates, so `since` has to be one
+	# too — and a clock face from another day compares as a plain string:
+	# after an evening session, "07:30" >= "18:00" is false and the whole
+	# morning stays untold. Anything older than today starts at midnight.
+	from=$(date -d "@$since" +%H:%M)
+	[[ $(date -d "@$since" +%F) == $(date +%F) ]] || from=00:00
+	lines=$(awk -v since="$from" '
 		/^- [0-9][0-9]:[0-9][0-9] / { t = $2; sub(/^- [0-9:]+ /, ""); if (t >= since && $0 ~ /^(ronde|rêve|digestion|mission terminée|conversation)/) print }
 	' "$MEMORY_DIR/journal/$(date +%F).md" 2>/dev/null | tail -4)
 	[[ -n $lines ]] || exit 0
 	summary=$(printf '%s' "$lines" | sed 's/^[a-zé ]* : //' | awk '{ printf "%s%s", (NR > 1 ? " " : ""), $0 }' | cut -c1-240)
-	mascot reply "Pendant ton absence : $summary"
+	mascot_aside "Pendant ton absence : $summary"
 	log "greet: $summary"
 	;;
 look)
@@ -897,7 +1388,11 @@ look)
 		notify "Jarvis" "Impossible de générer le poisson — voyez le journal."
 		exit 1
 	fi
-	log "look: $(setting corps B1) $(setting oeil E1) $(setting criniere M1) $(setting queue T1) $(setting couleur or)"
+	# The stamp is written only here, after a generation that succeeded, and
+	# it is what lets doctor tell « the fish on disk is the fish the soul
+	# describes » from « the fish on disk is the one from before ».
+	look_signature >"$SPRITES_DIR/.look"
+	log "look: $(look_signature)"
 	mascot reload
 	;;
 index)
@@ -908,18 +1403,64 @@ index)
 	notify "Jarvis" "$out"
 	;;
 tick)
-	# The mascot's idle pulse. The exchange box first (MakeDirectory
-	# cannot create the parent of a glob), then the mechanical upkeep:
-	# after an
-	# omarchy update the knowledge base is stale — reindex, no LLM needed.
+	# The pulse. It is a systemd timer now (systemd/jarvis-tick.timer, every
+	# sixty seconds) and no longer the mascot's Timer, which only ran while
+	# the fish was idle: the one thing able to repair a wedged machine was
+	# the one thing a wedged machine stopped, and with it went the rounds,
+	# the dreams, the retries of parked documents and the conversation
+	# rotation — silently, until logout. The timer survives a wedge, a shell
+	# reload, a hidden mascot and a plugin that is not installed at all.
+	#
+	# The watchdog runs first, before anything below reads the state: every
+	# guard here is written for a machine that tells the truth about what it
+	# is doing.
+	"$0" watchdog
+	# One truth about the quiet hours, refreshed on the pulse and not only
+	# on a transition: a machine that idles across the 23:00 boundary wore
+	# yesterday's flag until somebody finally spoke to it.
+	printf '%s' "$(quiet_now && echo 1 || echo 0)" >"$STATE_DIR/quiet"
+	# The exchange box first (MakeDirectory cannot create the parent of a
+	# glob), then the mechanical upkeep: after an omarchy update the
+	# knowledge base is stale — reindex, no LLM needed.
 	box_init
-	"$JARVIS_DIR/bin/jarvis-index" --inbox >/dev/null 2>&1
+	# Only when a fiche actually arrived. The pulse used to be the mascot's
+	# five minutes and is a systemd minute now, and an index rewritten every
+	# sixty seconds is a disk woken up for nothing.
+	inbox_index="$MEMORY_DIR/knowledge/inbox/INDEX.md"
+	if [[ ! -e $inbox_index || -n $(find "$MEMORY_DIR/knowledge/inbox" -newer "$inbox_index" -print -quit 2>/dev/null) ]]; then
+		"$JARVIS_DIR/bin/jarvis-index" --inbox >/dev/null 2>&1
+	fi
 	if [[ "$(omarchy version 2>/dev/null)" != "$(cat "$MEMORY_DIR/knowledge/VERSION" 2>/dev/null)" ]]; then
 		"$0" index
 	fi
-	# Quiet hours, or a brain that said it is out of quota until a given
-	# hour: nothing autonomous until then.
+	# Once a day, the self-check — deterministic, no brain, no voice — and
+	# only what went red SINCE the last one is worth saying out of it. A
+	# daily litany of the same missing voice model is how a warning becomes
+	# wallpaper; a line that turns red today is news.
+	#
+	# It runs before both guards below, and deliberately: a machine whose
+	# brain is out of quota is exactly the one whose body deserves a look,
+	# and the check itself costs nothing and says nothing. Only the
+	# notification is held back at night — that, and not the diagnosis, is
+	# what the soul's `silence` is about.
+	stamp="$STATE_DIR/last-doctor-run"
+	if [[ ! -e $stamp || -z $(find "$stamp" -mmin -1440 2>/dev/null) ]]; then
+		touch "$stamp"
+		red=$("$0" doctor --quiet | sort)
+		new=$(comm -13 <(sort -u "$STATE_DIR/last-doctor" 2>/dev/null) <(printf '%s\n' "$red" | grep -v '^$'))
+		printf '%s\n' "$red" >"$STATE_DIR/last-doctor"
+		if [[ -n ${new//[[:space:]]/} ]]; then
+			# One line, joined in bash: `paste -sd'; '` cycles through the
+			# delimiters given, so it wrote « a;b c » and not « a; b; c ».
+			summary=${new//$'\n'/; }
+			log "doctor: nouveau(x) problème(s) — $summary"
+			quiet_now || notify "Jarvis — bilan de santé" "$summary"
+		fi
+	fi
+	# Quiet hours: nothing autonomous from here on.
 	quiet_now && exit 0
+	# A brain that said it is out of quota until a given hour: nothing that
+	# needs it until then.
 	case "$(brain_status)" in
 	quota\ *) (($(date +%s) < $(brain_status | cut -d' ' -f2))) && exit 0 ;;
 	esac
@@ -929,13 +1470,13 @@ tick)
 	stamp="$STATE_DIR/emote-disk"
 	if (($(df --output=pcent / 2>/dev/null | tail -1 | tr -dc 0-9) >= 90)) && [[ ! -e $stamp || -z $(find "$stamp" -mmin -1440 2>/dev/null) ]]; then
 		touch "$stamp"
-		mascot emote worried
+		mascot_emote worried
 		notify "Jarvis" "Le disque est presque plein."
 	fi
 	stamp="$STATE_DIR/emote-updates"
 	if [[ ! -e $stamp || -z $(find "$stamp" -mmin -360 2>/dev/null) ]]; then
 		touch "$stamp"
-		(omarchy-update-available >/dev/null 2>&1 && mascot emote curious) &
+		(omarchy-update-available >/dev/null 2>&1 && mascot_emote curious) &
 	fi
 	# Documents parked in the inbox while the brain was out: retry now.
 	if [[ -n $(find "$BOX_DIR/input/.pending" -maxdepth 1 -type f ! -name '.*' -print -quit 2>/dev/null) ]]; then
@@ -956,14 +1497,19 @@ tick)
 	exec "$0" heartbeat
 	;;
 maybe-dream)
-	# The opportunistic nap, ticked by the mascot whenever Jarvis idles:
-	# dream only when there is something to digest, no conversation is
-	# fresh (last exchange over 10 minutes ago), and the previous dream is
-	# more than 30 minutes old.
+	# The opportunistic nap, ticked whenever Jarvis idles: dream only when
+	# there is something to digest, no conversation is fresh (last exchange
+	# over 10 minutes ago), and the previous dream is more than 30 minutes
+	# old.
 	[[ $(state) == idle ]] || exit 0
+	# Three entries, not one. A single line was enough to schedule a sonnet
+	# session whose job is to rewrite LEARNED.md, which CLAUDE.md imports as
+	# persona — so one transcript that came back empty could change who he
+	# is. Three is the smallest number that can carry a pattern, which is
+	# the only thing a dream is supposed to learn from.
 	# grep -c prints the count AND exits nonzero on zero matches.
 	entries=$(grep -c '^- \[' "$FAILURES" 2>/dev/null)
-	(( ${entries:-0} > 0 )) || exit 0
+	((${entries:-0} >= 3)) || exit 0
 	[[ -e $LAST_ASK && -n $(find "$LAST_ASK" -mmin -10 2>/dev/null) ]] && exit 0
 	[[ -e $STATE_DIR/last-dream && -n $(find "$STATE_DIR/last-dream" -mmin -30 2>/dev/null) ]] && exit 0
 	exec "$0" dream --quiet
@@ -1001,37 +1547,157 @@ rotate)
 	trace "✓ conversation résumée et close"
 	;;
 doctor)
-	# The deterministic self-check: every dependency of the pipeline,
-	# green or red, no LLM involved. Exit code = number of problems.
+	# The deterministic self-check: every dependency of the pipeline, green
+	# or red, no LLM involved. Exit code = number of problems.
+	#
+	#   --quiet   the red lines only — what `tick` diffs once a day
+	#   --mic     add the check that takes the microphone
+	#
+	# What it looks at has been rewritten against the failures actually seen
+	# here rather than against the list of things that exist. `test -x` on
+	# piper says nothing about a voice model truncated by a full disk: the
+	# file is present, executable, correctly named, and silent. A colour
+	# changed from the Control Center whose regeneration then failed leaves
+	# the old fish on screen with nothing to notice it by. A checkout moved
+	# to another directory leaves ~/.local/bin/omarchy-jarvis pointing at a
+	# ghost, and every keybinding in the system with it.
+	quiet=0 want_mic=0
+	for arg in "$@"; do
+		case "$arg" in
+		--quiet) quiet=1 ;;
+		--mic) want_mic=1 ;;
+		esac
+	done
 	fails=0
+	# Anything external gets five seconds and no more: this was a list of
+	# commands trusted to return, and piper on a truncated model, systemctl
+	# on a stuck bus and `claude` with no network are all things that do
+	# not. The checks that are functions of ours are called directly —
+	# `timeout` could not run them anyway, and they do nothing but read
+	# files and take a non-blocking lock.
 	chk() {
-		local label="$1"
+		local label="$1" rc
 		shift
-		if "$@" >/dev/null 2>&1; then
-			printf '✓ %s\n' "$label"
+		if [[ $(type -t "$1") == function ]]; then
+			"$@" >/dev/null 2>&1
+		else
+			timeout 5 "$@" >/dev/null 2>&1
+		fi
+		rc=$?
+		if ((rc == 0)); then
+			((quiet)) || printf '✓ %s\n' "$label"
 		else
 			printf '✗ %s\n' "$label"
 			fails=$((fails + 1))
 		fi
 	}
-	chk "claude (le cerveau)" command -v claude
-	chk "voxtype (l'oreille)" command -v voxtype
-	chk "pw-record" command -v pw-record
-	chk "pw-play" command -v pw-play
-	chk "piper (la voix)" test -x "$PIPER"
-	chk "voix française" test -f "$VOICE_FR"
+
+	# The checks that need more than one command. Values reach them as
+	# arguments or through the enclosing scope, never interpolated into a
+	# quoted string: a space in $HOME is not supposed to become a bug in a
+	# diagnostic tool.
+	check_piper() {
+		local out rc size
+		out=$(mktemp) || return 1
+		printf 'test' | timeout 5 "$PIPER" --model "$VOICE_FR" --output_file "$out" >/dev/null 2>&1
+		rc=$?
+		size=$(stat -c %s "$out" 2>/dev/null || echo 0)
+		rm -f "$out"
+		((rc == 0 && size > 0))
+	}
+	# The sheets by name, not by count: the mascot asks for them by name,
+	# and a count turns every new sheet into a red line. `cancel` belongs on
+	# this list like any other — Service.qml draws it on every abort, and a
+	# checkout whose sprite engine predates it leaves the fish wearing the
+	# previous strip with nothing to say why.
+	check_sheets() {
+		local sheet
+		for sheet in idle listening thinking speaking cancel sleeping tired dnd worried proud curious celebrate; do
+			[[ -e $SPRITES_DIR/$sheet.png ]] || return 1
+		done
+	}
+	# The stamp `look` leaves beside the sheets holds the five settings they
+	# were generated from. Comparing THOSE, rather than SOUL.md's mtime,
+	# means a tone changed from the Control Center does not report a fish
+	# that is perfectly up to date as stale.
+	check_look() {
+		[[ $(cat "$SPRITES_DIR/.look" 2>/dev/null) == "$(look_signature)" ]]
+	}
+	check_wake_venv() {
+		timeout 5 "$JARVIS_DIR/wake/venv/bin/python" -c 'import openwakeword' 2>/dev/null
+	}
+	# Installed AND running: every unit the repository ships is expected in
+	# ~/.config/systemd/user (install.sh puts it there), and every trigger
+	# among them — the path watch, the pulse — is expected active.
+	check_units() {
+		local unit name
+		for unit in "$JARVIS_DIR"/systemd/*; do
+			[[ -e $unit ]] || continue
+			[[ -e $HOME/.config/systemd/user/$(basename "$unit") ]] || return 1
+		done
+		for unit in "$JARVIS_DIR"/systemd/*.path "$JARVIS_DIR"/systemd/*.timer; do
+			[[ -e $unit ]] || continue
+			name=$(basename "$unit")
+			timeout 5 systemctl --user --quiet is-active "$name" || return 1
+		done
+	}
+	check_symlink() {
+		[[ $(readlink -f "$HOME/.local/bin/omarchy-jarvis" 2>/dev/null) == "$(readlink -f "$JARVIS_DIR/bin/jarvis")" ]]
+	}
+	# The only check that opens the microphone, which is why it is behind a
+	# flag: half a second of capture, and a file with something in it.
+	check_capture() {
+		local out pid size
+		out=$(mktemp) || return 1
+		timeout 5 pw-record --target "$MIC_TARGET" --rate 16000 --channels 1 \
+			--format s16 "$out" >/dev/null 2>&1 &
+		pid=$!
+		sleep 0.5
+		# INT, like the pipeline: it is what makes pw-record finalize its
+		# header instead of leaving a file nothing can read.
+		kill -INT "$pid" 2>/dev/null
+		wait "$pid" 2>/dev/null
+		size=$(stat -c %s "$out" 2>/dev/null || echo 0)
+		rm -f "$out"
+		((size > 0))
+	}
+
+	chk "claude (le cerveau)" bash -c 'command -v claude'
+	chk "voxtype (l'oreille)" bash -c 'command -v "$1"' _ "$VOXTYPE"
+	chk "pw-record" bash -c 'command -v pw-record'
+	chk "pw-play" bash -c 'command -v pw-play'
+	chk "piper : une synthèse réelle" check_piper
 	chk "voix anglaise" test -f "$VOICE_EN"
-	chk "micro ($MIC_TARGET)" bash -c "pactl list sources short 2>/dev/null | grep -q '$MIC_TARGET'"
+	chk "micro ($MIC_TARGET) présent" bash -c 'pactl list sources short 2>/dev/null | grep -q "$1"' _ "$MIC_TARGET"
+	((want_mic)) && chk "micro : capture réelle" check_capture
 	chk "daemon wake (hey Jarvis)" wake_alive
-	chk "unité jarvis-inbox.path" systemctl --user --quiet is-active jarvis-inbox.path
+	chk "venv wake + openwakeword" check_wake_venv
+	chk "planches du poisson" check_sheets
+	chk "poisson conforme à l'âme" check_look
+	chk "greffon installé" test -d "$HOME/.config/omarchy/plugins/macarchy.jarvis"
+	chk "unités systemd installées et actives" check_units
+	chk "omarchy-jarvis pointe sur ce dépôt" check_symlink
 	chk "boîte $BOX_DIR" test -d "$BOX_DIR/input/.work"
 	chk "symlink memory" test "$(readlink -f "$BOX_DIR/memory" 2>/dev/null)" = "$(readlink -f "$MEMORY_DIR")"
 	chk "settings.json valide" python3 -c "import json;json.load(open('$JARVIS_DIR/.claude/settings.json'))"
 	chk "prompts (ronde, rêve, digestion)" bash -c "test -f '$MEMORY_DIR/HEARTBEAT_PROMPT.md' -a -f '$MEMORY_DIR/DREAM_PROMPT.md' -a -f '$MEMORY_DIR/DIGEST_PROMPT.md'"
 	chk "connaissance à jour (omarchy)" test "$(omarchy version 2>/dev/null)" = "$(cat "$MEMORY_DIR/knowledge/VERSION" 2>/dev/null)"
-	printf 'ℹ cerveau : %s — conversation : %s — état : %s\n' \
-		"$(brain_status)" "$([[ -e $CONV_FLAG ]] && echo "ouverte ($((($(date +%s) - $(stat -c %Y "$CONV_FLAG")) / 60)) min)" || echo fermée)" "$(state)"
-	((fails)) && printf '%s problème(s).\n' "$fails"
+	# The one line with a sentence instead of a label, because the answer is
+	# a duration and the remedy is a command. The watchdog normally gets
+	# there first; this is what shows when the pulse itself is not running,
+	# which is the case where the user has been staring at a frozen fish.
+	now_state=$(state) age=$(state_age)
+	if [[ $now_state != idle ]] && ((age > 600)); then
+		printf '✗ machine bloquée en « %s » depuis %s min (omarchy-jarvis cancel)\n' "$now_state" "$((age / 60))"
+		fails=$((fails + 1))
+	elif ((!quiet)); then
+		printf '✓ état : %s\n' "$now_state"
+	fi
+	if ((!quiet)); then
+		printf 'ℹ cerveau : %s — conversation : %s\n' \
+			"$(brain_status)" "$([[ -e $CONV_FLAG ]] && echo "ouverte ($((($(date +%s) - $(stat -c %Y "$CONV_FLAG")) / 60)) min)" || echo fermée)"
+		((fails)) && printf '%s problème(s).\n' "$fails"
+	fi
 	exit "$fails"
 	;;
 state)
@@ -1096,7 +1762,7 @@ suggestion)
 	fi
 	;;
 *)
-	echo "usage: jarvis [press|cancel|reset|settle|ask [--quiet] <text>|say <text>|state|status|dispatch [--dir <dir>] <task>|dream [--quiet]|maybe-dream|heartbeat|tick|digest|doctor|rotate|look [random]|lastcmd|missed [min]|save|greet|index|note <text>|suggestions|suggestion <n> accept|reject]" >&2
+	echo "usage: jarvis [press|cancel [--say] [--from <mot>]|reset|settle|watchdog|ask [--quiet] <text>|say <text>|state|status|dispatch [--dir <dir>] <task>|dream [--quiet]|maybe-dream|heartbeat|tick|digest|doctor [--quiet] [--mic]|rotate|look [random]|lastcmd|missed [min]|save|greet|index|note <text>|suggestions|suggestion <n> accept|reject]" >&2
 	exit 1
 	;;
 esac

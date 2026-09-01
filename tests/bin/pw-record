@@ -1,2 +1,41 @@
-#!/usr/bin/env bash
-exit 0
+#!/usr/bin/env python3
+"""The fake microphone: the last argument is the WAV it grows until it is
+interrupted, and the file survives the interruption — do_finish stops the
+real recorder with SIGINT, waits for the header, and reads what is left.
+
+This one fake is Python rather than shell for one reason: a shell ignores
+SIGINT in every child it backgrounds, and a bash script cannot take back a
+signal that was ignored on entry, so a shell stub could only ever die of
+SIGTERM — while the pipeline sends SIGINT. Silence (nothing captured at
+all) is FAKE_RECORD_SILENT=1.
+"""
+
+import os
+import signal
+import sys
+import time
+
+out = sys.argv[-1]
+silent = os.environ.get("FAKE_RECORD_SILENT") == "1"
+signal.signal(signal.SIGINT, lambda *_: os._exit(0))
+signal.signal(signal.SIGTERM, lambda *_: os._exit(0))
+# The recorder is backgrounded by the FSM and outlives the invocation that
+# started it: keep it off the suite's stdout, whose pipe it would hold open.
+os.close(1)
+os.open(os.devnull, os.O_WRONLY)
+
+# The file appearing is the signal that the handlers above are armed: a
+# SIGINT sent before that would be lost to the disposition the shell handed
+# down, so the suite waits for it before pressing again.
+with open(out, "wb", buffering=0) as wav:
+    if not silent:
+        wav.write(b"RIFF____WAVEfmt ")
+    while True:
+        if not silent:
+            wav.write(b"audio")
+        # A recorder outlives its invocation on purpose, so it also has to
+        # know when its sandbox is gone: an unlinked file means the run
+        # cleaned up around it and there is nothing left to record into.
+        if os.fstat(wav.fileno()).st_nlink == 0:
+            break
+        time.sleep(0.05)

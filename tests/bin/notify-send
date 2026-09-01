@@ -1,2 +1,7 @@
 #!/usr/bin/env bash
+# The desktop channel, recorded instead of dropped. Everything the user READS
+# passes here — and it is the only place the four remaining English strings of
+# the pipeline were ever visible, so it is the only place a test can prove
+# they are gone.
+printf '%s\n' "$*" >>"${FAKE_NOTIFY_LOG:-/dev/null}"
 exit 0

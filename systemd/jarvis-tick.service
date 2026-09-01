@@ -1,0 +1,21 @@
+[Unit]
+Description=Jarvis — une pulsation
+
+[Service]
+Type=oneshot
+# User units do not inherit the session PATH: rebuild the parts the pulse
+# needs (mise-installed claude, omarchy bins, ~/.local/bin for the symlink
+# the tick calls itself through).
+Environment=PATH=%h/.local/share/mise/installs/claude/latest:%h/.local/bin:%h/.local/share/mise/shims:/usr/share/omarchy/bin:/usr/local/bin:/usr/bin
+# Type=oneshot means TimeoutStartSec defaults to INFINITY, and the pulse is
+# also the one automatism allowed to call the brain: it ends on a round, and
+# on a night with memory to digest it ends on a dream. A `claude` that hangs
+# on a dead network would hold this unit in `activating` for the rest of the
+# login session, and a timer does not fire again while its service is still
+# running — so the watchdog, whose whole job is to free a wedged stage, would
+# itself be the thing a wedge stops. Fifteen minutes is past the longest
+# honest tick (a dream is capped at ten by its own deadline) and far short of
+# a session; the kill takes the whole control group with it, and the next
+# pulse finds the machine and frees it in the ordinary way.
+TimeoutStartSec=900
+ExecStart=%h/Work/jarvis/bin/jarvis tick

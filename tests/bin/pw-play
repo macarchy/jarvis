@@ -1,2 +1,14 @@
 #!/usr/bin/env bash
-exit 0
+# The fake speaker. It records the moment, the size of what it was handed
+# and the state the machine was in — the three things a voice test wants —
+# then holds the line so a barge-in has something to cut. Being cut is
+# logged too: that is how the suite sees the player die.
+#   FAKE_PLAY_SLEEP=<s>   how long the "playback" lasts
+log=${FAKE_PLAY_LOG:-/dev/null}
+state=$(cat "${JARVIS_RUN:-/nonexistent}/state" 2>/dev/null || echo '?')
+printf '%s %s %s\n' "$(date +%H:%M:%S)" "$(stat -c %s "${1:-}" 2>/dev/null || echo 0)" "$state" >>"$log"
+trap 'printf "%s coupé\n" "$(date +%H:%M:%S)" >>"$log"; exit 0' INT TERM
+# Backgrounded, then waited on: bash only runs a trap between commands, so
+# a foreground sleep would swallow the signal until it ended by itself.
+sleep "${FAKE_PLAY_SLEEP:-0.05}" &
+wait $!

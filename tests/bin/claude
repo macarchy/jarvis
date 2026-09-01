@@ -4,7 +4,11 @@
 #   FAKE_CLAUDE_REPLY=<text>   print this plain reply
 #   FAKE_CLAUDE_FICHE=1        write the fiche named by the digest prompt
 #   FAKE_CLAUDE_EXIT=<code>    exit status (default 0)
+#   FAKE_CLAUDE_SLEEP=<s>      think for that long before answering — which is
+#                              what makes `thinking` a state a test can press
+#                              a key in, and what a killed group looks like
 printf '%s\n' "$*" >>"${FAKE_CLAUDE_LOG:-/dev/null}"
+[[ -n ${FAKE_CLAUDE_SLEEP:-} ]] && sleep "$FAKE_CLAUDE_SLEEP"
 if [[ ${FAKE_CLAUDE_FICHE:-} == 1 && $# -gt 0 ]]; then
 	fiche=$(printf '%s' "${@: -1}" | sed -n 's/^Fiche : //p' | tail -1)
 	if [[ -n $fiche ]]; then
