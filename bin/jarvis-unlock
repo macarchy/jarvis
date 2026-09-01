@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# jarvis-unlock — the unlock/resume watcher: when the session comes back
+# (hyprlock closes → logind's LockedHint drops; the machine wakes →
+# PrepareForSleep false), Jarvis greets with a bubble of what happened
+# meanwhile (`omarchy-jarvis greet`, throttled there). Autostarted by
+# Hyprland (autostart.lua). No root: dbus-monitor eavesdrops on the
+# system bus read-only.
+set -u
+exec dbus-monitor --system \
+	"type='signal',sender='org.freedesktop.login1',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged'" \
+	"type='signal',sender='org.freedesktop.login1',interface='org.freedesktop.login1.Manager',member='PrepareForSleep'" 2>/dev/null |
+	while IFS= read -r line; do
+		case "$line" in
+		*'member=PrepareForSleep'*) want=sleep ;;
+		*'string "LockedHint"'*) want=lock ;;
+		*'boolean false'*)
+			[[ ${want:-} ]] || continue
+			want=""
+			omarchy-jarvis greet >/dev/null 2>&1 &
+			;;
+		esac
+	done

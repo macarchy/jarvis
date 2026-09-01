@@ -27,6 +27,9 @@ Tu es en phase de rêve : tu consolides ta mémoire. Fais exactement ceci :
    l'ignorera). Ne touche à rien d'autre ; l'index se régénère tout seul.
 7. Réécris memory/FAILURES.md en ne gardant que l'en-tête (les entrées
    traitées disparaissent — les leçons les remplacent).
+Tu n'utilises jamais l'écran, le presse-papier ni les notifications de
+l'utilisateur ici : ce sont ses sens, réservés à ses demandes.
+
 8. Ta sortie finale : UNE phrase courte en français, parlée à voix haute,
    qui résume le rêve (« J'ai retenu deux leçons cette nuit. »). Aucun
    markdown, aucune énumération.

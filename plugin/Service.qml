@@ -21,7 +21,9 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Services.UPower
+import Quickshell.Hyprland
 import qs.Commons
+import qs.Ui as Ui
 
 import "components"
 
@@ -265,6 +267,13 @@ Item {
     // Punctual emotion over the idle body (celebrate, worried, tired, dnd).
     function emote(name: string): void { service.playEmote(String(name)) }
 
+    // The written exchange: a small prompt bar (SUPER+ALT+K). Enter sends
+    // to `ask --quiet`, the reply lands in the philactère.
+    function prompt(): void {
+      if (!service.promptOpen) promptField.text = ""
+      service.promptOpen = !service.promptOpen
+    }
+
     // Re-read the sprite sheets after `omarchy-jarvis look` regenerated them.
     function reload(): void {
       service.spriteBust = true
@@ -276,6 +285,64 @@ Item {
       if (service.mood === "idle" && !excursion.running) excursion.start()
     }
     function ping(): string { return "ok" }
+  }
+
+  // ------------------------------------------------------ the prompt bar
+  //
+  // A paper strip near the top of the screen, keyboard-exclusive while
+  // open: type, Enter, and the fish answers in his bubble. Escape or a
+  // click elsewhere puts it away.
+  property bool promptOpen: false
+
+  PanelWindow {
+    id: promptWin
+    visible: service.promptOpen
+    screen: Quickshell.screens.length > 0 ? Quickshell.screens[0] : null
+    color: "transparent"
+
+    WlrLayershell.namespace: "macarchy-jarvis-prompt"
+    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.keyboardFocus: service.promptOpen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    exclusionMode: ExclusionMode.Ignore
+
+    anchors { top: true }
+    margins { top: Style.space(140) }
+    implicitWidth: Style.space(540)
+    implicitHeight: promptBox.height + Style.space(8)
+
+    HyprlandFocusGrab {
+      active: service.promptOpen
+      windows: [promptWin]
+      onCleared: service.promptOpen = false
+    }
+
+    Rectangle {
+      id: promptBox
+      anchors.horizontalCenter: parent.horizontalCenter
+      y: Style.space(4)
+      width: parent.width - Style.space(8)
+      height: promptField.implicitHeight + Style.space(20)
+      color: service.bubblePaper
+      border.width: 4
+      border.color: service.bubbleInk
+
+      Ui.TextField {
+        id: promptField
+        anchors.fill: parent
+        anchors.margins: Style.space(10)
+        placeholderText: "Écris à Jarvis…"
+        foreground: service.bubbleInk
+        font.pixelSize: Style.font.body
+        Keys.onEscapePressed: service.promptOpen = false
+        onAccepted: {
+          var t = text.trim()
+          service.promptOpen = false
+          if (t.length > 0) Quickshell.execDetached(["omarchy-jarvis", "ask", "--quiet", t])
+        }
+      }
+    }
+
+    onVisibleChanged: if (visible) Qt.callLater(function() { promptField.forceActiveFocus() })
   }
 
   PanelWindow {

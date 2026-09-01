@@ -113,6 +113,21 @@ unset JARVIS_SPRITES
 t "sprites: les 256 configurations s'attachent"
 assert "check.py à zéro échec" python3 "$TESTS_DIR/../sprites/check.py"
 
+# ---- save (« enregistre ça ») and greet
+t "save: un lien copié devient un .url dans la boîte"
+FAKE_CLIP="https://example.org/article" "$JARVIS" save
+assert "fichier .url" bash -c "ls '$JARVIS_BOX/input/'lien-*.url"
+assert "contenu = le lien" bash -c "grep -qx 'https://example.org/article' '$JARVIS_BOX/input/'lien-*.url"
+t "save: un texte copié devient une note"
+FAKE_CLIP="trois lignes de notes" "$JARVIS" save
+assert "fichier .md" bash -c "ls '$JARVIS_BOX/input/'note-*.md"
+t "greet: résume ce qui s'est passé, une fois par demi-heure"
+mkdir -p "$JARVIS_MEMORY/journal"; printf -- '- 08:00 ronde : Le disque est presque plein.\n- 08:30 digestion : contrat.pdf → knowledge/inbox/contrat.md\n' >"$JARVIS_MEMORY/journal/$(today).md"
+touch -d '3 hours ago' "$JARVIS_RUN/last-ask"
+"$JARVIS" greet
+assert "greet journalisé dans le log" bash -c "grep -q 'greet: Le disque est presque plein.' '$JARVIS_STATE/jarvis.log'"
+assert "second appel silencieux" bash -c "! '$JARVIS' greet 2>&1 | grep -q ."
+
 # ---- rotate
 t "rotate: résume et clôt la conversation"
 printf 'test-session-id' >"$JARVIS_STATE/conversation"
