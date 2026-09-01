@@ -385,6 +385,22 @@ brain_excuse() {
 	esac
 }
 
+# Idempotent scaffold for his memory. The five journals below are runtime
+# state — what he failed at HERE, what you interrupted, what he learned about
+# YOU — so they are not tracked; memory/scaffold/ holds their headers, which
+# are, because a header says who writes a file and in what shape. A fresh
+# clone restores them on its first command, and so does a machine where one
+# was deleted. CLAUDE.md imports two of them, so an absent file is not a
+# cosmetic problem: it is the persona arriving incomplete.
+memory_init() {
+	local f name
+	for f in "$JARVIS_DIR/memory/scaffold"/*.md; do
+		[[ -e $f ]] || continue
+		name=$(basename "$f")
+		[[ -e $MEMORY_DIR/$name ]] || cp "$f" "$MEMORY_DIR/$name"
+	done
+}
+
 # Idempotent scaffold for ~/Jarvis. The hidden dirs under input/ are the
 # digestion machinery: .work (claimed), .pending (waiting on the brain),
 # .archive (digested originals), .failed (given up). memory is a symlink
@@ -912,6 +928,9 @@ on_press() {
 		;;
 	esac
 }
+
+mkdir -p "$MEMORY_DIR"
+memory_init
 
 case "${1:-press}" in
 press | listen)

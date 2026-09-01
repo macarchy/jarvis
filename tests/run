@@ -71,6 +71,11 @@ assert() {
 }
 today() { date +%F; }
 journal_has() { grep -q "$1" "$JARVIS_MEMORY/journal/$(today).md"; }
+# « Pas d'échec noté » : le fichier existe toujours — memory_init lui rend
+# son en-tête au premier lancement — donc la question est s'il porte une
+# entrée, pas s'il est là.
+no_aborts() { ! grep -q '^- \[' "$JARVIS_MEMORY/ABORTS.md" 2>/dev/null; }
+no_failures() { ! grep -q '^- \[' "$JARVIS_MEMORY/FAILURES.md" 2>/dev/null; }
 state_is() { [[ $(cat "$JARVIS_RUN/state" 2>/dev/null) == "$1" ]]; }
 # A pid we never got is neither alive nor dead: both answers stay false so
 # a missing pid file can never be mistaken for a process that behaved.
@@ -115,6 +120,23 @@ command -v shellcheck >/dev/null && {
 	assert "shellcheck bin/jarvis" shellcheck -S warning -x "$JARVIS"
 	assert "shellcheck bin/jarvis-fsm.sh" shellcheck -S warning "$TESTS_DIR/../bin/jarvis-fsm.sh"
 }
+
+# ---- a fresh clone has no memory, and must not stay that way
+t "mémoire : un clone frais retrouve ses en-têtes, vides"
+"$JARVIS" state >/dev/null
+for name in LEARNED CONVERSATION FAILURES ABORTS SUGGESTIONS; do
+	assert "$name.md restauré" test -e "$JARVIS_MEMORY/$name.md"
+	assert "$name.md a son en-tête" grep -q "^# $name.md" "$JARVIS_MEMORY/$name.md"
+done
+# Restauré veut dire vide : un gabarit qui apporterait des leçons ou des
+# suggestions toutes faites ferait démarrer chaque installation avec la
+# mémoire de quelqu'un d'autre.
+assert "aucune leçon héritée" test "$(grep -c '^- ' "$JARVIS_MEMORY/LEARNED.md")" = 0
+assert "aucune suggestion héritée" test "$(grep -c '^- \[' "$JARVIS_MEMORY/SUGGESTIONS.md")" = 0
+# Et il ne réécrit jamais par-dessus ce qui existe.
+printf -- '- une leçon à moi\n' >>"$JARVIS_MEMORY/LEARNED.md"
+"$JARVIS" state >/dev/null
+assert "la mémoire existante est intacte" grep -q 'une leçon à moi' "$JARVIS_MEMORY/LEARNED.md"
 
 # ---- jarvis-sentences: blocks stay separated across tool calls
 t "sentences: espaces entre blocs"
@@ -272,7 +294,7 @@ assert "joueur coupé" waitfor grep -q 'coupé' "$FAKE_PLAY_LOG"
 # Talking over him is a gesture, not a defect. It used to be filed in
 # FAILURES.md, and one line there schedules a dream whose job is to rewrite
 # LEARNED.md — so pressing a key manufactured persona changes.
-assert "l'interruption n'est pas un échec" test ! -e "$JARVIS_MEMORY/FAILURES.md"
+assert "l'interruption n'est pas un échec" no_failures
 assert "l'oreille se rouvre" waitfor test -s "$JARVIS_RUN/pids/record"
 mic_ready
 rec=$(cat "$JARVIS_RUN/pids/record" 2>/dev/null)
@@ -451,7 +473,7 @@ assert "passé par l'état d'annulation" grep -q 'state: cancelling' "$JARVIS_ST
 assert "le poisson a joué l'abandon" grep -q 'macarchy.jarvis abort' "$FAKE_SHELL_LOG"
 assert "l'annulation est notée avec l'étape et le geste" \
 	grep -qE 'annulé pendant sa réflexion après [0-9]+ s \(touche\)' "$JARVIS_MEMORY/ABORTS.md"
-assert "ce n'est pas un échec" test ! -e "$JARVIS_MEMORY/FAILURES.md"
+assert "ce n'est pas un échec" no_failures
 assert "il n'a rien dit" test ! -s "$FAKE_PIPER_LOG"
 assert "plus aucun groupe en vie" bash -c "! ls '$JARVIS_RUN/pids/'* 2>/dev/null"
 
@@ -460,13 +482,13 @@ printf 'transcribing' >"$JARVIS_RUN/state"
 printf 'state=transcribing since=%s owner=0 epoch=3 ask=x-3\n' "$(date +%s%3N)" >"$JARVIS_RUN/state.rec"
 "$JARVIS" cancel --from touche
 assert "état idle" state_is idle
-assert "un doigt qui ripe n'est pas un motif" test ! -e "$JARVIS_MEMORY/ABORTS.md"
+assert "un doigt qui ripe n'est pas un motif" no_aborts
 printf 'speaking' >"$JARVIS_RUN/state"
 printf 'state=speaking since=%s owner=0 epoch=4 ask=x-4\n' "$(($(date +%s%3N) - 12000))" >"$JARVIS_RUN/state.rec"
 "$JARVIS" cancel --say --from voix
 assert "l'étape, la durée et le geste" \
 	grep -q 'annulé pendant sa réponse après 12 s (voix)' "$JARVIS_MEMORY/ABORTS.md"
-assert "toujours pas un échec" test ! -e "$JARVIS_MEMORY/FAILURES.md"
+assert "toujours pas un échec" no_failures
 assert "et --say le dit à voix haute" grep -q 'Annulé.' "$FAKE_PIPER_LOG"
 assert "état idle" state_is idle
 
@@ -485,7 +507,7 @@ assert "l'étape, la durée et le geste, en français" \
 # Les entrées seulement : le titre du fichier porte son propre nom.
 assert "aucun mot anglais dans les entrées" \
 	bash -c "! grep '^- \[' '$JARVIS_MEMORY/ABORTS.md' | grep -qiE 'barge|cancel|abort|press'"
-assert "ce n'est toujours pas un échec" test ! -e "$JARVIS_MEMORY/FAILURES.md"
+assert "ce n'est toujours pas un échec" no_failures
 "$JARVIS" cancel
 
 # Le propriétaire est ce qui permet au chien de garde de distinguer une étape
@@ -558,7 +580,7 @@ printf 'thinking' >"$JARVIS_RUN/state"
 printf 'state=thinking since=%s owner=0 epoch=1 ask=x-1\n' "$(date +%s%3N)" >"$JARVIS_RUN/state.rec"
 "$JARVIS" watchdog
 assert "toujours en réflexion" state_is thinking
-assert "aucun échec noté" test ! -e "$JARVIS_MEMORY/FAILURES.md"
+assert "aucun échec noté" no_failures
 
 t "chien de garde : un cerveau qui écrit encore gagne un sursis, une fois"
 printf 'thinking' >"$JARVIS_RUN/state"
@@ -577,7 +599,7 @@ printf 'followup' >"$JARVIS_RUN/state"
 printf 'state=followup since=%s owner=0 epoch=1 ask=x-1\n' "$(($(date +%s%3N) - 20000))" >"$JARVIS_RUN/state.rec"
 "$JARVIS" watchdog
 assert "refermée" state_is idle
-assert "sans échec" test ! -e "$JARVIS_MEMORY/FAILURES.md"
+assert "sans échec" no_failures
 assert "sans rien dire" test ! -s "$FAKE_NOTIFY_LOG"
 
 t "chien de garde : une décision périmée ne tue rien"
