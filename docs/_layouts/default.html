@@ -6,6 +6,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ page.title }} · Jarvis</title>
 <meta name="description" content="{{ page.description | default: site.description }}">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Jarvis">
+<meta property="og:locale" content="{% if fr %}fr_FR{% else %}en_GB{% endif %}">
+<meta property="og:title" content="{{ page.title }}">
+<meta property="og:description" content="{{ page.description | default: site.description }}">
+<meta property="og:url" content="{{ site.url }}{{ site.baseurl }}{{ page.url }}">
+<meta property="og:image" content="{{ site.url }}{{ site.baseurl }}/media/social.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="Jarvis — a pixel-art Babel fish on deep water">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ page.title }}">
+<meta name="twitter:description" content="{{ page.description | default: site.description }}">
+<meta name="twitter:image" content="{{ site.url }}{{ site.baseurl }}/media/social.png">
 {% if page.alt %}<link rel="alternate" hreflang="{{ page.altlang }}" href="{{ site.url }}{{ site.baseurl }}{{ page.alt }}">
 <link rel="alternate" hreflang="{{ page.lang }}" href="{{ site.url }}{{ site.baseurl }}{{ page.url }}">{% endif %}
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
