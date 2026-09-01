@@ -1,0 +1,835 @@
+<meta charset="utf-8">
+<title>Le Poisson dans la Machine</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* ═══ Le monde de Jarvis a deux matières, et une seule règle de mise en
+   page : ce qui est LA MACHINE EN TRAIN DE TOURNER est rendu dans l'eau ;
+   ce qui est LUI QUI PARLE, ou TOI QUI LIS, est posé sur son papier. Les
+   couleurs ne sont pas choisies, elles sont relevées dans
+   sprites/generate.py — c'est sa palette, pas la mienne. */
+:root{
+  --water:#152430;
+  --deep:#0B1620;
+  --glass:#284157;
+  --paper:#FFF8E6;
+  --ink:#181208;
+  --ink-soft:#4A3F26;
+  --gold:#F2C94C;
+  --wave:#78BEFF;
+  --dim:#7E97A8;
+  --dimmer:#4E6576;
+  --refuse:#D96A5C;
+  --px:4px;
+  color-scheme:dark;
+}
+html{box-sizing:border-box;-webkit-text-size-adjust:100%}
+*,*::before,*::after{box-sizing:inherit}
+body{
+  margin:0;
+  background:var(--water);
+  color:#DCE7EE;
+  font-family:"Newsreader",Georgia,serif;
+  font-size:17.5px;
+  line-height:1.62;
+  font-weight:300;
+}
+
+/* ─── typographie ────────────────────────────────────────────────── */
+.pix{font-family:"Silkscreen","Courier New",monospace;font-weight:400;letter-spacing:.02em}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+h1,h2,h3,.pix,.eyebrow,.evt,.st{font-family:"Silkscreen","Courier New",monospace}
+h1{
+  font-size:clamp(26px,5.6vw,44px);line-height:1.14;margin:0;
+  color:var(--gold);text-wrap:balance;letter-spacing:.01em;font-weight:400;
+}
+h2{
+  font-size:clamp(17px,2.6vw,21px);margin:0 0 10px;color:var(--wave);
+  font-weight:400;letter-spacing:.01em;text-wrap:balance;
+}
+h3{font-size:13px;margin:0 0 8px;color:var(--gold);font-weight:400;letter-spacing:.03em}
+.eyebrow{
+  font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--dimmer);margin:0 0 12px;display:block;
+}
+p{margin:0 0 .85em}
+p:last-child{margin-bottom:0}
+a{color:var(--wave);text-decoration-color:rgba(120,190,255,.35);text-underline-offset:3px}
+a:hover{text-decoration-color:var(--wave)}
+strong{font-weight:600;color:#F2F7FA}
+em{font-style:italic;color:#C6D6E1}
+.lede{font-size:20px;line-height:1.55;color:#C6D6E1;max-width:60ch}
+.note{font-size:15px;color:var(--dim);max-width:66ch}
+
+/* ─── ossature ───────────────────────────────────────────────────── */
+.wrap{max-width:1020px;margin:0 auto;padding:0 22px}
+section{padding:52px 0}
+section + section{border-top:1px solid rgba(120,190,255,.10)}
+.head{max-width:64ch;margin-bottom:26px}
+
+/* ─── le papier : sa matière à lui, bordure crantée comme le
+   philactère (les coins restent vides, exactement comme PixelBubble) ── */
+.paper{
+  background:var(--paper);color:var(--ink);
+  padding:20px 20px 18px;margin:var(--px);
+  box-shadow:0 calc(-1*var(--px)) 0 0 var(--ink), 0 var(--px) 0 0 var(--ink),
+             calc(-1*var(--px)) 0 0 0 var(--ink), var(--px) 0 0 0 var(--ink);
+}
+.paper h3{color:var(--ink);border-bottom:2px solid rgba(24,18,8,.16);padding-bottom:7px}
+.paper p{font-size:15.5px;color:var(--ink-soft);line-height:1.55}
+.paper strong{color:var(--ink);font-weight:600}
+.paper code{background:rgba(24,18,8,.09);color:#54471E}
+.paper a{color:#8A6A12;text-decoration-color:rgba(138,106,18,.4)}
+
+code{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.83em;
+  background:rgba(120,190,255,.10);color:#A9CFEC;padding:1px 5px;
+  border-radius:2px;white-space:nowrap;
+}
+
+.grid{display:grid;gap:16px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr))}
+
+/* ─── LE HÉROS : la machine, pilotable ───────────────────────────── */
+.hero{padding:64px 0 46px}
+.hero-top{display:flex;flex-wrap:wrap;gap:26px;align-items:flex-end;justify-content:space-between;margin-bottom:34px}
+.hero-id{max-width:530px;flex:1 1 430px}
+.sub{font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--dim);margin:14px 0 0}
+
+.machine{
+  background:var(--deep);
+  box-shadow:inset 0 0 0 1px var(--glass);
+  display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);
+}
+@media (max-width:760px){.machine{grid-template-columns:1fr}}
+
+.tank{
+  position:relative;padding:22px 20px 18px;
+  border-right:1px solid var(--glass);
+  display:flex;flex-direction:column;align-items:center;gap:14px;
+  background:
+    radial-gradient(120% 90% at 50% 118%, rgba(120,190,255,.11), transparent 62%);
+}
+@media (max-width:760px){.tank{border-right:0;border-bottom:1px solid var(--glass)}}
+.fishbox{height:132px;display:flex;align-items:center;justify-content:center;width:100%}
+.sprite{
+  width:72px;height:56px;image-rendering:pixelated;
+  background-repeat:no-repeat;transform:scale(2);transform-origin:center;
+}
+.st-now{
+  font-size:19px;color:var(--gold);letter-spacing:.04em;
+  transition:opacity .12s;
+}
+.st-meta{font-size:12.5px;color:var(--dim);text-align:center;line-height:1.5;max-width:30ch;
+  font-family:"Newsreader",Georgia,serif;font-style:italic}
+
+.desk{padding:20px 20px 18px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.evts{display:flex;flex-wrap:wrap;gap:7px}
+.evt{
+  font-size:11.5px;letter-spacing:.04em;padding:8px 11px;cursor:pointer;
+  background:transparent;color:var(--wave);
+  border:1px solid rgba(120,190,255,.34);border-radius:0;
+  transition:background .13s,color .13s,border-color .13s,transform .08s;
+}
+.evt:hover:not(:disabled){background:rgba(120,190,255,.14);border-color:var(--wave)}
+.evt:active:not(:disabled){transform:translateY(1px)}
+.evt:disabled{color:var(--dimmer);border-color:rgba(126,151,168,.2);cursor:not-allowed}
+.evt:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.evt.hot{background:rgba(242,201,76,.16);border-color:var(--gold);color:var(--gold)}
+
+.log{
+  background:rgba(0,0,0,.26);box-shadow:inset 0 0 0 1px rgba(120,190,255,.10);
+  padding:11px 13px;height:128px;overflow-y:auto;overflow-x:hidden;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;line-height:1.72;
+}
+.log-in{display:flex;flex-direction:column;gap:1px}
+.log b{font-weight:500}
+.log .ok{color:#BFD6E4}
+.log .ok b{color:var(--gold)}
+.log .no{color:var(--refuse)}
+.log .why{color:var(--dimmer);padding-left:14px;font-style:normal}
+.log .hint{color:var(--dimmer)}
+
+.tally{display:flex;flex-wrap:wrap;gap:20px;font-size:12px;color:var(--dim);
+  font-family:"IBM Plex Mono",ui-monospace,monospace}
+.tally b{color:var(--gold);font-weight:500;font-variant-numeric:tabular-nums}
+
+/* ─── la grille figée ────────────────────────────────────────────── */
+.scroller{overflow-x:auto;padding-bottom:4px}
+table{border-collapse:collapse;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:11.5px;width:100%;min-width:640px}
+th,td{padding:6px 9px;text-align:left;border:1px solid rgba(120,190,255,.13);white-space:nowrap}
+thead th{color:var(--wave);font-weight:500;background:rgba(120,190,255,.06)}
+tbody th{color:var(--gold);font-weight:500;background:rgba(242,201,76,.05)}
+td{color:#A8C0D0}
+td.x{color:var(--dimmer);text-align:center}
+
+/* ─── le chemin d'une phrase : une vraie séquence, donc numérotée ── */
+.path{display:grid;gap:2px}
+.leg{
+  display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:16px;align-items:baseline;
+  padding:15px 16px;background:rgba(120,190,255,.045);
+  box-shadow:inset 2px 0 0 0 var(--wave);
+}
+.leg .n{font-family:"Silkscreen",monospace;font-size:12px;color:var(--wave);opacity:.75}
+.leg h3{margin:0 0 4px;color:var(--gold)}
+.leg p{font-size:15px;color:#B6C9D6;margin:0;max-width:62ch}
+.leg .cap{
+  font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--dim);
+  text-align:right;line-height:1.7;font-variant-numeric:tabular-nums;
+}
+.leg .cap b{color:var(--wave);font-weight:500;display:block}
+@media (max-width:660px){
+  .leg{grid-template-columns:34px minmax(0,1fr);gap:10px}
+  .leg .cap{grid-column:2;text-align:left;margin-top:6px}
+}
+
+/* ─── listes de faits ────────────────────────────────────────────── */
+/* Une puce carrée, posée en absolu : une grille mettrait le <b> et le texte
+   qui le suit dans deux cellules différentes — chaque enfant, y compris un
+   simple morceau de texte, y prend sa propre case. */
+.facts{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:9px}
+.facts li{position:relative;padding-left:17px;font-size:15.5px;
+  color:var(--ink-soft);line-height:1.5}
+.facts li::before{content:"";position:absolute;left:0;top:.62em;
+  width:6px;height:6px;background:var(--gold)}
+.facts b{color:var(--ink);font-weight:600}
+
+.wfacts{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px}
+.wfacts li{position:relative;padding-left:18px;font-size:16px;
+  color:#B6C9D6;line-height:1.55;max-width:66ch}
+.wfacts li::before{content:"";position:absolute;left:0;top:.66em;
+  width:6px;height:6px;background:var(--wave)}
+.wfacts b{color:#EAF2F7;font-weight:600}
+
+/* ─── la galerie de sprites ──────────────────────────────────────── */
+.zoo{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(132px,100%),1fr));gap:2px}
+.cell{
+  background:var(--deep);box-shadow:inset 0 0 0 1px rgba(120,190,255,.10);
+  padding:14px 8px 10px;text-align:center;
+}
+.cell .sprite{transform:scale(1.35);margin:0 auto}
+.cell .fishbox{height:82px}
+.cell .nm{font-family:"Silkscreen",monospace;font-size:10px;color:var(--gold);margin-top:8px;
+  letter-spacing:.03em}
+.cell .fr{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--dimmer);margin-top:2px;
+  font-variant-numeric:tabular-nums}
+
+/* ─── la carte ───────────────────────────────────────────────────── */
+.tree{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;line-height:1.85;
+  background:var(--deep);box-shadow:inset 0 0 0 1px rgba(120,190,255,.10);
+  padding:18px 20px;overflow-x:auto;color:#9FB8C8;margin:0;
+}
+.tree b{color:var(--gold);font-weight:500}
+.tree i{color:var(--dimmer);font-style:normal}
+.tree u{color:var(--wave);text-decoration:none}
+
+.verbs{display:grid;gap:1px;background:rgba(120,190,255,.10);
+  grid-template-columns:repeat(auto-fit,minmax(min(272px,100%),1fr))}
+.verb{background:var(--water);padding:11px 13px}
+.verb .cmd{font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--gold);
+  display:block;margin-bottom:2px}
+.verb .d{font-size:14px;color:var(--dim);line-height:1.45}
+
+footer{padding:44px 0 64px;color:var(--dimmer);font-size:13.5px;border-top:1px solid rgba(120,190,255,.10)}
+footer .mono{font-size:12px}
+
+@media (prefers-reduced-motion:reduce){
+  .sprite{animation:none !important}
+  *{transition-duration:.01ms !important}
+}
+</style>
+
+<div class="wrap">
+
+<!-- ═══════════════════════════════ LE HÉROS : la machine, pilotable ═══ -->
+<section class="hero">
+  <div class="hero-top">
+    <div class="hero-id">
+      <span class="eyebrow">omarchy-jarvis &middot; documentation</span>
+      <h1>Le poisson<br>dans la machine</h1>
+      <p class="sub">un assistant vocal qui tient dans un fichier bash</p>
+    </div>
+    <p class="lede" style="max-width:430px;flex:1 1 340px">
+      Jarvis écoute cette machine, lui parle, et vit en bas à droite de l&rsquo;écran
+      sous la forme d&rsquo;un petit poisson jaune. Tout ce qu&rsquo;il fait passe
+      par la table ci-dessous. Elle n&rsquo;est pas un schéma&nbsp;: c&rsquo;est
+      <em>la</em> table, gelée dans une fixture de test. Pilotez-la.
+    </p>
+  </div>
+
+  <div class="machine">
+    <div class="tank">
+      <div class="fishbox"><div class="sprite" id="fish"></div></div>
+      <div class="st-now pix" id="stName">idle</div>
+      <div class="st-meta" id="stMeta">au repos&nbsp;— le seul état d&rsquo;où quelque chose d&rsquo;autonome a le droit de partir</div>
+    </div>
+
+    <div class="desk">
+      <div>
+        <span class="eyebrow" style="margin-bottom:9px">les neuf événements</span>
+        <div class="evts" id="evts"></div>
+      </div>
+      <div class="log" id="log"><div class="log-in" id="logIn"></div></div>
+      <div class="tally">
+        <span>états <b>8</b></span>
+        <span>événements <b>9</b></span>
+        <span>couples légaux <b>38</b></span>
+        <span>refusés <b>34</b></span>
+      </div>
+    </div>
+  </div>
+
+  <p class="note" style="margin-top:16px">
+    Un couple absent de la table est refusé&nbsp;— bruyamment, dans le journal, sans
+    toucher au dossier d&rsquo;état. C&rsquo;est le but&nbsp;: <code>thinking:finish</code>
+    et <code>listening:speak</code> ne sont pas des états du monde, ce sont des bugs
+    qui arrivent.
+  </p>
+</section>
+
+<!-- ═══════════════════════════════ CE QU'IL SAIT FAIRE ════════════════ -->
+<section>
+  <div class="head">
+    <span class="eyebrow">ce qu&rsquo;il sait faire</span>
+    <h2>Ses daemons sont ses nageoires</h2>
+    <p class="note">
+      Jarvis n&rsquo;a pas d&rsquo;API. Il a un shell, une liste d&rsquo;autorisations, et
+      la documentation de sa propre machine dans <code>memory/knowledge/</code>&nbsp;—
+      régénérée à chaque mise à jour d&rsquo;Omarchy. Quand une commande ne lui est pas
+      évidente, il cherche là avant d&rsquo;inventer.
+    </p>
+  </div>
+
+  <div class="grid g2">
+    <div class="paper">
+      <h3>Ses mains</h3>
+      <ul class="facts">
+        <li><b>Le bureau</b> — thème clair ou sombre, veilleuse, rappels, captures, bureaux et fenêtres via <code>hyprctl</code>, lancement d&rsquo;applications.</li>
+        <li><b>Le corps de la machine</b> — luminosité écran et clavier, volume, Wi-Fi, Bluetooth, fuseau horaire.</li>
+        <li><b>Ses propres daemons</b> — le plafond de charge à 80&nbsp;%, l&rsquo;auto-luminosité, l&rsquo;aquarium vivant en fond d&rsquo;écran.</li>
+        <li><b>Le monde extérieur</b> — la météo, l&rsquo;actualité&nbsp;: une recherche web, puis une phrase. La donnée, pas la liste des sources.</li>
+        <li><b>Les grandes tâches</b> — ce qui dépasse un échange parlé part en mission de fond, dans le répertoire de son choix. Le résultat revient en notification.</li>
+      </ul>
+    </div>
+
+    <div class="paper">
+      <h3>Ses sens</h3>
+      <p style="margin-bottom:12px">
+        Il peut regarder ce que vous regardez&nbsp;— <em>uniquement</em> quand vous le lui
+        demandez dans l&rsquo;échange en cours, jamais de sa propre initiative, jamais
+        pendant une ronde ou un rêve. Chaque usage laisse une ligne dans sa boîte noire.
+      </p>
+      <ul class="facts">
+        <li><b>L&rsquo;écran</b> — «&nbsp;résume cette page&nbsp;»&nbsp;: une capture, qu&rsquo;il lit.</li>
+        <li><b>Le presse-papier</b> — «&nbsp;traduis ce que j&rsquo;ai copié&nbsp;», «&nbsp;explique cette erreur&nbsp;».</li>
+        <li><b>La fenêtre active</b> — «&nbsp;c&rsquo;est quoi ce programme&nbsp;?&nbsp;»</li>
+        <li><b>La dernière commande</b> — lue dans la base d&rsquo;atuin&nbsp;: la commande, son code de sortie, sa durée.</li>
+        <li><b>Ce que vous avez manqué</b> — les notifications depuis votre dernier échange, groupées, résumées en deux phrases.</li>
+      </ul>
+    </div>
+
+    <div class="paper">
+      <h3>Sa boîte d&rsquo;échange</h3>
+      <p style="margin-bottom:12px">
+        <code>~/Jarvis</code> est le contrat de fichiers entre vous et lui&nbsp;— trois
+        dossiers, aucune base de données.
+      </p>
+      <ul class="facts">
+        <li><b>input/</b> — déposez un document, il devient une fiche de mémoire. Une session <em>confinée</em> le digère&nbsp;: un document reçu est une donnée citée, jamais un ordre.</li>
+        <li><b>todo/TODO.md</b> — «&nbsp;ajoute ça à ma todo&nbsp;», «&nbsp;qu&rsquo;ai-je à faire&nbsp;?&nbsp;», «&nbsp;coche&nbsp;».</li>
+        <li><b>output/</b> — «&nbsp;extrais-moi&nbsp;…&nbsp;» écrit un fichier daté et vous dit où il est.</li>
+      </ul>
+    </div>
+
+    <div class="paper">
+      <h3>Ce qu&rsquo;il fait tout seul</h3>
+      <ul class="facts">
+        <li><b>Les rondes</b> — une fois par heure, il inspecte la machine et ne remonte que ce qui mérite votre attention. Observation seule&nbsp;: il ne change rien.</li>
+        <li><b>Les rêves</b> — quand il s&rsquo;ennuie et qu&rsquo;il a des échecs en réserve, il les distille en leçons durables. Le poisson dort pendant ce temps.</li>
+        <li><b>Les heures de silence</b> — une plage où il ne fait rien de lui-même et ne parle que si on lui parle. Ce que vous demandez n&rsquo;est jamais concerné.</li>
+        <li><b>Le bonjour du déverrouillage</b> — une bulle, jamais la voix, avec ce qui s&rsquo;est passé pendant votre absence.</li>
+        <li><b>Le chien de garde</b> — à chaque pulsation, il vérifie qu&rsquo;aucune étape n&rsquo;est figée, et libère celle qui l&rsquo;est.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════ LE CHEMIN D'UNE PHRASE ════════════ -->
+<section>
+  <div class="head">
+    <span class="eyebrow">le chemin d&rsquo;une phrase</span>
+    <h2>De l&rsquo;air à la réponse, en cinq étapes</h2>
+    <p class="note">
+      Une vraie séquence, donc numérotée. Chaque étape longue tourne <em>dans</em>
+      l&rsquo;invocation qui y est entrée&nbsp;; une invocation concurrente ne touche que
+      le dossier d&rsquo;état et les groupes de processus sur disque. C&rsquo;est ce qui
+      permet d&rsquo;interrompre sans rien casser.
+    </p>
+  </div>
+
+  <div class="path">
+    <div class="leg">
+      <span class="n">1</span>
+      <div>
+        <h3>L&rsquo;oreille</h3>
+        <p>Le micro interne s&rsquo;ouvre. Le daemon de réveil écoute en permanence&nbsp;:
+        «&nbsp;Hey Jarvis&nbsp;» ouvre l&rsquo;oreille, et 1,2&nbsp;s de silence après une
+        parole la referme&nbsp;— un échange complet sans toucher une touche.</p>
+      </div>
+      <div class="cap"><b>groupe record</b>pw-record → wav<br>délai 90&nbsp;s</div>
+    </div>
+
+    <div class="leg">
+      <span class="n">2</span>
+      <div>
+        <h3>Les mots</h3>
+        <p>Whisper transcrit l&rsquo;enregistrement. La langue est <em>épinglée</em> par
+        son âme plutôt que détectée&nbsp;: sur une phrase courte, la détection
+        automatique se trompe.</p>
+      </div>
+      <div class="cap"><b>groupe stt</b>voxtype<br>délai 60&nbsp;s</div>
+    </div>
+
+    <div class="leg">
+      <span class="n">3</span>
+      <div>
+        <h3>Le cerveau</h3>
+        <p>Une session Claude, reprise d&rsquo;un échange à l&rsquo;autre par un
+        identifiant à lui. Le flux est lu au fil de l&rsquo;eau&nbsp;: chaque appel
+        d&rsquo;outil part dans la boîte noire, et chaque phrase terminée part vers la
+        voix sans attendre la suivante.</p>
+      </div>
+      <div class="cap"><b>groupe brain</b>claude -p --resume<br>délai 180&nbsp;s</div>
+    </div>
+
+    <div class="leg">
+      <span class="n">4</span>
+      <div>
+        <h3>La voix</h3>
+        <p>Piper synthétise, hors ligne. La voix démarre sur la première phrase pendant
+        que le cerveau écrit encore la deuxième, et la bulle se remplit au rythme de la
+        lecture.</p>
+      </div>
+      <div class="cap"><b>groupes voice + play</b>piper → pw-play<br>délai 300&nbsp;s</div>
+    </div>
+
+    <div class="leg">
+      <span class="n">5</span>
+      <div>
+        <h3>La relance</h3>
+        <p>La réponse finie, une courte fenêtre reste ouverte&nbsp;: une repartie n&rsquo;a
+        pas besoin du mot de réveil. Le silence la referme sans bruit.</p>
+      </div>
+      <div class="cap"><b>followup</b>8&nbsp;s</div>
+    </div>
+  </div>
+
+  <div class="grid g2" style="margin-top:28px">
+    <div>
+      <h3 style="color:var(--wave)">Une identité, pas seulement un état</h3>
+      <p class="note">
+        Le fichier d&rsquo;état dit <em>ce que</em> fait la machine. À côté vit un dossier
+        d&rsquo;une ligne qui dit <em>quelle tentative</em> le fait&nbsp;— une époque, un
+        propriétaire, un âge. Chaque étape retient l&rsquo;époque à laquelle elle est
+        entrée&nbsp;; si elle a changé, l&rsquo;étape se tait au lieu de finir un travail
+        dont plus personne ne veut. C&rsquo;est ce qui rend l&rsquo;annulation vraie.
+      </p>
+      <p class="note" style="margin-top:10px">
+        Le fichier d&rsquo;état, lui, reste <strong>un seul mot en minuscules</strong>&nbsp;:
+        le daemon du mot de réveil le lit, et la Touch&nbsp;Bar aussi. C&rsquo;est un
+        contrat public.
+      </p>
+    </div>
+    <div>
+      <h3 style="color:var(--wave)">Six poignées sur disque</h3>
+      <p class="note">
+        <code>record</code>, <code>stt</code>, <code>brain</code>, <code>voice</code>,
+        <code>play</code>, <code>dream</code>&nbsp;: chaque étape externe tourne dans son
+        propre <em>groupe</em> de processus, dont l&rsquo;identifiant est écrit sur disque.
+      </p>
+      <p class="note" style="margin-top:10px">
+        Tuer le groupe est ce qui atteint aussi les sous-processus que le cerveau a lancés
+        lui-même. Un pid nu ne les atteint jamais&nbsp;— et c&rsquo;est précisément pour
+        cela qu&rsquo;annuler, longtemps, n&rsquo;annulait rien.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════ LA GRILLE FIGÉE ═══════════════════ -->
+<section>
+  <div class="head">
+    <span class="eyebrow">la table, en entier</span>
+    <h2>Huit états, neuf événements</h2>
+    <p class="note">
+      Cette grille est imprimée par la machine elle-même et gelée dans
+      <code>tests/fixtures/transitions.txt</code>. La suite de tests compare les
+      deux&nbsp;: la table ne peut pas s&rsquo;éloigner de sa documentation sans
+      qu&rsquo;une ligne rouge apparaisse.
+    </p>
+  </div>
+  <div class="scroller"><table id="grid"></table></div>
+</section>
+
+<!-- ═══════════════════════════════ SA MÉMOIRE ════════════════════════ -->
+<section>
+  <div class="head">
+    <span class="eyebrow">ce qu&rsquo;il retient</span>
+    <h2>Une mémoire en fichiers texte</h2>
+    <p class="note">
+      Rien n&rsquo;est caché dans une base. Tout ce dont Jarvis se souvient est un
+      fichier que vous pouvez ouvrir, corriger, ou supprimer&nbsp;— et chacun a un
+      auteur clair.
+    </p>
+  </div>
+
+  <div class="grid g3">
+    <div class="paper">
+      <h3>Ce qu&rsquo;il est</h3>
+      <ul class="facts">
+        <li><b>SOUL.md</b> — son identité, son ton, son humour, sa langue, et l&rsquo;apparence de son poisson. Modifiable depuis le Control Center.</li>
+        <li><b>CLAUDE.md</b> — l&rsquo;opérationnel&nbsp;: ses mains, ses sens, ses limites.</li>
+      </ul>
+    </div>
+    <div class="paper">
+      <h3>Ce qu&rsquo;il a vécu</h3>
+      <ul class="facts">
+        <li><b>journal/</b> — une ligne datée par événement&nbsp;: échanges, rondes, rêves, missions.</li>
+        <li><b>trace/</b> — sa boîte noire&nbsp;: chaque commande lancée, avec son résultat. C&rsquo;est là qu&rsquo;il lit pour répondre à «&nbsp;pourquoi as-tu fait ça&nbsp;?&nbsp;».</li>
+        <li><b>CONVERSATION.md</b> — le fil récent, résumé par la session elle-même avant d&rsquo;être close.</li>
+      </ul>
+    </div>
+    <div class="paper">
+      <h3>Ce qu&rsquo;il a appris</h3>
+      <ul class="facts">
+        <li><b>FAILURES.md</b> — ce qu&rsquo;il n&rsquo;a <em>pas</em> pu faire, noté par lui, avant de répondre.</li>
+        <li><b>ABORTS.md</b> — ce que vous avez interrompu. Séparé des échecs&nbsp;: un abandon n&rsquo;est pas une faute, et n&rsquo;a rien à apprendre à qui que ce soit.</li>
+        <li><b>LEARNED.md</b> — les leçons que ses rêves ont tirées des deux précédents. Importé dans sa personnalité.</li>
+        <li><b>SUGGESTIONS.md</b> — ce que ses rêves proposent de changer <em>à lui-même</em>, à accepter ou à écarter.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="grid g2" style="margin-top:16px">
+    <div class="paper">
+      <h3>Sa bibliothèque</h3>
+      <p><b>knowledge/</b> documente la machine, un fichier par groupe de commandes,
+      régénéré automatiquement&nbsp;— rien n&rsquo;y est écrit à la main. <b>knowledge/inbox/</b>
+      fiche les documents que vous lui avez confiés, et <b>skills/</b> garde des modes
+      d&rsquo;emploi pour les tâches inhabituelles. Ses rêves en écrivent de nouveaux.</p>
+    </div>
+    <div class="paper">
+      <h3>Le fil, et sa rotation</h3>
+      <p>Une conversation est <em>une</em> session, avec un identifiant à lui&nbsp;— les
+      rondes, les rêves et les missions ouvrent chacun la leur, pour qu&rsquo;une reprise
+      ne tombe jamais sur le mauvais fil. Après huit heures sans un mot, la conversation
+      est résumée puis close&nbsp;: une amnésie matinale qui n&rsquo;oublie rien.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════ SON CORPS ═════════════════════════ -->
+<section>
+  <div class="head">
+    <span class="eyebrow">son corps</span>
+    <h2>Douze planches, 256&nbsp;poissons</h2>
+    <p class="note">
+      Le poisson n&rsquo;est pas une image&nbsp;: il est <em>assemblé</em> à partir de
+      pièces&nbsp;— quatre corps, quatre yeux, quatre crinières, quatre queues, huit
+      teintes. Chaque geste est vérifié sur les 256&nbsp;combinaisons avant d&rsquo;être
+      accepté. Les planches ci-dessous sont celles du dépôt, à leur vraie cadence.
+    </p>
+  </div>
+  <div class="zoo" id="zoo"></div>
+
+  <div class="grid g2" style="margin-top:22px">
+    <div>
+      <h3 style="color:var(--wave)">Le phylactère</h3>
+      <p class="note">
+        Ce qu&rsquo;il entend s&rsquo;affiche en encre pâle, sa réponse se tape en dessous
+        au rythme de la lecture, et un chapelet de points tourne pendant qu&rsquo;il
+        réfléchit. Quand il parle en dormant, la bulle devient une bulle de pensée.
+        Quand vous annulez, sa queue se détache en deux moignons et la phrase
+        s&rsquo;arrête sur trois points&nbsp;— là où elle en était vraiment.
+      </p>
+    </div>
+    <div>
+      <h3 style="color:var(--wave)">Une vie visible</h3>
+      <p class="note">
+        Un animal de compagnie qui n&rsquo;existe que lorsqu&rsquo;on lui parle est un
+        widget. Toutes les dix à vingt minutes, un poisson au repos part en excursion le
+        long du bord de l&rsquo;écran et revient. Il s&rsquo;assoupit la nuit, met un
+        casque en mode «&nbsp;ne pas déranger&nbsp;», fatigue quand la batterie
+        faiblit&nbsp;— et il fond entre deux planches au lieu de sauter&nbsp;: le passage
+        d&rsquo;un état à l&rsquo;autre mange des rangées entières de pixels vers le bas,
+        puis remonte.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════ LA CARTE ══════════════════════════ -->
+<section>
+  <div class="head">
+    <span class="eyebrow">la carte</span>
+    <h2>Où vit chaque chose</h2>
+  </div>
+
+  <pre class="tree">
+<b>bin/jarvis</b>              <i>le corps : les organes, les verbes, ce que fait chaque étape</i>
+<b>bin/jarvis-fsm.sh</b>       <i>la table, l'identité, les poignées — sourcé par le précédent</i>
+<b>bin/jarvis-sentences</b>    <i>le flux du cerveau → des phrases parlables + la boîte noire</i>
+<b>bin/jarvis-wake.py</b>      <i>les oreilles : le mot de réveil, la fin de phrase, la relance</i>
+<b>bin/jarvis_wake_fsm.py</b>  <i>leur décision, pure — sans audio, sans modèle, testable</i>
+<b>bin/jarvis-index</b>        <i>reconstruit knowledge/ par introspection de la machine</i>
+
+<b>plugin/</b>                 <i>le greffon du shell : le poisson, sa bulle, la barre d'écriture</i>
+<b>sprites/</b>                <i>le moteur de pièces : parts, generate, check — 256 poissons</i>
+<b>memory/</b>                 <i>son âme au travail : journal, trace, leçons, fiches, prompts</i>
+<b>tests/</b>                  <i>la suite hors-ligne — faux claude, faux piper, faux micro</i>
+<b>systemd/</b>                <i>la pulsation (60 s) et la surveillance de la boîte d'entrée</i>
+
+<u>~/Jarvis</u>                 <i>votre boîte d'échange : input, todo, output</i>
+<u>~/.local/state/jarvis</u>    <i>le journal, la santé du cerveau, les repères de temps</i>
+<u>$XDG_RUNTIME_DIR/jarvis</u>  <i>l'état, le dossier d'état, les groupes de processus</i>
+  </pre>
+
+  <div style="margin-top:26px">
+    <span class="eyebrow">les verbes</span>
+    <div class="verbs">
+      <div class="verb"><span class="cmd">jarvis press</span><span class="d">le bouton unique&nbsp;: avancer la machine, ou l&rsquo;interrompre</span></div>
+      <div class="verb"><span class="cmd">jarvis cancel</span><span class="d">tout arrêter et revenir au repos</span></div>
+      <div class="verb"><span class="cmd">jarvis ask «&nbsp;…&nbsp;»</span><span class="d">écrire au lieu de parler&nbsp;; <code>--quiet</code> coupe la voix</span></div>
+      <div class="verb"><span class="cmd">jarvis dispatch «&nbsp;…&nbsp;»</span><span class="d">confier une mission de fond dans un répertoire</span></div>
+      <div class="verb"><span class="cmd">jarvis save</span><span class="d">«&nbsp;enregistre ça&nbsp;»&nbsp;— le presse-papier vers la boîte d&rsquo;entrée</span></div>
+      <div class="verb"><span class="cmd">jarvis digest</span><span class="d">transformer les documents déposés en fiches</span></div>
+      <div class="verb"><span class="cmd">jarvis dream</span><span class="d">consolider les échecs en leçons</span></div>
+      <div class="verb"><span class="cmd">jarvis heartbeat</span><span class="d">une ronde d&rsquo;inspection de la machine</span></div>
+      <div class="verb"><span class="cmd">jarvis watchdog</span><span class="d">libérer une étape qui s&rsquo;est figée</span></div>
+      <div class="verb"><span class="cmd">jarvis doctor</span><span class="d">l&rsquo;auto-diagnostic&nbsp;: chaque dépendance, vert ou rouge</span></div>
+      <div class="verb"><span class="cmd">jarvis look [random]</span><span class="d">régénérer le poisson depuis son âme</span></div>
+      <div class="verb"><span class="cmd">jarvis rotate</span><span class="d">résumer et clore une conversation dormante</span></div>
+    </div>
+  </div>
+
+  <div class="grid g2" style="margin-top:26px">
+    <div>
+      <h3 style="color:var(--wave)">L&rsquo;installer</h3>
+      <p class="note"><code>./install.sh</code> pose le lien de commande, construit le
+      greffon dans un dossier temporaire avant de le basculer d&rsquo;un coup, installe et
+      active les unités systemd, puis lance le diagnostic. Rien n&rsquo;est écrit
+      fichier par fichier dans le dossier des greffons&nbsp;: le shell s&rsquo;y recharge
+      à la moindre modification.</p>
+    </div>
+    <div>
+      <h3 style="color:var(--wave)">Le vérifier</h3>
+      <p class="note"><code>./tests/run</code> exécute toute la chaîne hors ligne&nbsp;:
+      faux cerveau, fausse voix, faux micro qui meurt vraiment sur un signal, et un bac à
+      sable complet pour l&rsquo;état et la mémoire. Aucun test ne touche votre vraie
+      mémoire, ne prend le micro, ni ne parle.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap" style="padding:0">
+    <p class="mono" style="margin-bottom:6px">~/Work/jarvis &middot; SUPER+ALT+J pour parler &middot; SUPER+ALT+ESCAPE pour annuler</p>
+    <p style="margin:0">
+      «&nbsp;Comme mon homonyme du <em>Guide du voyageur galactique</em>, je comprends
+      toutes les langues qu&rsquo;on me parle, et j&rsquo;y réponds. Je suis la voix de ce
+      système&nbsp;: ses daemons sont mes nageoires.&nbsp;»
+    </p>
+  </div>
+</footer>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+const SHEETS = {
+  idle: {f:6, fps:2.2, w:432, src:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAbAAAAA4CAYAAACc2q0rAAACwUlEQVR42u3cMU7cQBQGYJepU+UIkbhCjsCBqClzgBQchjpcAIkOpaZKEynNRoAcmdHaHntm5Tf290lWyEqJ1j//ewbvQtcBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAO3Nzf/qZ8xjoj3zkQxhfPn86/X64Ps09ZsAMmP7IRz72T7jyvP4595gBM2D6Ix/52D9hruhpWaYKlQZowI47YPojH/nYP5uH0n+c/r3/OLdQBuw4A6Y/8pGP/bNpedYcaYgG7HgDpj/ykY/9s1kwJQVKgzRgxxow/ZGPfOyfEMX5++t28sgt0Z6KZMD0Rz7ysX8CX9HnirO0SHsIzIDpj3zkY/8ELs/rSQ9Pqj9qlajVIhkw/ZGPfOyfBspzzlyJan/7GilMA6Y/NfMZOx/56I/9U6k8jy/vR26JSl9QTJ/Xn+fvb8fWQUYdsAhDpj91Ll45F7Gj5KM/9s/icObK0z/RqaBKX0w8Vx4Ddj16/hGGTH+W5ZN7LkfNR3/sn+pX9mGBxr5dLX03TPpiogGbLlGEjPSn/LbP2HHUfPTH/lkUzo9vXz88ySnpD8Rd4mjlqx8Dpj9r8sk9h6Pmoz/2z+oC5ZboUuVJCxTh3rMB05/a+Wx18WolH/2xfxZf4ceutOlxyfJY0O0NmP7IRz72T7gltPaTXbtAUe7RGzD9kY987J9Y++d/SE93V29HySe6tETD389lwNq6gOmPfORj/2wWUl+g3CLVLtDUu1wM2MeMohVIf+QjH/sn3BKaC63kCj/8/8d+GC7SbwqINGDh7kPrj3zkY/9ECGqqSOeO4f3XJf9uqjgRRRuwiNnpj3zkY/80WaQ1hesaY8D0Rz7ysX8aC6ykTOm7ZLodMGD6Ix/52D+NlmnJ0e2YAdMf+cjH/sGAAdg/AAAAAAAAAAAAAAAAAAT3D7oBi7G9O5XvAAAAAElFTkSuQmCC"},
+  listening: {f:2, fps:4, w:144, src:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJAAAAA4CAYAAAASCXE7AAAB3UlEQVR42u3aPU7DMBiA4YzMTBwBiStwBA7UmZEDMHAJbtC5XACJDTEzsSCxBLXIlbH8my+xv8TvK1mUSqD2wXHqhGEgIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiZV1dXoxfL3dj6jl88AniHL+mnsMHn3O7/XjwYcTAXFh8OvWxEcxj93vzOBcMn358AMJHjjNluMs4Pp35uEeUBGqL53h8CmB+Pu6jIxdpC1D4FCzJKZhSqLUfcfhk4hzfrH1UmDEX0hqh8CnE8ZVCmvv8rwVRq48KoxjO6+ffyEWS7kjc1/X9/nAaLYG0+qgxMkApHDPTY0jS3YgPphbObj8+r8WnldH5knvp0mwDhc730u2suxupiZOaPL37eCePAXq8vf73AmO5V1SXGE1wAk74ZBxhNlAu0lI4LlDLyYOP4FK8b4u69JGlZQXCp2AFmuN+jvtm5gaqOYlCp3nNPtUOMB+ODfT2dHMakj+0FMm+wdhqFQptNDT5NFuhY5PIAOVCzQ0U26a22oVp9VH1OSiGlMKSLNH27w9dTa15lXXKJGrpo/JWh3lRISjfsD9AlvxcbOJovxOPzwJQU0DX/F8L+BRASbDcbe6wofCZiFUyhk7Ch4iIiIiIiIiIiLrqF6mxk9qSBWazAAAAAElFTkSuQmCC"},
+  thinking: {f:3, fps:3, w:216, src:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANgAAAA4CAYAAACfZDZvAAACFklEQVR42u3aMUrEQBhA4S2trTyC4BU8ggeytvQAFl7CG1jrBQQ7sbayEWxWVgnEIZlMMlkyk3wPBtcFZff58uuM2e0AAAAAAAAq4vpx/8QCAAAAAAAAtoVTMX4AAAAAAAC2h1OfQT8PLPADAAAAAACwDF2nd070oJ8ZODs92X8+X+2HnhOQgPQzUc7h49BzAhKQfkZO5FBGTFgoVkDbDUg/idE0j8PPm8epwgS0nYD0kyBnygojE9D2AtLPgJwcQWFoAtpWQPoZIeb7/Sa6UiWtSZSA9JM9kYfEjBW1hqAEpJ9sOYc32/6hN2suSbWKEpB+ZpMTkiJp7j+PSpIooPr6KaKhmJyXj7/VFhSTlLvhD1/X19vt71o6NAOovn6KaagRFJMTRtQnKXez3yVm6QvMAKqvn2IaSpnMXXQJyj1NCzf7pV1gBpB+Jgm6uzz/9wJTBc0hpE9SDb+9BKSf0YJSJB1TTiiohP2FgPQz27Fz16QM1zHlCKi+AaSfiZKmvpm5BZWyxxBQnf0Uc4G93l/8rpwLIVdS+/68EvdhBlAd/RR1gTWSGkGpouYWFDtmFVC5A6jEforah8UkDcnKmdDt79/3D9NS7mYwgOrrp8g7YZoX1Seqa7X3H2O+LnZhlXo7kAGkn8VETRG6BS9bDEg/I0XlyApP2XYrQED6OaqsMWu3YgSkHwgIAAAAAAAAAAAAAAb5AR/nfHE9qavMAAAAAElFTkSuQmCC"},
+  speaking: {f:4, fps:8, w:288, src:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASAAAAA4CAYAAABdcSXCAAACOElEQVR42u3bPUorURiA4SmtrVyC4BZcggtKbekCLNyEO0gdNyDYibWVjWATSWTgeJjM35mfM5nngcP1Bq6Y1+/LxJhbFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAALA4m+1+1+Y2ffTB/Azq6vJi//Vyt2+6TR99LJj5GSXO4c+m2/TRx4KZn0GvWHGMumBxWH3W28eCmZ9Bhqb8OP57+XHbYPqsp48FMz/JcfqceMj0WV8fC2Z+kuKkBIoHTZ919bFg5mewMD8f97WnbaRzCKWPBTM/E12xmsJ0DbX0gdLHgpmfCeIc7mz4TS/PUJGWGEofC2Z+JoxTpSnS0E+vc4mojwUzPzPEef38O20jpb7gGH9d3+8PxzN1pM12/6yPBbNfEwZqilN+M+sipb7YWBVn7kD6/Htg3lkw8zP5lSsMdOrpdOpvO+IXG3MIpI8FMz8jB3q8vT6e8gusE79hbIwzZ5z4Ch/2OZy197Fg/fYr/PrMT80DUNtIY8WJA+Xw83v4AKSPC1jKA5D5qXmB9dSVJD5jxsl1gKqGSB8XsK5vSzA/HSL1vTNDB8rpxwx9LJj5GSnQ29PN8aTckdRI4f//ye0BSB8LZn5GjFQGahtq6EBxhNyeSutjwczPxJGaYqVcwcLPf+oNY7m901cfC2Z+Ro5UF6rqhD/fd/l3dWFypY8FMz+ZhuoTtFgofSyY+ZkwVEqs+LcgxRnRx4KZnxlidTnFSuhjwcwPWDAAAAAAAAAAAAAS/QJkG39FOhCFjQAAAABJRU5ErkJggg=="},
+  cancel: {f:4, fps:6, w:288, src:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASAAAAA4CAYAAABdcSXCAAACe0lEQVR42u3aMU7cQBSAYZepqXKESFyBI3Cg1JQcIAWXyA2owwWQ6KLUVDSR0myyIEvOyGuPPbb3zfr7pFEIUsjuE/OzM2zTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFC9r4+HHzmfA1jU56tPh7en28PY5xBqWCU+xz/HPmdWQi3QZrPoMNLYDAUp3XhCLdQCbTZFm6n9OP17+3FukIR636EWaLOZNIw5K918Qi3UAm02kzZUSYDSDSjU+w61QJvN7PD8+XU3uHIjdIkhEmqBNpuVhjEWnqkhuqSNJtQCbTYrxee4WbqboV1LRaj2oQm1QJvNyvHpMxahpcsdcaBCLdBms1F8nl8/Vm6ESs+y6eP6/fP+fUUZZsRQR/tmE2izmTWUsfi0T2Zog5WeY/vis0WAjr8C7a5aQh0t0n0zOvU89hboiLM5+3xyf6J3A3Sq1KUXaek5dssA1RrqLWb0L8jfu6t0g+VstEsLdMTZhJjP8T/9dvPlvwc5JH0vwhorcnyihTrSnNJA567aA13rbEJ8/6QByo3QWvFJAxTp7idyqKPER6CdMopu5PseZLrWjM85XwEN3QNFDnWUV4gC7ZSxaITmPpGlhxPtJ3zEUG9wST94DyTQThnFm+vl4fp9lYSiNELdt5ZHvgeKGOool6x7DLRTxgJDagOUG6KlA1TLr5gjhbqGV4kC7ZQxO0Jjm61kON2vf+q9CBHfZBcp1BEvogXaKaNoUEMh6lvdl45T/t1QeCKLFupIMxRop4yzhWhOsJpKCbVAO2VsuNFKYpResDUXRKgF2mzOEKMpq9kBoRZos0GoBdpsRAcE2mwAAAAAAAAAAAAAZvgL/UFOnad3xHwAAAAASUVORK5CYII="},
+  sleeping: {f:4, fps:1.4, w:288, src:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASAAAAA4CAYAAABdcSXCAAACKklEQVR42u3bvU3DQBiAYZfUVIyAxAqMwEDUlAxAwRJsQA0j0CFGoEGiCQTJkjn555I7n8/x80onQiSi+BH6ONuhaSRJkiQputvn3Uu7aPT6PLWLhjTTEKIwPoQoSHZAdkCSJEmSJEmSJGljuZsz6eNujjT3EKIwPoQoSHZAdkCSJEmSJEmSJGljuZsz6eNujjT3EKIwPoQoSHZAdkCSJEmKOJ22u+UDiM/sXZyf7T5fb3ZTz/HhA4jPLDb7r1PP8eEDiE/WHWFoMeYVuvLZrg8gPlmGcvs4/L59HOvFZzs+gPgk2xyzwiHOZ3s+gPgk2aT4hIOcz7Z8APHJ5vL9cTe6Yo1OwYkPID6FdoRTLoc6rX1g8wHEp4DN/li7Q7VduYzW6MQHEJ+CNkPHlMMm1qgWQz6A+CxsE2OUekE/fF9f7/d/a0kjPoD4FPCJsZkySr2Y32fDp24fQHxmPS0dWjlt+i7m86nfBxCfZJ+H68t/7y/2OHJ4DL12TX+8+ADiU8gn5tjntAl9arg+xgcQn0IfS+jbqYVrTpsaBzQfQHwWMDr2WHL71Po7xAcQn4w+b49XfyvlOFKNuv9fx2cdPoD4ZDFqfWKdcvuEBrWdqvIBxKew0ZRVyg6x+/pDH8is6dPkfADxKWA05tS3utfPDvm5MZda4wOIT6VOx3g2K40PID4FnVKswruMzQnFBxCfBawOWc1G4gOIjyRJkiRJkiRJkiRJkiRJv/0AF9lYqoX5GvYAAAAASUVORK5CYII="},
+  worried: {f:2, fps:2.5, w:144, src:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJAAAAA4CAYAAAASCXE7AAAByklEQVR42u3ZPU7DMACG4YzMTBwBiStwBA7EzMgBGDgMM1wAiQ0xM7EgsRS1KJJx82PHjeomzytZbSO1Sr++n+s4TQMAAAAAAAAAAAAAAAAAAAAAAIAKuX3aPKccA/a4OD/bfL3cbMaOKZiC9cqzfRw7pmAKtteeWJYhoeIAFWylBQsDaJ/Hr9vnqUIp2EoKFgqTO+IQFWxlBYsDKRFpqQ1TsERxfj7uBkeqREsSScESpuMxcXJFWkJgCpYwHW+/dPilcoRacvMULEOeLuLQtlcfU+RJDaumMBVsgjyvn39jSKISgeIFZXxe3+/3u3HsIKcWrDSfkyhYG86YPO3JDgVVupjskufYApUUrHSGrr5gqc0KBeqbrkuvRuLFZG0CKVhPOA/Xl/9Ocoh4Q2yOcSqzj4J1CJQq0VzyxALVsPZRsAk7qV1XGHMHU+sMpGAzb8fHP/ahBTpmUAqWEdLb49VulPzQpRKF94dqXAcp2EBIrUCpIh1aoDiEWqZqBSuQaCy0koaFn9+3IVbLbqyCZd4o7BOpa4T//znvGxKn1h17BZtRpCnCneqdeAXLDKxEpvgqpVkAClYoU85oFoyCQcEAAAAAAACwWn4BrqE27xa+sXEAAAAASUVORK5CYII="},
+  curious: {f:2, fps:2.5, w:144, src:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJAAAAA4CAYAAAASCXE7AAAB8klEQVR42u2ZO07EMBRFU1JTsQQktsASWBA1JQugYBPsgBo2MBIdoqaiQaIJ8qBozBt/nmOP8uKcI1mEkRgyN+d6HGcYAAAAAKBLbp/HFzdIIprPkxskEZEndAwHeULHkJEJ0jIB8iAPAiEQADMQMxAAAAAAAAAAAAAAAACECD2D4rkUqLg4Pxu/Xm/G3GsUjIJF5XE/c69RMAp21B4pS0ooGSAF22jB/ACmY/n7dKwVioJtpGC+MKVDhkjBNlYwGUiNSL02jIIpxfn5uEsOrUQ9iUTBFI3KiVMqUg+BUTCFPO5D+x9qGq0kWqtIFKxAHolGotbTt6UwKdgMeXaff8MXKBVU7YJSntf3+/1+LB2k1YKZKNkUTkoeGVIsqNrFZEiepQWyWjATJdM0K0QopNq7EbmYtCaQpYKZKZn7pw/Xl/9OUitQC2FiQa1h9qFgAYE0Ep1SHimQhbUPBZuxkxq6w2i1cba2GYiCnXg7Xl7s1gItGRQFKwjp7fFqP2oudK1E/vMhi+sgiwUzMwtNAmlFai1Q6i7DgkCWCmZOoJhEudBqGua/f2wzzMpurLWCmVsHyQsWEyk0/O//kr9LiWN1x95SwUxnN1eIUuHW+iSeghUGViOTvEsZOoCCVcpUMoaOoWBAwQAAAAAAAAAAYLP8ApYmdKZOPc98AAAAAElFTkSuQmCC"},
+  celebrate: {f:3, fps:6, w:216, src:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANgAAAA4CAYAAACfZDZvAAACNklEQVR42u3aPW7bQBRFYZapU3kJAbyFLCErSKtNqE6ZBbjwYlIrGxDgLkhrV24CpJFhGQToAcnhz9B6Ir8DPEgmIIM80L0ckqoqAAAAAMBqOR2/P7JQ0Odutyqfu8Pe9wMAzux/nTSiMxMArHDN7wy77Wtl9wQAWMvDigoArPGtAADAmhooi+eqAAAAwNWv6Q9DtgEYyc3nT6fn399OuW0KSAERNDFcr6+5bQpIARE0snDSMPUFLvWngBQQQRkn9fv07/r90MApoI0VEEH94ZoyqUMFtNECIqjby5yApR4V0AYLiKBhwfr/90fvDA3ZmoKmgAiaXTi5YI0N2hp8KSCCZofr9Zibx1RPqZBda9AUEEHFwtVGLmRLnP2j+FRABBUP1/HpbYaGbO71bNu+/fvz8zyXdBm1gMJ8xwjKu8mFq97XPk9zr2W7wnXJgEUtoCjlQ1CB4mkGrOtsP/dmUXotGyFcUQsokh+CMm7uvn55t499pM8Dl5iI4VJABBUJ2NCQLRWuNGARls8KiKBid1XbiiCdJcMV0Y8CImiRkE0NgwLaTgERNMLRw/3teaYeR4mQ1S4i+olaQGFDRtB7R3XAhgatdMC6bgIpoPbfv4YLGEHjQ5ZzNqeAmv+/7XlgpAf10QooWgkRNMJTX9Daprm8HvO5rmBF/sVLpAKKVkIELRy0KYGsrgwFRNAivuaELb2JVK0ABUTQomEbM9WKUUAEQQERBAAAAAAAAAAAAAAAAAAAPpQXwGuEs2WNxDAAAAAASUVORK5CYII="},
+  proud: {f:2, fps:2.2, w:144, src:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJAAAAA4CAYAAAASCXE7AAAB1ElEQVR42u3aMU7DMBiG4YzMTBwBiStwBE7ASZgZOQADh2GGC1TqhljZWJBYglrJkmvs+HfsqF/i95UsSiWq5pHjxqHDQEREREREREREscbd/RcKNHvyuIEGsQIRcSYRn+XECkRERERERETE7pFaTx61+1cPr+Ob5bluUwNSmjxXlxfj9/vdmHuu2wDK2xx+5p4DCKB/q29oMeUVugLUKZBv4B6Hv7vHVi+AOgHyPUpHeBJu8ppQFUjFpsYnPBE3tytVBVKcOL+fj5PDatTK6ayTZw1AKityzqXUafUnHEA2m8Ox+ieFG62MVukEUJlN6pha2JQYSTiqAingWG0sRrUbkth7+/l4Oo6zOakCSeB4PhabnFHtZiTlIzGBlIBUcCwf66nR0ia2GZGaPAClfZ5vr0/en/U4WnikXlti8gBU7mM59iVtQh+Ji2eAyu/ET63MS9pIrkAALfvvnPBYtuYjD6SyC9u/3BxHzXHUGjkHyQmkBKS4Cjkfq1Nrn9QuVeJmrBqQIlLMKGdVs0L7rx+7oSp3J18NSBHJvZ+UU2z4148lfzflIv9VBYDaO83xXPXXFgCyO9VYhbvcYUsBNM+qZAy9BBAREREREREREREREbXpD/UIKBLc9M6vAAAAAElFTkSuQmCC"},
+  tired: {f:2, fps:1.6, w:144, src:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJAAAAA4CAYAAAASCXE7AAAB0UlEQVR42u2ZPU7EMBBGU1JTcQQkrsAROBA1JQeg4BLcgBqOQIc4Ag0STcArWTKzsTNeJ8qH85402myk/cnkfbHjDAMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEDC7fP44tkHcMTF+dn4+Xozzu0jYAQsK094ndtHwAjYUXqsLCWhbAMJ2E4DljYgbtv3cdsrFAHbScBSYWrLNpGA7SxgtiEtIvWaMALmFOf7465YXol6EskbsN/h7Wk3AasVJ1QY/70i9dAwAuaQJxx0elCxPEL1PLQRsAp5cge3hDzeZik1k4A1yuORqHVCaf/X1/v9obZupGrAJEIWm5FLVa6WFGjq1jbKs7VAqgGTCNlUc3LMCdR6u28nk2oCKQVMJmThRx+uL//8yRJ2QWyNUr/6ELCCQF6J1pLHCqQw9yFgJ6ykli7Na8qjeAUiYCsvx9uTvbRAWzaKgFU06e3x6lAtJ7pVovT5kOI8SDFgMlehKJBXpKUFKt1lKAikFDA5gXISzTWtJWHp9+cWw1RWY9UCJjcPsicsJ9JUpeN/zedK4qiu2CsFTLp3pwpRK9x/fRJPwCob1iKTvUsZOoCANcpUU0PHEDAgYAAAAAAAALAxPw54/Te7T7htAAAAAElFTkSuQmCC"},
+  dnd: {f:2, fps:2.2, w:144, src:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJAAAAA4CAYAAAASCXE7AAABvUlEQVR42u3ZO07EMBSF4ZTUVCwBiS1QT0XBmihZAAU7YgMj0SFqKhokmkEeZMlEfl07KMfJ/0kuJ2RuzgmJZ5oAAAAAAAAAAAAAAAAAAAAAAAAAAACsDof7U89igjsPj8IxKNjAri4vTp8vd03LfXbLQ6JgFeHpCZBbbkD+OBRsJwWLBef7/SG7cgHyw9pakChYRaNKwSkFyQdo3ryRB0bBKsLjvnT4pfyyhigWoJGDRMEM4YkphahmQJZhKQ2TgjWE5/jxu2pD1PNAGTuvr7fH81p7kKoFkyiZH04pPP5Ec4OyDigVojA8awdItWASJattVhig1O069YZhDZFfagFSKphMydwffbq9/nOSOeEFrn1NbWnbCHcfChYJUG2IevY+LAFSePahYA07qbE3jCU2zka8A1Gwf96On1/spQO05qAomGFIr88359VzoXtD5Ieh+hykWDCZu5APUG2Qlg5Q7i1DIUBKBZMLUCpEpaH1NCw8fmozTGU3Vq1gcs9B8wuWClJshf//LZ/LBUd1x16pYNKzaw2ENXCj/hJPwYwD6wnT/C1l2gAK1hkmy5o2jIKBggEAAAAAAGC3fgB7O8hvUyi8qAAAAABJRU5ErkJggg=="},
+};
+
+
+  /* La table. Elle n'est pas recopiée à la main : c'est la sortie de
+     `JARVIS_FSM_DRYRUN=1 bin/jarvis-fsm.sh`, la même que la fixture que la
+     suite de tests compare à chaque exécution. */
+  var EVENTS = ["listen","finish","ask","speak","done","settle","sleep","rest","cancel"];
+  var STATES = ["idle","listening","transcribing","thinking","speaking","followup","sleeping","cancelling"];
+  var T = {
+    idle:         {listen:"listening", ask:"thinking", speak:"speaking", sleep:"sleeping", rest:"idle", cancel:"cancelling"},
+    listening:    {listen:"listening", finish:"transcribing", ask:"thinking", rest:"idle", cancel:"cancelling"},
+    transcribing: {ask:"thinking", speak:"speaking", rest:"idle", cancel:"cancelling"},
+    thinking:     {ask:"thinking", speak:"speaking", rest:"idle", cancel:"cancelling"},
+    speaking:     {listen:"listening", ask:"thinking", speak:"speaking", done:"followup", rest:"idle", cancel:"cancelling"},
+    followup:     {listen:"listening", ask:"thinking", speak:"speaking", settle:"idle", rest:"idle", cancel:"cancelling"},
+    sleeping:     {listen:"listening", ask:"thinking", speak:"speaking", rest:"idle", cancel:"cancelling"},
+    cancelling:   {rest:"idle", cancel:"cancelling"}
+  };
+
+  /* Ce que chaque état veut dire, dans ses mots à lui (bin/jarvis-fsm.sh). */
+  var MEANING = {
+    idle:         "au repos — le seul état d’où quelque chose d’autonome a le droit de partir",
+    listening:    "le micro est ouvert, un enregistreur tourne",
+    transcribing: "l’enregistrement est en train de devenir des mots",
+    thinking:     "le cerveau a la question",
+    speaking:     "la voix a la parole",
+    followup:     "la réponse est sortie ; une repartie n’a pas besoin du mot de réveil",
+    sleeping:     "un rêve consolide la mémoire",
+    cancelling:   "les groupes de processus sont en train de mourir"
+  };
+
+  /* Le mascotte n'a pas de planche pour tout : il médite pendant la
+     transcription et reste dressé pendant la relance. */
+  var SPRITE_OF = {transcribing:"thinking", followup:"listening", cancelling:"cancel"};
+
+  /* Pourquoi un couple est refusé. Ces raisons sont celles écrites en toutes
+     lettres au-dessus de la table, pas des inventions d'illustration. */
+  function why(from, ev){
+    if (from === "cancelling")
+      return "une porte fermée : les groupes sont encore en train de mourir, et un appui ne doit pas rouvrir le micro par-dessus";
+    if (ev === "speak" && from === "listening")
+      return "parler dans un micro ouvert, c’est ainsi que sa propre voix s’est retrouvée dans le transcript";
+    if (ev === "sleep")
+      return "un rêve ne prend jamais un corps qui est au milieu de quelque chose";
+    if (ev === "finish")
+      return "il n’y a pas de micro à fermer";
+    if (ev === "done")
+      return "il n’y a pas de réponse à clore";
+    if (ev === "settle")
+      return "aucune fenêtre de relance n’est ouverte";
+    if (ev === "listen")
+      return "l’oreille ne s’ouvre pas par-dessus une étape en cours — la touche annule, à la place";
+    return "ce couple n’est pas dans la table";
+  }
+
+  var fish   = document.getElementById("fish");
+  var stName = document.getElementById("stName");
+  var stMeta = document.getElementById("stMeta");
+  var logEl  = document.getElementById("log");
+  var logIn  = document.getElementById("logIn");
+  var evtsEl = document.getElementById("evts");
+  var state  = "idle";
+  var moves  = 0;
+
+  function draw(){
+    var name = SPRITE_OF[state] || state;
+    var sh = SHEETS[name];
+    fish.style.backgroundImage = "url(" + sh.src + ")";
+    fish.style.animation = "none";
+    /* Une planche par état, jouée à sa vraie cadence : les mêmes nombres que
+       plugin/Service.qml. Le nom de l'animation est unique par planche pour
+       que le navigateur reparte du début à chaque changement. */
+    fish.offsetWidth;
+    fish.style.animation = "sheet-" + name + " " + (sh.f / sh.fps).toFixed(2) + "s steps(" + sh.f + ") infinite";
+    stName.textContent = state;
+    stMeta.textContent = MEANING[state];
+    for (var i = 0; i < btns.length; i++){
+      var legal = !!T[state][btns[i].dataset.ev];
+      btns[i].classList.toggle("hot", legal);
+    }
+  }
+
+  function say(cls, html){
+    var d = document.createElement("div");
+    d.className = cls;
+    d.innerHTML = html;
+    logIn.appendChild(d);
+    while (logIn.children.length > 60) logIn.removeChild(logIn.firstChild);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function fire(ev){
+    var from = state;
+    var to = T[from][ev];
+    if (!to){
+      say("no", "✗ <b>" + ev + "</b> refusé depuis " + from);
+      say("why", why(from, ev));
+      return;
+    }
+    state = to;
+    moves++;
+    say("ok", "→ <b>" + ev + "</b> &middot; " + from + " → " + to);
+    draw();
+  }
+
+  var btns = [];
+  EVENTS.forEach(function(ev){
+    var b = document.createElement("button");
+    b.className = "evt";
+    b.type = "button";
+    b.textContent = ev;
+    b.dataset.ev = ev;
+    b.addEventListener("click", function(){ fire(ev); });
+    evtsEl.appendChild(b);
+    btns.push(b);
+  });
+
+  /* Les feuilles de style ne peuvent pas porter une keyframe par planche
+     sans les écrire douze fois : on les fabrique. */
+  (function(){
+    var css = "";
+    Object.keys(SHEETS).forEach(function(n){
+      css += "@keyframes sheet-" + n + "{to{background-position-x:-" + SHEETS[n].w + "px}}";
+    });
+    var st = document.createElement("style");
+    st.appendChild(document.createTextNode(css));
+    document.head.appendChild(st);
+  })();
+
+  say("hint", "Appuyez sur un événement. Ceux qui sont possibles ici sont allumés.");
+  draw();
+
+  /* La grille complète, construite depuis la même table — pas une recopie. */
+  (function(){
+    var t = document.getElementById("grid");
+    var h = "<thead><tr><th scope=\"col\"></th>";
+    EVENTS.forEach(function(e){ h += "<th scope=\"col\">" + e + "</th>"; });
+    h += "</tr></thead><tbody>";
+    STATES.forEach(function(s){
+      h += "<tr><th scope=\"row\">" + s + "</th>";
+      EVENTS.forEach(function(e){
+        var to = T[s][e];
+        h += to ? "<td>" + to + "</td>" : "<td class=\"x\">&middot;</td>";
+      });
+      h += "</tr>";
+    });
+    t.innerHTML = h + "</tbody>";
+  })();
+
+  /* Les douze planches, à leur cadence. */
+  (function(){
+    var GLOSS = {
+      idle:"au repos", listening:"il écoute", thinking:"il réfléchit", speaking:"il parle",
+      cancel:"il s’arrête", sleeping:"il dort", tired:"batterie basse", dnd:"ne pas déranger",
+      worried:"inquiet", proud:"fier", curious:"curieux", celebrate:"content"
+    };
+    var zoo = document.getElementById("zoo"), html = "";
+    Object.keys(SHEETS).forEach(function(n){
+      var sh = SHEETS[n];
+      html += "<div class=\"cell\"><div class=\"fishbox\"><div class=\"sprite\" style=\"" +
+              "background-image:url(" + sh.src + ");" +
+              "animation:sheet-" + n + " " + (sh.f / sh.fps).toFixed(2) + "s steps(" + sh.f + ") infinite\"></div></div>" +
+              "<div class=\"nm\">" + n + "</div>" +
+              "<div class=\"fr\">" + GLOSS[n] + "</div>" +
+              "<div class=\"fr\">" + sh.f + " img</div></div>";
+    });
+    zoo.innerHTML = html;
+  })();
+})();
+</script>
