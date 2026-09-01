@@ -133,7 +133,9 @@ assert "bash -n bootstrap.sh" bash -n "$TESTS_DIR/../bootstrap.sh"
 assert "python compile" env PYTHONPYCACHEPREFIX="$SB/pyc" python3 -m py_compile \
 	"$TESTS_DIR/../bin/jarvis-sentences" "$TESTS_DIR/../bin/jarvis-index" \
 	"$TESTS_DIR/../bin/jarvis-wake.py" "$TESTS_DIR/../bin/jarvis_wake_fsm.py"
-# shellcheck is not part of the toolchain here; run it when it happens to be.
+# ShellCheck is not part of the toolchain here; run it when it happens to be.
+# (Capital S deliberately: a comment opening with the lowercase name is read
+#  as a directive, and an unparseable directive stops the whole file.)
 command -v shellcheck >/dev/null && {
 	assert "shellcheck bin/jarvis" shellcheck -S warning -x "$JARVIS"
 	assert "shellcheck bin/jarvis-fsm.sh" shellcheck -S warning "$TESTS_DIR/../bin/jarvis-fsm.sh"
