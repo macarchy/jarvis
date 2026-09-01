@@ -3,9 +3,25 @@
 # FSM decides whether the internal microphone node exists. There is none here,
 # so it lists nothing.
 #
-# FAKE_PACTL_SLEEP holds the answer back. That is not a whim: this call sits
+# FAKE_PACTL_SLEEP holds that answer back. That is not a whim: this call sits
 # between taking the machine and opening the ear, and holding it is what makes
 # « a press that has already been overruled » a moment a test can arrive in
 # rather than a race it has to win.
-[[ -n ${FAKE_PACTL_SLEEP:-} ]] && sleep "$FAKE_PACTL_SLEEP"
+#
+# FAKE_MIC_MUTED=1 mutes the node — the one thing only `get-source-mute` can
+# say, and the one thing that made him look like he was listening on
+# 2026-09-01 while nothing at all could reach him. Writes are RECORDED rather
+# than performed: FAKE_PACTL_LOG staying empty is how a test proves he did
+# not quietly undo a mute the user meant.
+case "${1:-}" in
+get-source-mute)
+	if [[ ${FAKE_MIC_MUTED:-0} == 1 ]]; then printf 'Mute: yes\n'; else printf 'Mute: no\n'; fi
+	;;
+set-source-mute)
+	printf '%s\n' "$*" >>"${FAKE_PACTL_LOG:-/dev/null}"
+	;;
+*)
+	[[ -n ${FAKE_PACTL_SLEEP:-} ]] && sleep "$FAKE_PACTL_SLEEP"
+	;;
+esac
 exit 0

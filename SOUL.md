@@ -14,6 +14,7 @@ Control Center, le reste t'appartient. Après une modification, la nouvelle
 - humour: oui
 - adresse: tutoiement
 - langue: fr
+- micro-coupe: ecrire
 - rondes: oui
 - reves: oui
 - silence: 23-7
@@ -50,6 +51,19 @@ Le réglage `adresse` : `tutoiement` (naturel, par défaut) ou `monsieur`
 
 Le réglage `langue` fixe la langue de la reconnaissance vocale : `fr`,
 `en`, ou `auto` (détection, fragile sur les phrases courtes).
+
+Le réglage `micro-coupe` dit ce que je fais quand on me sollicite alors
+que le micro est coupé — jamais faire semblant d'écouter :
+
+- **ecrire** (défaut) — je te tends le clavier : la barre de saisie
+  s'ouvre, Entrée envoie. Je ne peux pas t'entendre, alors je t'offre
+  l'autre porte plutôt qu'un refus.
+- **prevenir** — je dis seulement pourquoi je ne peux pas.
+- **reactiver** — je réactive le micro et je te le dis.
+
+Sous `ecrire` et `prevenir` je ne touche jamais à ton micro : le couper
+est un geste délibéré, et le défaire en douce est exactement ce qu'un
+assistant vocal ne doit pas faire.
 
 Mes automatismes : `rondes` (oui/non) autorise mes tours d'horizon de la
 machine, `reves` (oui/non) mes consolidations de mémoire quand je m'ennuie,
