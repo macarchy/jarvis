@@ -1,13 +1,19 @@
+<div align="center">
+
+<img src="docs/media/fish.gif" alt="Un poisson de Babel en pixel art parcourant les états idle, listening, thinking, speaking et cancel" width="340">
+
 # Jarvis
 
-Un assistant vocal bilingue (français / English) qui vit sur un seul portable,
-avec Claude comme cerveau, le shell comme mains, et un poisson de Babel en
-pixel art comme visage.
+**Un assistant vocal qui tient dans un fichier bash.**
 
-> **[macarchy.github.io/jarvis](https://macarchy.github.io/jarvis/index.fr.html)** — le site de documentation, avec la
-> machine à états pilotable.
->
-> *English: [README.md](README.md)*
+Claude comme cerveau, le shell comme mains,
+et un poisson de Babel en pixel art comme visage.
+
+[**Documentation**](https://macarchy.github.io/jarvis/index.fr.html) · [**Pilote la machine à états**](https://macarchy.github.io/jarvis/machine.fr.html) · [English](README.md)
+
+</div>
+
+---
 
 ```
 SUPER + ALT + J          appuie pour parler, appuie encore pour la réponse
@@ -23,6 +29,39 @@ code en arrière-plan, puis vient te dire ce qu'elle a donné.
 Il répond dans la langue que tu as parlée. Il se souvient d'hier. Quand il ne
 peut pas faire quelque chose, il note pourquoi — et plus tard, quand il
 s'ennuie, il relit ces notes et les distille en leçons qu'il garde.
+
+## Ce qui vaut la peine d'être volé ici
+
+Même sans jamais le faire tourner, quatre choses de ce dépôt sont faites pour
+être lues et reprises :
+
+- **Une machine à états qui ne peut pas s'éloigner de sa documentation.** Huit
+  états, neuf événements, 38 couples légaux sur 72 — écrits en prose au-dessus
+  du code dans [`bin/jarvis-fsm.sh`](bin/jarvis-fsm.sh) et gelés dans une
+  fixture de test, pour que la table et le paragraphe qui l'explique tombent
+  ensemble ou pas du tout.
+  [Pilote-la dans ton navigateur.](https://macarchy.github.io/jarvis/machine.fr.html)
+
+- **Une annulation qui annule vraiment.** Le fichier d'état dit *ce que* fait
+  la machine ; un dossier à côté dit *quelle tentative* le fait. Chaque étape
+  porte l'époque à laquelle elle a commencé et se tait si celle-ci a bougé.
+  Chaque étape externe tourne dans son propre groupe de processus, parce que
+  tuer le groupe est ce qui atteint les sous-processus que `claude` a lancés
+  pour ses propres outils — un pid nu ne les atteint jamais, et c'est pour ça
+  qu'annuler ne faisait longtemps rien du tout.
+
+- **Une mémoire qui se consolide toute seule.** Les échecs sont notés au
+  moment où ils arrivent. Quand il s'ennuie, une session séparée les relit et
+  les distille en leçons qui deviennent une part de sa personnalité. Les
+  interruptions vont dans un autre fichier, exprès : une seule ligne dans le
+  journal des échecs suffisait à programmer une session qui réécrit sa
+  personnalité, donc appuyer sur une touche fabriquait des changements de
+  caractère permanents.
+
+- **Une suite de tests pour un assistant vocal.** Plus de 250 assertions,
+  entièrement hors ligne : un faux cerveau, une fausse voix, un faux micro qui
+  meurt vraiment sur un signal. Aucun quota, aucun réseau, aucun son, aucun
+  micro pris.
 
 ---
 

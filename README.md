@@ -1,13 +1,19 @@
+<div align="center">
+
+<img src="docs/media/fish.gif" alt="A pixel-art Babel fish cycling through the states idle, listening, thinking, speaking and cancel" width="340">
+
 # Jarvis
 
-A bilingual (français / English) voice assistant that lives on one laptop,
-with Claude as its brain, the shell as its hands, and a pixel-art Babel fish
-as its face.
+**A voice assistant that fits in one bash file.**
 
-> **[macarchy.github.io/jarvis](https://macarchy.github.io/jarvis)** — the documentation site, with the
-> state machine you can drive.
->
-> *Français : [README.fr.md](README.fr.md)*
+Claude as its brain, the shell as its hands,
+and a pixel-art Babel fish as its face.
+
+[**Documentation**](https://macarchy.github.io/jarvis) · [**Drive the state machine**](https://macarchy.github.io/jarvis/machine.html) · [Français](README.fr.md)
+
+</div>
+
+---
 
 ```
 SUPER + ALT + J          press to speak, press again to answer
@@ -23,6 +29,35 @@ a background coding session and reports back when it lands.
 He answers in the language you spoke. He remembers yesterday. When he cannot
 do something he writes down why, and later — while idle — he reads those
 notes back and distils them into lessons he keeps.
+
+## What is worth stealing here
+
+Even if you never run it, four things in this repository are designed to be
+read and taken:
+
+- **A state machine that cannot drift from its documentation.** Eight states,
+  nine events, 38 of the 72 pairs legal — written out in prose above the code
+  in [`bin/jarvis-fsm.sh`](bin/jarvis-fsm.sh) and frozen into a test fixture,
+  so the table and the paragraph explaining it fail together or not at all.
+  [Drive it in your browser.](https://macarchy.github.io/jarvis/machine.html)
+
+- **Cancelling that actually cancels.** The state file records *what* the
+  machine is doing; a record beside it records *which attempt* is doing it.
+  Every stage carries the epoch it started on and goes quiet if that moved.
+  Each external stage runs in its own process group, because killing the group
+  is what reaches the subprocesses `claude` spawned for its own tools — a bare
+  pid never does, which is why aborting used to do nothing at all.
+
+- **A memory that consolidates itself.** Failures are written down as they
+  happen. When he is idle, a separate session reads them back and distils them
+  into lessons that become part of his persona. Interruptions go in a
+  different file on purpose: one line in the failure log was enough to
+  schedule a session that rewrites his personality, so pressing a key was
+  manufacturing permanent character changes.
+
+- **A test suite for a voice assistant.** More than 250 assertions, entirely offline:
+  a fake brain, a fake voice, a fake microphone that really dies on a signal.
+  No quota, no network, no sound, no microphone taken.
 
 ---
 
