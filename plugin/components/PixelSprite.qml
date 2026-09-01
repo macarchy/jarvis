@@ -26,6 +26,9 @@ Item {
 
   Image {
     source: root.sheet
+    // The sheets are regenerated in place (omarchy-jarvis look): never
+    // serve a stale copy from Qt's cache.
+    cache: false
     smooth: false
     fillMode: Image.Stretch
     width: root.width * root.frameCount

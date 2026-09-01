@@ -20,39 +20,105 @@ import variants  # noqa: E402
 BW, BH = variants.BW, variants.BH
 OUT = os.path.join(os.path.dirname(os.path.realpath(__file__)), "parts_out")
 
-# ------------------------------------------------------------------ body
+# ---------------------------------------------------------------- bodies
 #
-# C2's body alone: eye socket filled with flesh, no crest, right edge
-# closed at the peduncle (cols 35-37) where every tail attaches.
-BODY = variants.pad([
-    "",
-    "",
-    "",
-    "",
-    "",
-    "........KYYYYYYYYYYYYYYK",
-    ".......KKYYYYYYYYYYYYYYYYKK",
-    ".....KKYYYHHHHHHHHYYYYYYYYKKK",
-    "....KYYYHHHHHHHHHHHHYYYYYYYYYKK",
-    "...KYYHYYYYYHHHHHHHHHYYYYYYYYYYKK",
-    "..KYYHYYYYYYHHHHHHHHYYYYYYYYYYYYKK",
-    ".KYYHYYYYYYYYHHHHHHHYYYYYYYYYYYYYYK",
-    ".KYHYYYYYYYYYYHHHHHHYYYYYYYYYYYYYYYK",
-    "KYYHYYYYYYYYYYHHHHHYYYYYYYYYYYYYYYYYK",
-    "KRYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYK",
-    "KRYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYK",
-    "KYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYK",
-    ".KYYYYYYYYYYYYYYKFFFKYYYYYYYYYYYYYYYYK",
-    ".KYOOYYYYYYYYYYKFFFFFKYYYYYYYYYYYYYYK",
-    "..KOOOOYYYYYYYYKFFFFFKYYYYYYYYYYYYYK",
-    "...KOOOOOOYYYYYYKFFFKYYYYYYYYYYOOOKK",
-    "....KKOOOOOOOOOOOKKKOOOOOOOOOOOOKK",
-    "......KKOOOOOOOOOOOOOOOOOOOOOKKK",
-    "........KKKOOOOOOOOOOOOOOKKKK",
-    "...........KKKKKKKKKKKKKK",
-])
+# Every body keeps its head top on row 5 (crests sit on it), fills its
+# eye socket with flesh, and closes its right edge at a peduncle where
+# every tail attaches. Anchors, in body coords:
+#   eye   top-left of the 11x8 eye box
+#   crest top-left of the 6-row crest box
+#   tail  top-left of the 12x13 tail box (its cols 1-2 overlap the edge)
+#   mouth the lip column (open_mouth carves cols mouth.x..+2)
+#   head  (x, y, w): the crown line the headphones band sits above
 
-ANCHORS = {"eye": (4, 9), "crest": (7, 0), "tail": (35, 9)}
+BODIES = {
+    "B1": ("Babel", variants.pad([
+        "", "", "", "", "",
+        "........KYYYYYYYYYYYYYYK",
+        ".......KKYYYYYYYYYYYYYYYYKK",
+        ".....KKYYYHHHHHHHHYYYYYYYYKKK",
+        "....KYYYHHHHHHHHHHHHYYYYYYYYYKK",
+        "...KYYHYYYYYHHHHHHHHHYYYYYYYYYYKK",
+        "..KYYHYYYYYYHHHHHHHHYYYYYYYYYYYYKK",
+        ".KYYHYYYYYYYYHHHHHHHYYYYYYYYYYYYYYK",
+        ".KYHYYYYYYYYYYHHHHHHYYYYYYYYYYYYYYYK",
+        "KYYHYYYYYYYYYYHHHHHYYYYYYYYYYYYYYYYYK",
+        "KRYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYK",
+        "KRYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYK",
+        "KYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYK",
+        ".KYYYYYYYYYYYYYYKFFFKYYYYYYYYYYYYYYYYK",
+        ".KYOOYYYYYYYYYYKFFFFFKYYYYYYYYYYYYYYK",
+        "..KOOOOYYYYYYYYKFFFFFKYYYYYYYYYYYYYK",
+        "...KOOOOOOYYYYYYKFFFKYYYYYYYYYYOOOKK",
+        "....KKOOOOOOOOOOOKKKOOOOOOOOOOOOKK",
+        "......KKOOOOOOOOOOOOOOOOOOOOOKKK",
+        "........KKKOOOOOOOOOOOOOOKKKK",
+        "...........KKKKKKKKKKKKKK",
+    ]), {"eye": (4, 9), "crest": (7, 0), "tail": (35, 9), "mouth": (0, 14), "head": (8, 5, 16)}),
+
+    "B2": ("Rond", variants.pad([
+        "", "", "", "", "",
+        "...........KKKKKKKK",
+        "........KKKYYYHHHHKKK",
+        "......KKYYYYYHHHHHYYKK",
+        ".....KYYYYYYYHHHHYYYYYK",
+        "....KYYYYYYYYYHHYYYYYYYK",
+        "...KYYYYYYYYYYYYYYYYYYYYK",
+        "..KYYYYYYYYYYYYYYYYYYYYYYK",
+        "..KYYYYYYYYYYYYYYYYYYYYYYYK",
+        ".KYYYYYYYYYYYYYYYYYYYYYYYYYK",
+        "KRYYYYYYYYYYYYYYYYYYYYYYYYYYK",
+        "KRYYYYYYYYYYYYYYYYYYYYYYYYYYK",
+        "KYRRYYYYYYYYYYYKFFFKYYYYYYYYK",
+        ".KYRRYYYYYYYYYKFFFFFKYYYYYYYK",
+        ".KYYYYYYYYYYYYKFFFFFKYYYYYYK",
+        "..KYOOYYYYYYYYYKFFFKYYYYYYK",
+        "..KOOOOYYYYYYYYYKKKYYYYYYK",
+        "...KOOOOOOYYYYYYYYYYYYYK",
+        "....KOOOOOOOOOYYYYYYYKK",
+        ".....KKOOOOOOOOOOOOKK",
+        ".......KKOOOOOOOKKK",
+        ".........KKKKKKKK",
+    ]), {"eye": (4, 9), "crest": (8, 0), "tail": (26, 9), "mouth": (0, 14), "head": (11, 5, 8)}),
+
+    "B3": ("Élancé", variants.pad([
+        "", "", "", "", "",
+        ".............KKKKKKKKKKKKKKKKK",
+        ".........KKKKDDDDDDDDDDDDDDDDDKKKK",
+        "......KKKDDDDDDDDDDDDDDDDDDDDDDDDDYYKK",
+        "....KKYYDDYYYYYYYYYYYYYYYYYYYYYYYYYYYYK",
+        "..KKYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYK",
+        ".KYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYK",
+        "KYYYYYYYYYYYYYYHHHHHHHHHHHHHHHHHHHYYYYYYK",
+        "KRYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYK",
+        "KRYYYYYYYYYYYYYKFFFKYYYYYYYYYYYYYYYYYYYYK",
+        ".KYYYYYYYYYYYYYKFFFFKYYYYYYYYYYYYYYYYYYK",
+        "..KKOOOOOOOOOOOOKFFFKOOOOOOOOOOOOOOOOKKK",
+        "....KKOOOOOOOOOOOKKKOOOOOOOOOOOOOOKKK",
+        "......KKKOOOOOOOOOOOOOOOOOOOOOOKKK",
+        ".........KKKKKKKKKKKKKKKKKKKKK",
+    ]), {"eye": (3, 8), "crest": (12, 0), "tail": (38, 7), "mouth": (0, 12), "head": (13, 5, 17)}),
+
+    "B4": ("Anguille", variants.pad([
+        "", "", "", "", "",
+        "..........KKKKKKK",
+        "........KKYYYYYYYKKKK",
+        "......KKYYYHHHHHHYYYYKKKKK",
+        "....KKYYYYHHHHHHHHYYYYYYYYKKKKKK",
+        "...KYYYYYYYYYYYYYYYYYYYYYYYYYYYYKKKKK",
+        "..KYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYK",
+        ".KYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYK",
+        "KRYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYK",
+        "KRYYYYYYYYYYYKFFKYYYYYYYYYYYYOOOOOOOOOOK",
+        ".KYOOYYYYYYYKFFFFKYYYYYYOOOOOOOOOOOOOKK",
+        "..KOOOOOYYYYYKFFKOOOOOOOOOOOOOOOOKKKK",
+        "...KKOOOOOOOOOKKOOOOOOOOOOOOKKKK",
+        ".....KKKOOOOOOOOOOOOOOOKKKKK",
+        "........KKKKKKKKKKKKKKK",
+    ]), {"eye": (3, 7), "crest": (9, 0), "tail": (37, 7), "mouth": (0, 12), "head": (10, 5, 7)}),
+}
+
+EYE_BOX, CREST_BOX, TAIL_BOX = (11, 8), (26, 6), (12, 13)
 
 # ------------------------------------------------------------------ eyes
 EYES = {
@@ -106,7 +172,7 @@ CRESTS = {
         ".....KYK..KYK..KYK..KY",
         "...B.KYK.KYK..KYK..KY",
         "..KYKKYYKKYKKKYK..KY",
-        ".KYYYYYYYYYYYYYYKKKY",
+        "..................KY",
     ]),
     "M2": ("Voile", [             # one sail sweeping back, its own ink
         ".........KK",             # base sits ON the head outline
@@ -194,7 +260,7 @@ TAILS = {
     ]),
 }
 
-AXES = {"eye": EYES, "crest": CRESTS, "tail": TAILS}
+AXES = {"body": BODIES, "eye": EYES, "crest": CRESTS, "tail": TAILS}
 
 # Colourways: the body ramp (Y body, O belly, H highlight, F fins, D
 # dark shade) swapped as a set. The page recolours the layers in the
@@ -209,7 +275,7 @@ PALETTES = {
     "braise":  ("Braise",  {"Y": "#FF6B6B", "O": "#D64545", "H": "#FFB3B3", "F": "#FFC6C6", "D": "#A83232"}),
     "encre":   ("Encre",   {"Y": "#5C8DFF", "O": "#3A64C8", "H": "#A9C4FF", "F": "#BFD2FF", "D": "#2B4A99"}),
 }
-DEFAULT = {"eye": "E1", "crest": "M1", "tail": "T1"}
+DEFAULT = {"body": "B1", "eye": "E1", "crest": "M1", "tail": "T1"}
 DEFAULT_PALETTE = "or"
 
 
@@ -226,19 +292,29 @@ def place(rows, part, ax, ay):
     return ["".join(r) for r in rows]
 
 
-def compose(config, body=BODY, only=None):
-    """Stack tail, body, crest, eye. `only` renders a single layer
-    (for the configurator) on an otherwise empty box."""
+def anchors(config):
+    return BODIES[config["body"]][2]
+
+
+def compose(config, only=None, crest=True, crest_dy=0):
+    """Stack tail, body, crest, eye on the body's anchors. `only` renders
+    a single layer (for the configurator); crest=False leaves the crown
+    bare (headphones); crest_dy lifts the crest (listening perk)."""
+    body = BODIES[config["body"]][1]
+    anc = anchors(config)
     rows = blank()
-    order = [("tail", TAILS), ("body", None), ("crest", CRESTS), ("eye", EYES)]
-    for name, lib in order:
+    for name in ("tail", "body", "crest", "eye"):
         if only and name != only:
             continue
         if name == "body":
             rows = place(rows, body, 0, 0)
+        elif name == "crest":
+            if crest:
+                x, y = anc["crest"]
+                rows = place(rows, CRESTS[config["crest"]][1], x, y + crest_dy)
         else:
-            part = lib[config[name]][1]
-            rows = place(rows, part, *ANCHORS[name])
+            lib = TAILS if name == "tail" else EYES
+            rows = place(rows, lib[config[name]][1], *anc[name])
     return rows
 
 
@@ -247,16 +323,17 @@ def main():
     def save(name, rows):
         img = variants.compose(rows)
         generate.write_png(os.path.join(OUT, f"{name}.png"), variants.CW, variants.CH, img.get)
-    # one PNG per axis variant, the other axes at their default
     for axis, lib in AXES.items():
         for key in lib:
-            cfg = dict(DEFAULT, **{axis: key})
-            save(f"{axis}-{key}", compose(cfg))
-    # transparent layers for the configurator
-    save("layer-body", compose(DEFAULT, only="body"))
-    for axis, lib in AXES.items():
-        for key in lib:
-            save(f"layer-{axis}-{key}", compose(dict(DEFAULT, **{axis: key}), only=axis))
+            save(f"{axis}-{key}", compose(dict(DEFAULT, **{axis: key})))
+    # transparent layers for the configurator: parts sit at a body's
+    # anchors, so each body gets its own set
+    for bkey in BODIES:
+        base = dict(DEFAULT, body=bkey)
+        save(f"layer-{bkey}-body", compose(base, only="body"))
+        for axis in ("eye", "crest", "tail"):
+            for key in AXES[axis]:
+                save(f"layer-{bkey}-{axis}-{key}", compose(dict(base, **{axis: key}), only=axis))
     print("parts:", ", ".join(f"{a}×{len(l)}" for a, l in AXES.items()))
 
 

@@ -198,6 +198,10 @@ Item {
   }
 
   readonly property url assetsDir: Qt.resolvedUrl("assets/")
+  // Flipping this drops the sheet URL for one tick, which — with
+  // Image.cache off — makes the sprite re-read the freshly generated
+  // file. `omarchy-jarvis look` calls reload after every regeneration.
+  property bool spriteBust: false
 
   function setMood(next) {
     var valid = ["idle", "listening", "thinking", "speaking", "sleeping"]
@@ -258,6 +262,12 @@ Item {
     // Punctual emotion over the idle body (celebrate, worried, tired, dnd).
     function emote(name: string): void { service.playEmote(String(name)) }
 
+    // Re-read the sprite sheets after `omarchy-jarvis look` regenerated them.
+    function reload(): void {
+      service.spriteBust = true
+      Qt.callLater(function() { service.spriteBust = false })
+    }
+
     // A little swim along the bottom edge, on demand (idle only).
     function swim(): void {
       if (service.mood === "idle" && !excursion.running) excursion.start()
@@ -305,7 +315,7 @@ Item {
       anchors.right: parent.right
       anchors.bottom: fish.top
       anchors.bottomMargin: Style.space(2)
-      px: fish.pixelScale
+      px: 4
       ink: service.bubbleInk
       paper: service.bubblePaper
       kind: service.bubbleStyle
@@ -384,8 +394,12 @@ Item {
       id: fish
       anchors.right: parent.right
       anchors.bottom: parent.bottom
-      pixelScale: 4
-      sheet: service.assetsDir + service.sprite + ".png"
+      // 72x56 sheets at 2: the same 144x112 on screen as the old 36x28 at 4,
+      // with four times the pixels for the parts engine to draw with.
+      frameWidth: 72
+      frameHeight: 56
+      pixelScale: 2
+      sheet: service.spriteBust ? "" : service.assetsDir + service.sprite + ".png"
       frameCount: service.sheets[service.sprite][0]
       fps: service.sheets[service.sprite][1]
 

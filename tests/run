@@ -101,6 +101,14 @@ assert "état revenu à idle" test "$(cat "$JARVIS_RUN/state")" = idle
 assert "échange journalisé" journal_has "échange : « test écrit »"
 assert "aucun wav synthétisé" bash -c "! ls '$JARVIS_RUN/'reply*.wav 2>/dev/null"
 
+# ---- look
+t "look: génère les onze planches depuis l'âme"
+export JARVIS_PLUGIN="$SB/plugin"; mkdir -p "$JARVIS_PLUGIN/assets"
+"$JARVIS" look
+assert "onze planches" test "$(ls "$JARVIS_PLUGIN/assets"/*.png | wc -l)" = 11
+assert "canevas 72 de large" bash -c "python3 '$TESTS_DIR/../sprites/preview.py' --no-ascii --scale 1 --out /dev/null '$JARVIS_PLUGIN/assets/tired.png' | grep -q '144x56'"
+unset JARVIS_PLUGIN
+
 # ---- rotate
 t "rotate: résume et clôt la conversation"
 printf 'test-session-id' >"$JARVIS_STATE/conversation"
