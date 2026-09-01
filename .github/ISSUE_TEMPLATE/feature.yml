@@ -1,0 +1,33 @@
+name: Idea
+description: Something Jarvis should be able to do, or do better.
+labels: ["idea"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Jarvis's capabilities are mostly prose: a paragraph in `CLAUDE.md` and a
+        line in `.claude/settings.json`. If your idea is "he should be able to
+        X", it may already be a five-line change — say what you tried.
+
+  - type: textarea
+    id: ask
+    attributes:
+      label: What you would say to him
+      description: The actual sentence, in the language you would say it. That is the specification.
+      placeholder: « réveille-moi dans vingt minutes »
+    validations:
+      required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: What happens today
+      description: His current answer, or the command you run by hand instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: how
+    attributes:
+      label: How it might work (optional)
+      description: If you know the command that would do it, that is most of the work.

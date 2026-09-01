@@ -1,0 +1,70 @@
+name: Bug report
+description: Something behaves differently from what the documentation promises.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before anything else: run `omarchy-jarvis doctor`. If a line is red,
+        [docs/troubleshooting.md](https://github.com/macarchy/jarvis/blob/main/docs/troubleshooting.md)
+        probably already answers it.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got instead. If it involves speech, quote the transcript rather than what you meant to say — the difference is often the bug.
+      placeholder: |
+        I said « mets le thème clair ». He answered « C'est fait » but the theme did not change.
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`omarchy-jarvis doctor`"
+      description: The whole output, red and green. This is worth more than a description.
+      render: text
+    validations:
+      required: true
+
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Which layer
+      description: See the table in the README. Not sure is a fine answer.
+      options:
+        - The voice loop (record, transcribe, think, speak)
+        - The hands (controlling the machine)
+        - The body (the fish, the bubble, the prompt bar)
+        - « Hey Jarvis » (the wake daemon)
+        - Install, bootstrap, or the docs
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: machine
+    attributes:
+      label: Machine
+      description: Architecture, distribution, compositor. Jarvis is written against a narrow target and this is usually the answer.
+      placeholder: aarch64, Asahi Linux (Fedora Asahi Remix), Hyprland + Omarchy
+    validations:
+      required: true
+
+  - type: textarea
+    id: trace
+    attributes:
+      label: The black box (optional)
+      description: |
+        The lines around the moment, from `memory/trace/<date>.log`.
+        **Read them before you paste them** — that file logs every command Jarvis ran on your machine.
+      render: text
+
+  - type: checkboxes
+    id: tests
+    attributes:
+      label: Before submitting
+      options:
+        - label: "`./tests/run` — I have run it and said below if it is not green"
+        - label: I have checked docs/troubleshooting.md
