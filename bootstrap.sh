@@ -94,14 +94,28 @@ fi
 # VOICE_FR at in bin/jarvis; they are not downloaded unless asked for.
 
 say "Voices — rhasspy/piper-voices"
+# Which French voice, according to the soul (`voix: siwis | tom | upmc`), the
+# same line bin/jarvis reads. Two voices are fetched — the French one he is
+# configured to speak, and the English one for an English reply. The other
+# two French voices are alternates; they are not downloaded unless asked for,
+# which is also how the AGPL-licensed `tom` stays a deliberate choice rather
+# than something a default install pulls in without being asked.
+fr=$(sed -n 's/^- voix: *//p' SOUL.md 2>/dev/null | head -1 | tr -d ' ')
+case "$fr" in siwis | tom | upmc) ;; *) fr=siwis ;; esac
+declare -A FR_PATH=(
+	[siwis]="fr/fr_FR/siwis/medium/fr_FR-siwis-medium"
+	[tom]="fr/fr_FR/tom/medium/fr_FR-tom-medium"
+	[upmc]="fr/fr_FR/upmc/medium/fr_FR-upmc-medium"
+)
 voices=(
-	"fr/fr_FR/tom/medium/fr_FR-tom-medium"
+	"${FR_PATH[$fr]}"
 	"en/en_GB/alan/medium/en_GB-alan-medium"
 )
-((all_voices)) && voices+=(
-	"fr/fr_FR/siwis/medium/fr_FR-siwis-medium"
-	"fr/fr_FR/upmc/medium/fr_FR-upmc-medium"
-)
+if ((all_voices)); then
+	for k in siwis tom upmc; do
+		[[ $k == "$fr" ]] || voices+=("${FR_PATH[$k]}")
+	done
+fi
 for path in "${voices[@]}"; do
 	name=$(basename "$path")
 	if [[ -s models/$name.onnx && -s models/$name.onnx.json ]]; then

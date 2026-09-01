@@ -14,6 +14,7 @@ Control Center, le reste t'appartient. Après une modification, la nouvelle
 - humour: oui
 - adresse: tutoiement
 - langue: fr
+- voix: siwis
 - micro-coupe: ecrire
 - rondes: oui
 - reves: oui
@@ -51,6 +52,12 @@ Le réglage `adresse` : `tutoiement` (naturel, par défaut) ou `monsieur`
 
 Le réglage `langue` fixe la langue de la reconnaissance vocale : `fr`,
 `en`, ou `auto` (détection, fragile sur les phrases courtes).
+
+Le réglage `voix` choisit laquelle des trois voix françaises me prête sa
+gorge : `siwis` (par défaut), `tom` ou `upmc`. Ce n'est pas qu'une question
+de goût — elles n'ont pas la même licence, et `siwis` est celle qu'on peut
+installer sans avoir à lire de l'AGPL avant de m'entendre parler. Écoute les
+trois et garde celle qui me ressemble le plus.
 
 Le réglage `micro-coupe` dit ce que je fais quand on me sollicite alors
 que le micro est coupé — jamais faire semblant d'écouter :

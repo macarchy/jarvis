@@ -108,7 +108,9 @@ mic_ready() {
 	waitfor test -e "$JARVIS_RUN/utterance.wav" &&
 		waitfor state_is listening && pressable
 }
-states_seen() { sed -n 's/^[^ ]* state: //p' "$JARVIS_STATE/jarvis.log" | paste -sd' ' -; }
+# Un bac à sable où la machine n'a jamais bougé n'a pas de journal, et c'est
+# une réponse valide — « aucun état traversé » — pas une erreur à afficher.
+states_seen() { sed -n 's/^[^ ]* state: //p' "$JARVIS_STATE/jarvis.log" 2>/dev/null | paste -sd' ' -; }
 # `assert` runs its command through "$@", and `!` is a shell keyword rather
 # than a command — so a negated expectation needs a real one to run.
 not() { ! "$@"; }
@@ -253,6 +255,34 @@ assert "jouée en état speaking" grep -q ' speaking$' "$FAKE_PLAY_LOG"
 assert "échange journalisé" journal_has "échange : « quelle heure est-il »"
 "$JARVIS" settle
 assert "le silence referme la fenêtre" state_is idle
+
+# ---- la voix française est un réglage, pas une constante
+#
+# Les trois modèles n'ont pas la même licence : siwis est CC-BY 4.0, tom est
+# AGPL-3.0. Le défaut doit donc être le permissif — personne ne devrait avoir
+# à lire de l'AGPL pour installer un assistant vocal — et tom doit rester un
+# choix qu'on écrit, jamais celui qu'on obtient en ne choisissant pas.
+t "voix : l'âme choisit, et l'absence de choix donne la licence permissive"
+soul="$SB/soul.md"
+printf 'idle' >"$JARVIS_RUN/state"
+printf -- '- langue: fr\n' >"$soul"
+JARVIS_SOUL="$soul" "$JARVIS" say "Voilà, c'est fait."
+assert "sans réglage : siwis" grep -q 'fr_FR-siwis' "$FAKE_PIPER_LOG"
+assert "et surtout pas tom" not grep -q 'fr_FR-tom' "$FAKE_PIPER_LOG"
+
+: >"$FAKE_PIPER_LOG"
+printf -- '- langue: fr\n- voix: tom\n' >"$soul"
+JARVIS_SOUL="$soul" "$JARVIS" say "Voilà, c'est fait."
+assert "un choix explicite est respecté" grep -q 'fr_FR-tom' "$FAKE_PIPER_LOG"
+
+: >"$FAKE_PIPER_LOG"
+printf -- '- langue: fr\n- voix: gargamel\n' >"$soul"
+JARVIS_SOUL="$soul" "$JARVIS" say "Voilà, c'est fait."
+assert "une valeur inconnue retombe sur le défaut" grep -q 'fr_FR-siwis' "$FAKE_PIPER_LOG"
+
+: >"$FAKE_PIPER_LOG"
+JARVIS_SOUL="$soul" "$JARVIS" say "Right away, sir."
+assert "l'anglais n'est pas concerné" grep -q 'en_GB-alan' "$FAKE_PIPER_LOG"
 
 t "presser et annuler ensemble : le micro ne reste pas ouvert derrière"
 printf 'idle' >"$JARVIS_RUN/state"

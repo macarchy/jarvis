@@ -77,7 +77,6 @@ SPRITES_DIR="${JARVIS_SPRITES:-$HOME/.local/share/jarvis/sprites}"
 # untested because of it. JARVIS_PIPER/JARVIS_VOXTYPE swap in the fakes.
 PIPER="${JARVIS_PIPER:-$JARVIS_DIR/piper/piper}"
 VOXTYPE="${JARVIS_VOXTYPE:-voxtype}"
-VOICE_FR="$JARVIS_DIR/models/fr_FR-tom-medium.onnx"
 VOICE_EN="$JARVIS_DIR/models/en_GB-alan-medium.onnx"
 STT_CONFIG="$JARVIS_DIR/voxtype.toml"
 REPLY_TXT="$RUN_DIR/reply.txt"
@@ -485,11 +484,28 @@ pick_model() {
 
 # ------------------------------------------------------------- the organs
 
+# Which French voice speaks. His voice is as much who he is as his tone or
+# his fish, so the soul chooses it — and the three models do not share a
+# licence, which decides the default: siwis is CC-BY 4.0, upmc CC-BY-SA 4.0,
+# and tom is AGPL-3.0. Nobody should have to reason about copyleft to install
+# a voice assistant, so tom is a deliberate choice rather than what you get by
+# not choosing. Read fresh every time, like `langue`: a change from the
+# Control Center applies to the next sentence, not the next reboot.
+voice_fr() {
+	local name
+	name=$(setting voix siwis)
+	case "$name" in
+	siwis | tom | upmc) ;;
+	*) name=siwis ;;
+	esac
+	printf '%s' "$JARVIS_DIR/models/fr_FR-$name-medium.onnx"
+}
+
 # Crude but effective: French replies carry accents or French function words.
 voice_for() {
 	local text=${1,,}
 	if [[ $text == *[éèêàçùôîû]* || $text =~ (^|[[:space:]])(le|la|les|est|c\'est|voilà|activé|activée|fait|batterie|monsieur)([[:space:]]|[.,!]|$) ]]; then
-		echo "$VOICE_FR"
+		voice_fr
 	else
 		echo "$VOICE_EN"
 	fi
@@ -1734,7 +1750,7 @@ doctor)
 	check_piper() {
 		local out rc size
 		out=$(mktemp) || return 1
-		printf 'test' | timeout 5 "$PIPER" --model "$VOICE_FR" --output_file "$out" >/dev/null 2>&1
+		printf 'test' | timeout 5 "$PIPER" --model "$(voice_fr)" --output_file "$out" >/dev/null 2>&1
 		rc=$?
 		size=$(stat -c %s "$out" 2>/dev/null || echo 0)
 		rm -f "$out"
