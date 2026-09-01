@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "macarchy.jarvis",
   "name": "Jarvis Mascot",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "phmatray",
-  "description": "The Babel fish: Jarvis's pixel-art mascot, animated by the voice pipeline's states",
+  "description": "The Babel fish: Jarvis's pixel-art mascot, animated by the voice pipeline's states, cancellation included",
   "kinds": [
     "service"
   ],

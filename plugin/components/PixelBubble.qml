@@ -1,7 +1,9 @@
 // The comic philactère, in the fish's own pixels. A paper card with a
 // stepped ink border drawn on a unit grid (one unit = one fish pixel),
-// a tail that leans down-left toward the mouth, and a "thought" variant
-// (dashed border, drifting beads) for what he says in his sleep.
+// a tail that leans down-left toward the mouth, a "thought" variant
+// (dashed border, drifting beads) for what he says in his sleep, and a
+// "cut" one — the card sealed, the tail severed into two drifting stubs —
+// for a sentence the user cancelled halfway through.
 //
 // The Canvas only draws chrome; the caller owns the content and sizes
 // this item so that height = content + margins + tailUnits * px.
@@ -18,7 +20,7 @@ Item {
   // Tail apex, in units from the LEFT edge; the caller aims it at the
   // mouth and clamps it inside the card.
   property int tailX: 6
-  property string kind: "speech" // speech | thought
+  property string kind: "speech" // speech | thought | cut
 
   readonly property int tailPx: tailUnits * px
 
@@ -71,6 +73,13 @@ Item {
         cell(tx - 1, Hp + 1, root.ink); cell(tx, Hp + 1, root.paper); cell(tx + 1, Hp + 1, root.paper); cell(tx + 2, Hp + 1, root.ink)
         cell(tx - 1, Hp + 2, root.ink); cell(tx, Hp + 2, root.paper); cell(tx + 1, Hp + 2, root.ink)
         cell(tx - 1, Hp + 3, root.ink); cell(tx, Hp + 3, root.ink)
+      } else if (root.kind === "cut") {
+        // A tail cut in two: the stub still under the card, an empty row
+        // where the sentence stopped, and the severed tip drifting on
+        // toward a mouth that is no longer saying anything.
+        cell(tx, Hp, root.ink); cell(tx + 1, Hp, root.ink)
+        cell(tx, Hp + 1, root.ink)
+        cell(tx - 2, Hp + 3, root.ink); cell(tx - 1, Hp + 3, root.ink)
       } else {
         // Thought beads drifting down toward the head: paper hearts so
         // they read as bubbles, not crumbs.
