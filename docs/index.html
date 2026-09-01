@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jarvis · le poisson de Babel</title>
+<meta name="description" content="A bilingual voice assistant that lives on one laptop, with Claude as its brain, the shell as its hands, and a pixel-art Babel fish as its face.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --water:#152430; --deep:#0B1620; --glass:#284157;
+  --paper:#FFF8E6; --ink:#181208; --ink-soft:#4A3F26;
+  --gold:#F2C94C; --wave:#78BEFF; --dim:#7E97A8; --dimmer:#4E6576;
+  --px:4px; color-scheme:dark;
+}
+html{box-sizing:border-box;-webkit-text-size-adjust:100%}
+*,*::before,*::after{box-sizing:inherit}
+body{
+  margin:0; background:var(--water); color:#DCE7EE;
+  font-family:"Newsreader",Georgia,serif; font-size:17.5px; line-height:1.62; font-weight:300;
+}
+.wrap{max-width:940px;margin:0 auto;padding:0 22px}
+a{color:var(--wave)}
+
+/* ─── le seuil ───────────────────────────────────────────────────── */
+.hero{
+  padding:66px 0 46px; display:grid; gap:34px;
+  grid-template-columns:minmax(0,1fr) auto; align-items:center;
+}
+@media (max-width:720px){.hero{grid-template-columns:1fr;padding-top:44px}}
+h1{
+  font-family:"Silkscreen",monospace;font-weight:400;letter-spacing:.01em;
+  font-size:clamp(30px,7vw,52px);line-height:1.1;margin:0;color:var(--gold);
+}
+.tagline{
+  font-family:"Silkscreen",monospace;font-size:11px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--dim);margin:14px 0 20px;
+}
+.lede{font-size:20px;line-height:1.55;color:#C6D6E1;max-width:52ch;margin:0}
+
+.tank{
+  background:var(--deep);box-shadow:inset 0 0 0 1px var(--glass);
+  width:210px;height:170px;display:flex;align-items:center;justify-content:center;
+  background-image:radial-gradient(120% 90% at 50% 118%, rgba(120,190,255,.12), transparent 62%);
+}
+.fish{
+  width:72px;height:56px;image-rendering:pixelated;transform:scale(2);
+  background-repeat:no-repeat;
+  background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAbAAAAA4CAYAAACc2q0rAAACwUlEQVR42u3cMU7cQBQGYJepU+UIkbhCjsCBqClzgBQchjpcAIkOpaZKEynNRoAcmdHaHntm5Tf290lWyEqJ1j//ewbvQtcBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAO3Nzf/qZ8xjoj3zkQxhfPn86/X64Ps09ZsAMmP7IRz72T7jyvP4595gBM2D6Ix/52D9hruhpWaYKlQZowI47YPojH/nYP5uH0n+c/r3/OLdQBuw4A6Y/8pGP/bNpedYcaYgG7HgDpj/ykY/9s1kwJQVKgzRgxxow/ZGPfOyfEMX5++t28sgt0Z6KZMD0Rz7ysX8CX9HnirO0SHsIzIDpj3zkY/8ELs/rSQ9Pqj9qlajVIhkw/ZGPfOyfBspzzlyJan/7GilMA6Y/NfMZOx/56I/9U6k8jy/vR26JSl9QTJ/Xn+fvb8fWQUYdsAhDpj91Ll45F7Gj5KM/9s/icObK0z/RqaBKX0w8Vx4Ddj16/hGGTH+W5ZN7LkfNR3/sn+pX9mGBxr5dLX03TPpiogGbLlGEjPSn/LbP2HHUfPTH/lkUzo9vXz88ySnpD8Rd4mjlqx8Dpj9r8sk9h6Pmoz/2z+oC5ZboUuVJCxTh3rMB05/a+Wx18WolH/2xfxZf4ceutOlxyfJY0O0NmP7IRz72T7gltPaTXbtAUe7RGzD9kY987J9Y++d/SE93V29HySe6tETD389lwNq6gOmPfORj/2wWUl+g3CLVLtDUu1wM2MeMohVIf+QjH/sn3BKaC63kCj/8/8d+GC7SbwqINGDh7kPrj3zkY/9ECGqqSOeO4f3XJf9uqjgRRRuwiNnpj3zkY/80WaQ1hesaY8D0Rz7ysX8aC6ykTOm7ZLodMGD6Ix/52D+NlmnJ0e2YAdMf+cjH/sGAAdg/AAAAAAAAAAAAAAAAAAT3D7oBi7G9O5XvAAAAAElFTkSuQmCC);
+  animation:swim 2.73s steps(6) infinite;
+}
+@keyframes swim{to{background-position-x:-432px}}
+@media (prefers-reduced-motion:reduce){.fish{animation:none}}
+
+/* ─── les portes ─────────────────────────────────────────────────── */
+section{padding:8px 0 56px}
+.eyebrow{
+  font-family:"Silkscreen",monospace;font-size:10.5px;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--dimmer);display:block;margin:0 0 16px;
+}
+.doors{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr))}
+.door{
+  display:block;text-decoration:none;background:var(--paper);color:var(--ink-soft);
+  padding:20px 20px 18px;margin:var(--px);
+  box-shadow:0 calc(-1*var(--px)) 0 0 var(--ink), 0 var(--px) 0 0 var(--ink),
+             calc(-1*var(--px)) 0 0 0 var(--ink), var(--px) 0 0 0 var(--ink);
+  transition:transform .12s;
+}
+.door:hover,.door:focus-visible{transform:translateY(-2px)}
+.door:focus-visible{outline:3px solid var(--gold);outline-offset:5px}
+.door h2{
+  font-family:"Silkscreen",monospace;font-weight:400;font-size:13px;margin:0 0 9px;
+  color:var(--ink);border-bottom:2px solid rgba(24,18,8,.16);padding-bottom:7px;
+}
+.door p{margin:0;font-size:15px;line-height:1.5}
+.door .lead{color:#8A6A12;font-weight:600}
+
+/* ─── s'installer ────────────────────────────────────────────────── */
+pre{
+  background:var(--deep);color:#9FB8C8;padding:18px 20px;overflow-x:auto;margin:0;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:13px;line-height:1.8;
+  box-shadow:inset 0 0 0 1px rgba(120,190,255,.12);
+}
+pre b{color:var(--gold);font-weight:500}
+pre i{color:var(--dimmer);font-style:normal}
+.note{font-size:15px;color:var(--dim);max-width:66ch;margin:14px 0 0}
+.note code{font-family:"IBM Plex Mono",monospace;font-size:.85em;
+  background:rgba(120,190,255,.10);color:#A9CFEC;padding:1px 5px;border-radius:2px}
+
+footer{padding:10px 0 64px;color:var(--dimmer);font-size:13.5px;
+  border-top:1px solid rgba(120,190,255,.10)}
+footer .mono{font-family:"IBM Plex Mono",monospace;font-size:12px;margin:22px 0 6px}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <div class="hero">
+    <div>
+      <h1>Jarvis</h1>
+      <p class="tagline">le poisson de Babel</p>
+      <p class="lede">
+        A bilingual voice assistant that lives on one laptop, with Claude as its
+        brain, the shell as its hands, and a pixel-art Babel fish as its face.
+        He answers in the language you spoke, and he remembers yesterday.
+      </p>
+    </div>
+    <div class="tank"><div class="fish"></div></div>
+  </div>
+
+  <section>
+    <span class="eyebrow">cinq portes</span>
+    <div class="doors">
+
+      <a class="door" href="machine.html">
+        <h2>La machine</h2>
+        <p><span class="lead">Eight states, nine events, drivable.</span>
+        Press the events and watch the illegal ones be refused, with the reason.
+        Thirty seconds here beats reading the architecture.</p>
+      </a>
+
+      <a class="door" href="privacy.html">
+        <h2>Vie privée</h2>
+        <p><span class="lead">What leaves your machine.</span>
+        Audio never does. The transcript goes to Anthropic. The screen and the
+        clipboard only when you ask, in that exchange. With the source lines
+        that prove it.</p>
+      </a>
+
+      <a class="door" href="troubleshooting.html">
+        <h2>Dépannage</h2>
+        <p><span class="lead">When something is red.</span>
+        One entry per line <code>doctor</code> can print, in the order it prints
+        them — and the things it cannot see.</p>
+      </a>
+
+      <a class="door" href="poisson.html">
+        <h2>Le poisson</h2>
+        <p><span class="lead">Twelve sheets, 256 fish.</span>
+        The sprite engine — every gesture is built from parts and proved on all
+        256 configurations before it is accepted.</p>
+      </a>
+
+      <a class="door" href="assembler.html">
+        <h2>L’assembler</h2>
+        <p><span class="lead">Four bodies, four eyes, four crests, four tails.</span>
+        Roll your own fish, then write the five settings into
+        <code>SOUL.md</code>.</p>
+      </a>
+
+    </div>
+  </section>
+
+  <section>
+    <span class="eyebrow">l'installer</span>
+    <pre><b>git clone</b> https://github.com/macarchy/jarvis.git ~/Work/jarvis
+<b>cd</b> ~/Work/jarvis
+<b>./bootstrap.sh</b>      <i># Piper, its voices, the Whisper model, the wake venv</i>
+<b>./install.sh</b>        <i># the CLI, the mascot plugin, the user units</i>
+<b>omarchy-jarvis doctor</b></pre>
+    <p class="note">
+      The voice loop is portable — Linux, PipeWire, voxtype, Claude Code. The
+      <em>hands</em> need Omarchy and Hyprland, and the <em>body</em> needs
+      Quickshell; both fail softly, so on a plain Linux box he still listens,
+      thinks and speaks. The full honesty is in the
+      <a href="https://github.com/macarchy/jarvis#readme">README</a>
+      (<a href="https://github.com/macarchy/jarvis/blob/main/README.fr.md">en français</a>).
+    </p>
+  </section>
+
+  <footer>
+    <p class="mono">macarchy/jarvis · MIT · <a href="https://github.com/macarchy/jarvis">le code</a></p>
+    <p style="margin:0">
+      « Comme mon homonyme du <em>Guide du voyageur galactique</em>, je comprends
+      toutes les langues qu’on me parle, et j’y réponds. Je suis la voix de ce
+      système : ses daemons sont mes nageoires. »
+    </p>
+  </footer>
+
+</div>
+
+</body>
+</html>

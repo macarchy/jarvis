@@ -4,6 +4,9 @@ Un assistant vocal bilingue (français / English) qui vit sur un seul portable,
 avec Claude comme cerveau, le shell comme mains, et un poisson de Babel en
 pixel art comme visage.
 
+> **[macarchy.github.io/jarvis](https://macarchy.github.io/jarvis)** — le site de documentation, avec la
+> machine à états pilotable.
+>
 > *English: [README.md](README.md)*
 
 ```
@@ -112,10 +115,10 @@ seulement 38 des 72 couples sont légaux. Elle est dans
 gelée dans `tests/fixtures/transitions.txt` : elle ne peut pas s'éloigner de sa
 propre documentation sans rendre un test rouge.
 
-**[web/documentation.html](web/documentation.html), c'est cette machine, en
-pilotable.** Ouvre-la dans un navigateur : appuie sur les événements, regarde
-le poisson changer, et regarde les coups illégaux être refusés avec leur
-raison. Trente secondes là-bas valent mieux que cette section.
+**[La machine, en pilotable](https://macarchy.github.io/jarvis/machine.html)** —
+appuie sur les événements, regarde le poisson changer, et regarde les coups
+illégaux être refusés avec leur raison. Trente secondes là-bas valent mieux
+que cette section.
 
 Ce qui est bon à voler si tu construis quelque chose d'approchant : le fichier
 d'état dit *ce que* fait la machine, et un dossier à côté dit *quelle

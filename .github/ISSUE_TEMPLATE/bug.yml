@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Before anything else: run `omarchy-jarvis doctor`. If a line is red,
-        [docs/troubleshooting.md](https://github.com/macarchy/jarvis/blob/main/docs/troubleshooting.md)
+        [the troubleshooting page](https://macarchy.github.io/jarvis/troubleshooting.html)
         probably already answers it.
 
   - type: textarea
