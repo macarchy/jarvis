@@ -7,3 +7,5 @@ wake/dataset/
 wake/verifier-hey-jarvis.joblib
 memory/trace/
 __pycache__/
+sprites/variants/
+sprites/parts_out/
