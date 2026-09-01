@@ -31,7 +31,7 @@
 :root{
   --water:#152430; --deep:#0B1620; --glass:#284157;
   --paper:#FFF8E6; --ink:#181208; --ink-soft:#4A3F26; --rule:rgba(24,18,8,.14);
-  --gold:#F2C94C; --wave:#78BEFF; --dim:#7E97A8; --dimmer:#4E6576;
+  --gold:#F2C94C; --wave:#78BEFF; --dim:#97ABBA; --dimmer:#728DA1;
   --px:4px; color-scheme:dark;
 }
 html{box-sizing:border-box;-webkit-text-size-adjust:100%}
@@ -59,7 +59,7 @@ nav a[aria-current]{color:var(--wave);border-bottom-color:var(--wave)}
    perdre sa place en changeant de langue est la faute classique. */
 .langs{margin-left:auto;display:flex;gap:2px;font-family:"Silkscreen",monospace;font-size:10px}
 .langs a,.langs span{padding:5px 8px;letter-spacing:.08em;text-decoration:none;line-height:1}
-.langs a{color:var(--dim);border:1px solid rgba(126,151,168,.3)}
+.langs a{color:var(--dim);border:1px solid rgba(151,171,186,.35)}
 .langs a:hover{color:var(--gold);border-color:var(--gold)}
 .langs span{color:var(--water);background:var(--gold);border:1px solid var(--gold);font-weight:700}
 
@@ -127,12 +127,14 @@ a:focus-visible,nav a:focus-visible,.langs a:focus-visible{outline:2px solid var
       <a href="{{ site.baseurl }}/privacy.fr.html"{% if page.url contains 'privacy' %} aria-current="page"{% endif %}>vie privée</a>
       <a href="{{ site.baseurl }}/troubleshooting.fr.html"{% if page.url contains 'trouble' %} aria-current="page"{% endif %}>dépannage</a>
       <a href="{{ site.baseurl }}/poisson.fr.html">le poisson</a>
+      <a href="{{ site.baseurl }}/assembler.fr.html">l’assembler</a>
       <a href="https://github.com/macarchy/jarvis">le code</a>
       {% else %}
       <a href="{{ site.baseurl }}/machine.html">the machine</a>
       <a href="{{ site.baseurl }}/privacy.html"{% if page.url contains 'privacy' %} aria-current="page"{% endif %}>privacy</a>
       <a href="{{ site.baseurl }}/troubleshooting.html"{% if page.url contains 'trouble' %} aria-current="page"{% endif %}>troubleshooting</a>
       <a href="{{ site.baseurl }}/poisson.html">the fish</a>
+      <a href="{{ site.baseurl }}/assembler.html">build one</a>
       <a href="https://github.com/macarchy/jarvis">the code</a>
       {% endif %}
     </nav>

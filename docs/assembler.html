@@ -66,9 +66,27 @@ button:focus-visible{outline:3px solid var(--wave);outline-offset:4px}
 .langs a:hover{color:#F2C94C;border-color:#F2C94C}
 .langs span{color:#152430;background:#F2C94C;border:1px solid #F2C94C;font-weight:700}
 .langs a:focus-visible{outline:2px solid #F2C94C;outline-offset:3px}
+
+/* ─── l'en-tête commun : les pages faites main partageaient le sélecteur de
+   langue mais pas la navigation, ce qui faisait d'elles des culs-de-sac —
+   or machine.html est justement la page que le README met en avant. */
+.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:baseline;padding:26px 0 22px}
+.top .brand{font-family:"Silkscreen","Courier New",monospace;font-size:19px;color:#F2C94C;
+  text-decoration:none;letter-spacing:.02em}
+.top .brand:hover{color:#FFE07A}
+.top nav{display:flex;flex-wrap:wrap;gap:16px;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px}
+.top nav a{color:#97ABBA;text-decoration:none;border-bottom:1px solid transparent;padding-bottom:2px}
+.top nav a:hover{color:#78BEFF;border-bottom-color:#78BEFF}
+.top nav a[aria-current]{color:#78BEFF;border-bottom-color:#78BEFF}
+.top .langs{margin-left:auto}
+.top nav a:focus-visible,.top .brand:focus-visible{outline:2px solid #F2C94C;outline-offset:3px}
 </style>
 <div class="wrap">
-<div class="langbar"><div class="langs"><span aria-current="true">EN</span><a href="assembler.fr.html" hreflang="fr" lang="fr">FR</a></div></div>
+<header class="top">
+  <a class="brand" href="index.html">JARVIS</a>
+  <nav><a href="machine.html">the machine</a><a href="privacy.html">privacy</a><a href="troubleshooting.html">troubleshooting</a><a href="poisson.html">the fish</a><a href="assembler.html" aria-current="page">build one</a><a href="https://github.com/macarchy/jarvis">the code</a></nav>
+  <div class="langs"><span aria-current="true">EN</span><a href="assembler.fr.html" hreflang="fr" lang="fr">FR</a></div>
+</header>
 <h1>Build your Jarvis</h1>
 <p class="lead">Four bodies, four eyes, four crests, four tails, eight colourways — 2,048 possible fish. Every part attaches to a fixed anchor — that is what lets any combination be animated by the same code. On the machine, the same thing is set from the Control Center (Jarvis › Appearance) — the plate matches the lines in SOUL.md.</p>
 <div class="atelier">
