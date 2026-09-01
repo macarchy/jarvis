@@ -149,7 +149,9 @@ fsm_next() {
 }
 
 FSM_STATES=(idle listening transcribing thinking speaking followup sleeping cancelling)
-FSM_EVENTS=(listen finish ask speak done settle sleep rest cancel)
+# `done` is quoted because it is a loop keyword: bare, a linter reads the
+# array as an unterminated `for`. It is an event name here, nothing more.
+FSM_EVENTS=(listen finish ask speak "done" settle sleep rest cancel)
 
 # The whole grid, one row per state. This is the documentation of record:
 # tests/fixtures/transitions.txt holds a copy and the suite diffs the two.

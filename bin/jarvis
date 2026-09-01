@@ -516,7 +516,7 @@ voice_for() {
 # after a real exchange, plain idle otherwise or when nobody is watching.
 after_speaking() {
 	if [[ ${1:-} == followup ]] && wake_alive; then
-		transition done
+		transition "done"
 	else
 		transition rest
 	fi
