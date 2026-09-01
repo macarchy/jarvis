@@ -86,12 +86,12 @@ EYES = {
         ".KWWWWPPPK",
         "..KKKKKKK",
     ]),
-    "E4": ("Anneau", [           # no white: a ring, Game Boy style
+    "E4": ("Anneau", [           # no white: a ring with one catchlight
         "",
         "....KKKK",
         "...KHHHHK",
         "..KHKKKKHK",
-        "..KHKKKKHK",
+        "..KHKKLKHK",
         "...KHHHHK",
         "....KKKK",
         "",
@@ -108,13 +108,13 @@ CRESTS = {
         "..KYKKYYKKYKKKYK..KY",
         ".KYYYYYYYYYYYYYYKKKY",
     ]),
-    "M2": ("Plumes", [            # three thick plumes with barbs
-        "...BB......BB.....BB",
-        "..KYYK....KYYK....KYYK",
-        ".KFYYFK..KFYYFK..KFYYFK",
-        "..KYYK....KYYK....KYYK",
-        ".KFYYFK..KFYYFK..KFYYFK",
-        "..KYYK....KYYK....KYYK",
+    "M2": ("Voile", [             # one sail sweeping back, its own ink
+        ".........KK",             # base sits ON the head outline
+        "........KFFK",
+        ".......KFFFFKK",
+        "......KFFFFFFFKK",
+        ".....KFFFFFFFFFFKK",
+        "....KKKKKKKKKKKKKKK",
     ]),
     "M3": ("Mohawk", [            # eight short filaments, blue tips
         "",
@@ -150,17 +150,17 @@ TAILS = {
         "....KFFK",
         ".....KK",
     ]),
-    "T2": ("Éventail", [          # rounded fan, goldfish-like
+    "T2": ("Éventail", [          # rounded fan, folds shaded at the base
         "",
         ".....KKKK",
         "...KKFFFFK",
-        "..KFFFFFFFK",
-        ".KKFFFFFFFFK",
-        ".KFFFFFFFFFK",
-        ".KFFFFFFFFFK",
-        ".KFFFFFFFFFK",
-        ".KKFFFFFFFFK",
-        "..KFFFFFFFK",
+        "..KOFFFFFFK",
+        ".KKOOFFFFFFK",
+        ".KOOOFFFFFFK",
+        ".KOOOFFFFFFK",
+        ".KOOOFFFFFFK",
+        ".KKOOFFFFFFK",
+        "..KOFFFFFFK",
         "...KKFFFFK",
         ".....KKKK",
     ]),
@@ -179,23 +179,38 @@ TAILS = {
         ".......KFK",
         "........KK",
     ]),
-    "T4": ("Ruban", [             # translucent double ribbon, no outline
+    "T4": ("Ruban", [             # two translucent veils diverging
         "",
         "",
-        "........FF",
+        "..........FF",
+        "........FFFF",
         "......FFFF",
-        "..FFFFFFF",
-        ".FFFFFFFFFF",
-        ".FFFFFFFF",
-        ".FFFFFFFFFF",
-        "..FFFFFFF",
+        "..KFFFFF",
+        ".KFFF",
+        "..KFFFFF",
         "......FFFF",
-        "........FF",
+        "........FFFF",
+        "..........FF",
     ]),
 }
 
 AXES = {"eye": EYES, "crest": CRESTS, "tail": TAILS}
+
+# Colourways: the body ramp (Y body, O belly, H highlight, F fins, D
+# dark shade) swapped as a set. The page recolours the layers in the
+# browser; generate.py will take the same table.
+PALETTES = {
+    "or":      ("Or",      {"Y": "#F2C94C", "O": "#D99A2B", "H": "#FAE282", "F": "#F7E08A", "D": "#C48022"}),
+    "corail":  ("Corail",  {"Y": "#F08A5D", "O": "#C95C3A", "H": "#FFB48F", "F": "#FFC9A8", "D": "#A64A2C"}),
+    "lagon":   ("Lagon",   {"Y": "#4CC9C0", "O": "#2A9D96", "H": "#9CEDE7", "F": "#B8F2EC", "D": "#1F7A75"}),
+    "lavande": ("Lavande", {"Y": "#A78BFA", "O": "#7C5CD6", "H": "#D1C4FF", "F": "#DCD3FF", "D": "#5F45B0"}),
+    "menthe":  ("Menthe",  {"Y": "#7ED957", "O": "#4FA83A", "H": "#C0F2A6", "F": "#D2F5C0", "D": "#3B8228"}),
+    "perle":   ("Perle",   {"Y": "#ECE7DC", "O": "#BFB6A6", "H": "#FFFFFF", "F": "#F6F2EA", "D": "#9A9082"}),
+    "braise":  ("Braise",  {"Y": "#FF6B6B", "O": "#D64545", "H": "#FFB3B3", "F": "#FFC6C6", "D": "#A83232"}),
+    "encre":   ("Encre",   {"Y": "#5C8DFF", "O": "#3A64C8", "H": "#A9C4FF", "F": "#BFD2FF", "D": "#2B4A99"}),
+}
 DEFAULT = {"eye": "E1", "crest": "M1", "tail": "T1"}
+DEFAULT_PALETTE = "or"
 
 
 def blank():
