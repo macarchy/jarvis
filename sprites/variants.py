@@ -148,8 +148,121 @@ GAMEBOY = pad([
     ".........KKKKKKKKKKKKKKK",
 ])
 
+# ===========================================================================
+# The Babel direction, explored: four sub-variants, one axis each.
+
+# C1 — « Ruban » : la sangsue, mais la queue finit en ruban translucide
+# (F sans contour) au lieu d'une pointe nue — le voile du film.
+RUBAN = pad([
+    "........B..B..B..B",
+    ".......KYKKYKKYKKY",
+    "......KKYYYYYYYYYKK",
+    "....KKYYYHHHHHHYYYYKKK",
+    "...KYYYHHHHHHHHHYYYYYYKKK",
+    "..KYYHHHHHHHHHHHHYYYYYYYYKKK",
+    ".KYYHHKKKKKHHHHHHHYYYYYYYYYYKKK",
+    ".KYHKWWWWWWKHHHHHHYYYYYYYYYYYYYKKK..........FF",
+    "KYHKWWLLWWWWKHHHHHYYYYYYYYYYYYYYYYKKK.......FFFF",
+    "KYHKWWLLWWPPWKHHHHYYYYYYYYYYYYYYYYYYKKK...FFFFF",
+    "KYHKWWWWWWPPPKHHHYYYYYYYYYYYYYYYYYYYYYKKKFFFFFFF",
+    "KYYKWWWWWWWPPKYYYYYYYYYYYYYYYYYYYYYYYYYYKFFFFFFFFF",
+    "KRYYKWWWWWWWKYYYYYYYYYYYYYYYYYYYYYYYYYYYYKFFFFFFF",
+    "KRYYYKKKKKKKYYYYYYYYYYYYYYYYYYYYYYYYYYOOOKFFFFF",
+    "KYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYOOOOKKFFFF",
+    ".KYYYYYYYYYYYYKFFKYYYYYYYYYYYYYYYOOOOOOKK.FF",
+    ".KYOOYYYYYYYYKFFFFKYYYYYYYYYYYOOOOOOOKK",
+    "..KOOOOYYYYYYKFFFFKYYYYYYYOOOOOOOOKKK",
+    "...KOOOOOOYYYYKFFKOOOOOOOOOOOOOKKK",
+    "....KKOOOOOOOOOKKOOOOOOOOOKKKK",
+    "......KKOOOOOOOOOOOOOOKKKK",
+    "........KKKOOOOOOOKKKK",
+    "...........KKKKKKK",
+])
+
+# C2 — « Panache » : corps compact de poisson, mais la crinière de
+# branchies devient LE signe : cinq filaments hauts, en éventail arrière.
+PANACHE = pad([
+    "..............B....B....B",
+    ".............KY...KY...KY...B",
+    "............KYK..KYK..KYK..KY",
+    "..........B.KYK.KYK..KYK..KY",
+    ".........KYKKYYKKYKKKYK..KY",
+    "........KYYYYYYYYYYYYYYKKKY",
+    ".......KKYYYYYYYYYYYYYYYYKK",
+    ".....KKYYYHHHHHHHHYYYYYYYYKKK",
+    "....KYYYHHHHHHHHHHHHYYYYYYYYYKK",
+    "...KYYHKKKKKHHHHHHHHHYYYYYYYYYYKK",
+    "..KYYHKWWWWWKHHHHHHHHYYYYYYYYYYYYKK.....KK",
+    ".KYYHKWWLLWWWKHHHHHHHYYYYYYYYYYYYYYK...KFFK",
+    ".KYHKWWLLWWPPWKHHHHHHYYYYYYYYYYYYYYYK.KFFFK",
+    "KYYHKWWWWWWPPPKHHHHHYYYYYYYYYYYYYYYYYKKFFFK",
+    "KRYYKWWWWWWWPPKYYYYYYYYYYYYYYYYYYYYYYFFFFK",
+    "KRYYYKWWWWWWWKYYYYYYYYYYYYYYYYYYYYYYYFFFK",
+    "KYYYYYKKKKKKKYYYYYYYYYYYYYYYYYYYYYYYYFFFFK",
+    ".KYYYYYYYYYYYYYYKFFFKYYYYYYYYYYYYYYYYKFFFFK",
+    ".KYOOYYYYYYYYYYKFFFFFKYYYYYYYYYYYYYYK.KFFFK",
+    "..KOOOOYYYYYYYYKFFFFFKYYYYYYYYYYYYYK...KFFK",
+    "...KOOOOOOYYYYYYKFFFKYYYYYYYYYYOOOKK....KK",
+    "....KKOOOOOOOOOOOKKKOOOOOOOOOOOOKK",
+    "......KKOOOOOOOOOOOOOOOOOOOOOKKK",
+    "........KKKOOOOOOOOOOOOOOKKKK",
+    "...........KKKKKKKKKKKKKK",
+])
+
+
+def translucent(rows):
+    """C3 — « Translucide » : vu comme dans le film — contour ocre foncé
+    au lieu de noir (sauf l'œil), un cœur clair qui affleure au milieu
+    du corps, comme une lampe dans la chair."""
+    out = []
+    for y, row in enumerate(rows):
+        cells = list(row)
+        for x, c in enumerate(cells):
+            in_eye = 6 <= y <= 13 and 3 <= x <= 13
+            if c == "K" and not in_eye:
+                cells[x] = "D"
+        if 9 <= y <= 13:
+            lo, hi = 16 + abs(11 - y) * 3, 40 - abs(11 - y) * 4
+            for x in range(lo, hi):
+                if cells[x] == "Y":
+                    cells[x] = "H"
+        out.append("".join(cells))
+    return out
+
+
+TRANSLUCIDE = translucent(RUBAN)
+
+# C4 — « Anguille » : très allongé, bas, un ruban dorsal sur tout le dos
+# et la queue qui ondule vers le haut ; petit œil, trois filaments.
+ANGUILLE = pad([
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    ".....B..B..B",
+    "....KB.KB.KB",
+    "...KYKKYKKYK......FFFF...FFFF",
+    "..KKYYYYYYYKKKK.FFFFFFFFFFFFFFFFF",
+    ".KYYHHHHHHYYYYYKKKKKFFFFFFFFFFFFFKKKK",
+    ".KYHKKKKHHHYYYYYYYYYKKKKKK.....KKKYYYYKK",
+    "KYHKWWWWKHHYYYYYYYYYYYYYYYKKKKKKYYYYYYYYYKKK",
+    "KYHKWLWPPKHHYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYKKKK",
+    "KYYKWWWPPKYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYKKK",
+    "KRYYKKKKKYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYK",
+    "KRYYYYYYYYYYYKFFKYYYYYYYYYYYYYYOOOOOOOOOOOOOOOOOOOOK",
+    ".KYOOYYYYYYYKFFFFKYYYYYYYOOOOOOOOOOOOOOOOOOOOKKKKKK",
+    "..KOOOOOYYYYYKFFKYYOOOOOOOOOOOOOOOOOOKKKKKKK",
+    "...KKOOOOOOOOOOKKOOOOOOOOOOOOOOKKKKKK",
+    ".....KKKOOOOOOOOOOOOOOOOKKKKKKK",
+    "........KKKKKKKKKKKKKKKK",
+])
+
 VARIANTS = [("A-rondouillard", RONDOUILLARD), ("B-elance", ELANCE),
-            ("C-babel", BABEL), ("D-gameboy", GAMEBOY)]
+            ("C-babel", BABEL), ("D-gameboy", GAMEBOY),
+            ("C1-ruban", RUBAN), ("C2-panache", PANACHE),
+            ("C3-translucide", TRANSLUCIDE), ("C4-anguille", ANGUILLE)]
 
 
 def compose(rows):
