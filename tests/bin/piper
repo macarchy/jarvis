@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# The fake voice. The sentence arrives on stdin, exactly as piper reads it;
+# what comes out is a WAV whose size tracks the text, so two sentences are
+# never mistaken for each other, plus one line per synthesis in
+# $FAKE_PIPER_LOG: the voice model and the words.
+#   FAKE_PIPER_FAIL=1   refuse, the way a missing model does
+out="" model=""
+while (($#)); do
+	case "$1" in
+	--output_file) out=${2:-}; shift 2 ;;
+	--model) model=${2:-}; shift 2 ;;
+	*) shift ;;
+	esac
+done
+text=$(cat)
+printf '%s\t%s\n' "$(basename "${model:-?}")" "$text" >>"${FAKE_PIPER_LOG:-/dev/null}"
+[[ ${FAKE_PIPER_FAIL:-} == 1 ]] && exit 1
+[[ -n $out ]] || exit 1
+# A plausible header, then the words themselves as payload: nothing plays
+# it, but its length is the one property the pipeline can observe.
+{ printf 'RIFF____WAVEfmt '; printf '%s' "$text"; } >"$out"

@@ -1,20 +1,27 @@
 #!/usr/bin/env python3
 """jarvis-wake — ears that never close.
 
-Streams the internal microphone through openWakeWord and drives the
-jarvis state machine:
+Streams the internal microphone through openWakeWord and drives the jarvis
+state machine. This file is the capture loop and nothing else: the model, the
+microphone, the subprocesses. WHAT to do with a frame of audio is decided by
+bin/jarvis_wake_fsm.py, which knows nothing of any of that and is therefore
+the part a test can drive — see tests/test_wake_fsm.py.
 
 - "Hey Jarvis" (score > threshold) while he is idle or sleeping fires
-  `omarchy-jarvis press` — summon, or wake from a dream. Never while he
-  speaks: the accent verifier is trained on his own Piper voices, so his
-  replies would wake him (barge-in stays on the key and the fish).
-- While he is LISTENING, the same audio stream does endpointing: once
-  speech has been heard, ~1.2 s of silence (or a 20 s cap) presses again
-  to stop the recording — so a wake-word exchange needs no key at all,
-  and a manual press-to-talk auto-stops too.
-- While he is in FOLLOWUP (just finished speaking), a speech onset within
-  the window presses — the rejoinder needs no wake word — and silence
-  settles him back to idle quietly.
+  `omarchy-jarvis press` — summon, or wake from a dream.
+- While he TRANSCRIBES or THINKS the same word aborts instead, at a slightly
+  higher threshold: those are the two states where the machine is working on
+  your behalf and, until the modal press landed, nothing in the whole system
+  could stop it. Never while he SPEAKS: the accent verifier is trained on his
+  own Piper voices, so his replies would score as wake words there (barge-in
+  stays on the key and the fish).
+- While he is LISTENING, the same audio stream does endpointing: once speech
+  has been heard, ~1.2 s of silence presses again to stop the recording — so
+  a wake-word exchange needs no key at all, and a manual press-to-talk
+  auto-stops too. Twenty seconds with no speech at all cancels instead: an
+  empty window is an abandoned attempt, not a question.
+- While he is in FOLLOWUP (just finished speaking), a speech onset within the
+  window presses — the rejoinder needs no wake word — and silence settles him.
 
 Runs from the venv under wake/venv (see bin/jarvis-wake launcher).
 """
@@ -28,11 +35,18 @@ import numpy as np
 import openwakeword
 from openwakeword.model import Model
 
-JARVIS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+BIN_DIR = os.path.dirname(os.path.realpath(__file__))
+JARVIS_DIR = os.path.dirname(BIN_DIR)
+sys.path.insert(0, BIN_DIR)
+import jarvis_wake_fsm as fsm  # noqa: E402 — the path above is what finds it
+
 # The French-accent verifier (wake/train-verifier) and its shim.
 sys.path.insert(0, os.path.join(JARVIS_DIR, "wake"))
 VERIFIER = os.path.join(JARVIS_DIR, "wake", "verifier-hey-jarvis.joblib")
-RUN_DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "jarvis")
+# JARVIS_RUN for the same reason bin/jarvis has it: a daemon and an FSM that
+# do not agree on where the state lives cannot be tested together.
+RUN_DIR = os.environ.get("JARVIS_RUN") or os.path.join(
+    os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "jarvis")
 STATE_FILE = os.path.join(RUN_DIR, "state")
 MIC_TARGET = os.environ.get("JARVIS_MIC", "effect_output.j493-mic")
 
@@ -45,12 +59,6 @@ CHUNK = 1280                    # 80 ms at 16 kHz
 HAS_VERIFIER = os.path.exists(VERIFIER)
 WAKE_THRESHOLD = float(os.environ.get(
     "JARVIS_WAKE_THRESHOLD", "0.8" if HAS_VERIFIER else "0.30"))
-WAKE_COOLDOWN = 3.0             # s between wake triggers
-SILENCE_HOLD = 1.2              # s of quiet that ends an utterance
-LISTEN_CAP = 20.0               # s hard cap on a listening window
-FOLLOWUP_WINDOW = 6.0           # s to start a rejoinder after a reply
-SPEECH_FACTOR = 5.0             # speech = noise floor × this
-QUIET_FACTOR = 2.5              # silence = below noise floor × this
 
 
 def state():
@@ -61,14 +69,21 @@ def state():
         return "idle"
 
 
-def press():
-    subprocess.Popen(["omarchy-jarvis", "press"],
+def run(args):
+    subprocess.Popen(["omarchy-jarvis", *args],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def settle():
-    subprocess.Popen(["omarchy-jarvis", "settle"],
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+def trace_score(score):
+    # Anything voice-like is traced so a real attempt that lands under the
+    # threshold is visible and tunable.
+    if score <= 0.08:
+        return
+    try:
+        with open(os.path.join(RUN_DIR, "wake-score"), "a") as f:
+            f.write(f"{time.strftime('%H:%M:%S')} {score:.3f}\n")
+    except OSError:
+        pass
 
 
 def mic_args():
@@ -88,12 +103,8 @@ def main():
     model = Model(wakeword_model_paths=[
         openwakeword.models["hey_jarvis"]["model_path"]], **kwargs)
 
-    noise_floor = 60.0          # RMS in int16 units, adapts continuously
-    last_wake = 0.0
-    listen_since = None
-    speech_heard = False
-    quiet_since = None
-    followup_since = None
+    st = fsm.new_state(WAKE_THRESHOLD)
+    floor = 60.0                # RMS in int16 units, adapts continuously
 
     while True:
         proc = subprocess.Popen(mic_args(), stdout=subprocess.PIPE)
@@ -106,61 +117,18 @@ def main():
                 rms = float(np.sqrt(np.mean(audio.astype(np.float32) ** 2)))
                 now = time.monotonic()
                 mode = state()
-
-                if mode == "listening":
-                    followup_since = None
-                    if listen_since is None:
-                        listen_since = now
-                        speech_heard = False
-                        quiet_since = None
-                    if rms > noise_floor * SPEECH_FACTOR:
-                        speech_heard = True
-                        quiet_since = None
-                    elif speech_heard and rms < noise_floor * QUIET_FACTOR:
-                        quiet_since = quiet_since or now
-                        if now - quiet_since >= SILENCE_HOLD:
-                            press()
-                            listen_since = None
-                    if listen_since and now - listen_since >= LISTEN_CAP:
-                        press()
-                        listen_since = None
-                    continue
-
-                if mode == "followup":
-                    # The reply just ended: a few seconds where speaking
-                    # again needs no wake word. A speech onset presses (the
-                    # endpointing above takes over); silence settles him.
-                    if followup_since is None:
-                        followup_since = now
-                    if rms > noise_floor * SPEECH_FACTOR:
-                        followup_since = None
-                        press()
-                    elif now - followup_since >= FOLLOWUP_WINDOW:
-                        followup_since = None
-                        settle()
-                    continue
-
-                # Out of listening: track the room's noise floor slowly and
-                # watch for the wake word.
-                listen_since = None
-                followup_since = None
-                noise_floor = 0.995 * noise_floor + 0.005 * max(rms, 1.0)
-
-                # Not while speaking: the accent verifier was trained on
-                # the very Piper voices Jarvis speaks with, so his own
-                # replies score as wake words (0.84+ seen in the trace).
-                # Barge-in stays available by key or click.
-                if mode in ("idle", "sleeping"):
+                score = None
+                if fsm.wants_score(mode):
                     score = max(model.predict(audio).values())
-                    # Trace anything voice-like so a real attempt that lands
-                    # under the threshold is visible and tunable.
-                    if score > 0.08:
-                        with open(os.path.join(RUN_DIR, "wake-score"), "a") as f:
-                            f.write(f"{time.strftime('%H:%M:%S')} {score:.3f}\n")
-                    if score > WAKE_THRESHOLD and now - last_wake > WAKE_COOLDOWN:
-                        last_wake = now
-                        model.reset()
-                        press()
+                    trace_score(score)
+                action, floor = fsm.decide(mode, rms, floor, score, now, st)
+                if not action:
+                    continue
+                # The model only ever fired if it was asked, so this is
+                # exactly the wake-word triggers and nothing else.
+                if score is not None:
+                    model.reset()
+                run(fsm.command_for(action, mode))
         finally:
             proc.kill()
         time.sleep(1.0)         # pw-record died; let the graph settle

@@ -6,7 +6,10 @@ Reads `claude -p --output-format stream-json --include-partial-messages`
 on stdin and emits one complete sentence per line, unbuffered, as soon as
 each boundary arrives — so the voice can start on sentence one while the
 brain still writes sentence two. The full reply is written to argv[1]
-when the stream ends (the pipeline journals and notifies from it).
+when the stream ends — and also when it does not: a reader that walks away
+mid-stream (a barge-in) gets whatever had arrived, plus an
+<reply-file>.interrupted marker, rather than an empty file the pipeline
+would read as a brain that answered nothing.
 
 Usage: jarvis-sentences [--quiet] <reply-file>
   --quiet   no sentence output (dreams, heartbeats, missions: the caller
@@ -33,7 +36,12 @@ quiet = "--quiet" in args
 out_path = [a for a in args if not a.startswith("--")][0]
 
 JARVIS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-TRACE_DIR = os.path.join(JARVIS_DIR, "memory", "trace")
+# JARVIS_MEMORY relocates the whole memory, exactly as it does for the FSM
+# and for jarvis-index: without it the test suite kept appending imaginary
+# quota notices and API errors to the real black box, and Jarvis's dreams
+# read them as evidence.
+MEMORY = os.environ.get("JARVIS_MEMORY") or os.path.join(JARVIS_DIR, "memory")
+TRACE_DIR = os.path.join(MEMORY, "trace")
 TRACE = os.path.join(TRACE_DIR, time.strftime("%Y-%m-%d") + ".log")
 
 # A sentence ends at . ! ? … or : (optionally inside quotes/brackets)
@@ -111,70 +119,98 @@ def drain(force=False):
         buf = ""
 
 
-for line in sys.stdin:
-    line = line.strip()
-    if not line:
-        continue
-    try:
-        ev = json.loads(line)
-    except ValueError:
-        continue
-    kind = ev.get("type")
-    if kind == "stream_event":
-        event = ev.get("event", {})
-        if event.get("type") == "content_block_start":
-            # A new text block after a tool call: the previous sentence
-            # ended without trailing whitespace, keep the words apart.
-            if event.get("content_block", {}).get("type") == "text":
-                separate()
-        delta = event.get("delta", {})
-        if delta.get("type") == "text_delta":
-            got_delta = True
-            buf += delta.get("text", "")
-            full += delta.get("text", "")
-            drain()
-    elif kind == "assistant":
-        for block in ev.get("message", {}).get("content", []):
-            btype = block.get("type")
-            if btype == "text" and not got_delta:
-                if not full and LIMIT.search(block["text"]):
-                    # The CLI's usage notice arrives as a synthetic
-                    # assistant message: a report on the brain, not a
-                    # reply — the FSM reads it from the sidecar.
-                    error(block["text"])
-                    continue
-                separate()
-                buf += block["text"]
-                full += block["text"]
-            elif btype == "tool_use":
-                desc = describe_tool(block)
-                tool_names[block.get("id")] = desc
-                trace(f"→ {desc}")
-        if not got_delta:
-            drain()
-    elif kind == "user":
-        content = ev.get("message", {}).get("content", [])
-        if isinstance(content, list):
-            for block in content:
-                if block.get("type") != "tool_result":
-                    continue
-                desc = tool_names.get(block.get("tool_use_id"), "?")
-                body = block.get("content")
-                if isinstance(body, list):
-                    body = " ".join(b.get("text", "")
-                                    for b in body if isinstance(b, dict))
-                mark = "✗" if block.get("is_error") else "←"
-                trace(f"{mark} [{desc.split(':')[0]}] {squash(body)}")
-    elif kind == "result":
-        failed = ev.get("is_error") or ev.get("subtype", "") != "success"
-        if failed and not full:
-            error(ev.get("result") or ev.get("subtype") or "erreur de session")
-        elif failed:
-            trace(f"✗ session: {squash(ev.get('result') or ev.get('subtype'))}")
-        elif not full:
-            buf = ev.get("result") or ""
-            full = buf
-drain(force=True)
+def consume():
+    global buf, full, got_delta
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            continue
+        kind = ev.get("type")
+        if kind == "stream_event":
+            event = ev.get("event", {})
+            if event.get("type") == "content_block_start":
+                # A new text block after a tool call: the previous sentence
+                # ended without trailing whitespace, keep the words apart.
+                if event.get("content_block", {}).get("type") == "text":
+                    separate()
+            delta = event.get("delta", {})
+            if delta.get("type") == "text_delta":
+                got_delta = True
+                buf += delta.get("text", "")
+                full += delta.get("text", "")
+                drain()
+        elif kind == "assistant":
+            for block in ev.get("message", {}).get("content", []):
+                btype = block.get("type")
+                if btype == "text" and not got_delta:
+                    if not full and LIMIT.search(block["text"]):
+                        # The CLI's usage notice arrives as a synthetic
+                        # assistant message: a report on the brain, not a
+                        # reply — the FSM reads it from the sidecar.
+                        error(block["text"])
+                        continue
+                    separate()
+                    buf += block["text"]
+                    full += block["text"]
+                elif btype == "tool_use":
+                    desc = describe_tool(block)
+                    tool_names[block.get("id")] = desc
+                    trace(f"→ {desc}")
+            if not got_delta:
+                drain()
+        elif kind == "user":
+            content = ev.get("message", {}).get("content", [])
+            if isinstance(content, list):
+                for block in content:
+                    if block.get("type") != "tool_result":
+                        continue
+                    desc = tool_names.get(block.get("tool_use_id"), "?")
+                    body = block.get("content")
+                    if isinstance(body, list):
+                        body = " ".join(b.get("text", "")
+                                        for b in body if isinstance(b, dict))
+                    mark = "✗" if block.get("is_error") else "←"
+                    trace(f"{mark} [{desc.split(':')[0]}] {squash(body)}")
+        elif kind == "result":
+            failed = ev.get("is_error") or ev.get("subtype", "") != "success"
+            if failed and not full:
+                error(ev.get("result") or ev.get("subtype") or "erreur de session")
+            elif failed:
+                trace(f"✗ session: {squash(ev.get('result') or ev.get('subtype'))}")
+            elif not full:
+                buf = ev.get("result") or ""
+                full = buf
+    drain(force=True)
 
-with open(out_path, "w") as f:
-    f.write(" ".join(full.split()))
+
+# A barge-in closes the voice's end of the pipe under us. Dying silently
+# there wrote nothing at all to <reply-file>, which the FSM read as a brain
+# that had answered nothing — and sent it off to ask the same question a
+# second time and speak an answer the user had just cancelled. So the
+# partial reply is written whatever happens, and the interruption is
+# recorded as itself rather than as emptiness.
+interrupted = False
+try:
+    consume()
+except (BrokenPipeError, KeyboardInterrupt):
+    interrupted = True
+finally:
+    try:
+        with open(out_path, "w") as f:
+            f.write(" ".join(full.split()))
+        if interrupted:
+            with open(out_path + ".interrupted", "w") as f:
+                f.write("1")
+            trace("✗ flux interrompu")
+    except OSError:
+        pass
+    # Python flushes stdout at shutdown; on a closed pipe that prints an
+    # "Exception ignored" traceback into $LOG for no one's benefit.
+    try:
+        sys.stdout.flush()
+    except (BrokenPipeError, ValueError):
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())

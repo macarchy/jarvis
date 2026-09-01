@@ -1,0 +1,7 @@
+{"type":"stream_event","event":{"type":"content_block_start","content_block":{"type":"text"}}}
+{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"J'ai coupé le Wi-Fi. "}}}
+{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Le thème clair est actif. "}}}
+{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"La batterie est à trente-huit pour cent. "}}}
+{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"La limite de charge est en place. "}}}
+{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"C'est tout ce que j'ai fait. "}}}
+{"type":"result","subtype":"success","is_error":false,"result":"J'ai coupé le Wi-Fi. Le thème clair est actif. La batterie est à trente-huit pour cent. La limite de charge est en place. C'est tout ce que j'ai fait."}

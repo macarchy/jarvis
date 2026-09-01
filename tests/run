@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# tests/run — the offline test suite. A fake `claude` and no-op desktop
-# shims (tests/bin) let the whole pipeline run in throwaway sandboxes:
-# no quota, no network, no sound. Each test gets a fresh sandbox via
-# the JARVIS_RUN/STATE/MEMORY/BOX overrides in bin/jarvis.
+# tests/run — the offline test suite. A fake `claude`, a fake voice, a fake
+# ear and a fake microphone (tests/bin) let the whole pipeline run in
+# throwaway sandboxes: no quota, no network, no sound, no Touch Bar. Each
+# test gets a fresh sandbox through the JARVIS_* overrides in bin/jarvis —
+# RUN/STATE/MEMORY/BOX/SPRITES for the directories, PIPER/VOXTYPE for the
+# two binaries of the voice path, NO_DESKTOP and WAKE for the two organs
+# that live outside any sandbox.
 set -u
 TESTS_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 JARVIS="$TESTS_DIR/../bin/jarvis"
@@ -10,11 +13,35 @@ FIX="$TESTS_DIR/fixtures"
 export PATH="$TESTS_DIR/bin:$PATH"
 pass=0 fail=0 current=""
 
+# Every sandbox is remembered so the run leaves nothing behind: neither the
+# mktemp trees (one per test, they used to pile up in /tmp) nor the real
+# recorders and players a press leaves running on purpose.
+sandboxes=()
+cleanup() {
+	local sb pidfile pgid
+	for sb in ${sandboxes+"${sandboxes[@]}"}; do
+		# Whole groups, the way bin/jarvis kills them: a bare pid would leave
+		# the recorder holding the microphone behind its little session shell.
+		for pidfile in "$sb"/run/pids/*; do
+			pgid=$(cat "$pidfile" 2>/dev/null) || continue
+			[[ -n $pgid ]] && kill -TERM "-$pgid" 2>/dev/null
+		done
+		rm -rf "$sb"
+	done
+}
+trap cleanup EXIT
+
 sandbox() {
 	SB=$(mktemp -d)
+	sandboxes+=("$SB")
 	export JARVIS_RUN="$SB/run" JARVIS_STATE="$SB/state" \
 		JARVIS_MEMORY="$SB/memory" JARVIS_BOX="$SB/box" \
-		FAKE_CLAUDE_LOG="$SB/claude.log"
+		JARVIS_SPRITES="$SB/sprites" \
+		JARVIS_PIPER="$TESTS_DIR/bin/piper" JARVIS_VOXTYPE="$TESTS_DIR/bin/voxtype" \
+		JARVIS_NO_DESKTOP=1 JARVIS_WAKE=0 \
+		FAKE_CLAUDE_LOG="$SB/claude.log" FAKE_PIPER_LOG="$SB/piper.log" \
+		FAKE_PLAY_LOG="$SB/play.log" FAKE_SHELL_LOG="$SB/shell.log" \
+		FAKE_VOXTYPE_LOG="$SB/voxtype.log" FAKE_NOTIFY_LOG="$SB/notify.log"
 	mkdir -p "$JARVIS_RUN" "$JARVIS_STATE" "$JARVIS_MEMORY/knowledge"
 	cp "$TESTS_DIR"/../memory/*_PROMPT.md "$JARVIS_MEMORY/"
 	echo test >"$JARVIS_MEMORY/knowledge/VERSION"
@@ -24,24 +51,78 @@ sandbox() {
 }
 
 t() { current="$1"; sandbox; }
+
+# A failing assertion says what it saw: the last lines the command printed
+# and the sandbox it printed them in, which survives long enough to look at
+# only if the run is interrupted — so print the path either way.
 assert() {
-	local desc="$1"
+	local desc="$1" out rc
 	shift
-	if "$@" >/dev/null 2>&1; then
+	out=$("$@" 2>&1)
+	rc=$?
+	if ((rc == 0)); then
 		pass=$((pass + 1))
 	else
 		fail=$((fail + 1))
 		printf '✗ %s — %s\n' "$current" "$desc"
+		[[ -n $out ]] && printf '%s\n' "$out" | tail -3 | sed 's/^/    │ /'
+		printf '    └ %s\n' "$SB"
 	fi
 }
 today() { date +%F; }
 journal_has() { grep -q "$1" "$JARVIS_MEMORY/journal/$(today).md"; }
+state_is() { [[ $(cat "$JARVIS_RUN/state" 2>/dev/null) == "$1" ]]; }
+# A pid we never got is neither alive nor dead: both answers stay false so
+# a missing pid file can never be mistaken for a process that behaved.
+alive() { [[ -n ${1:-} ]] && kill -0 "$1" 2>/dev/null; }
+dead() { [[ -n ${1:-} ]] && ! kill -0 "$1" 2>/dev/null; }
+# The pipeline's stages are real processes: give them up to two seconds
+# rather than racing them.
+waitfor() {
+	local i
+	for ((i = 0; i < 40; i++)); do
+		"$@" >/dev/null 2>&1 && return 0
+		sleep 0.05
+	done
+	return 1
+}
+# The FSM refuses a press within 250 ms of the last transition — the button
+# and the wake daemon's silence timer firing together are one gesture, not
+# two — so a test that presses again has to let the dead time pass.
+pressable() { sleep 0.3; }
+# The recorder arms its signal handlers before it creates the WAV, so the
+# file appearing is what says "you may press again": a SIGINT sent earlier
+# is lost, exactly as it would be against a real recorder still starting.
+# The dead time above is part of that same permission.
+mic_ready() {
+	waitfor test -e "$JARVIS_RUN/utterance.wav" &&
+		waitfor state_is listening && pressable
+}
+states_seen() { sed -n 's/^[^ ]* state: //p' "$JARVIS_STATE/jarvis.log" | paste -sd' ' -; }
+
+# ---- the scripts themselves parse
+t "hygiène : tout s'analyse avant de tourner"
+assert "bash -n bin/jarvis" bash -n "$JARVIS"
+assert "bash -n bin/jarvis-fsm.sh" bash -n "$TESTS_DIR/../bin/jarvis-fsm.sh"
+assert "bash -n bin/jarvis-wake" bash -n "$TESTS_DIR/../bin/jarvis-wake"
+assert "bash -n install.sh" bash -n "$TESTS_DIR/../install.sh"
+assert "bash -n bootstrap.sh" bash -n "$TESTS_DIR/../bootstrap.sh"
+assert "python compile" env PYTHONPYCACHEPREFIX="$SB/pyc" python3 -m py_compile \
+	"$TESTS_DIR/../bin/jarvis-sentences" "$TESTS_DIR/../bin/jarvis-index" \
+	"$TESTS_DIR/../bin/jarvis-wake.py" "$TESTS_DIR/../bin/jarvis_wake_fsm.py"
+# shellcheck is not part of the toolchain here; run it when it happens to be.
+command -v shellcheck >/dev/null && {
+	assert "shellcheck bin/jarvis" shellcheck -S warning -x "$JARVIS"
+	assert "shellcheck bin/jarvis-fsm.sh" shellcheck -S warning "$TESTS_DIR/../bin/jarvis-fsm.sh"
+}
 
 # ---- jarvis-sentences: blocks stay separated across tool calls
 t "sentences: espaces entre blocs"
-out=$(mktemp)
+out="$SB/reply"
 "$TESTS_DIR/../bin/jarvis-sentences" --quiet "$out.txt" <"$FIX/blocks.jsonl"
 assert "texte complet espacé" test "$(cat "$out.txt")" = "Je fais ma ronde. Un instant. RAS"
+assert "la trace reste dans le bac à sable" \
+	grep -q '→ Bash: df -h /' "$JARVIS_MEMORY/trace/$(today).log"
 
 # ---- heartbeat
 t "heartbeat: RAS reste silencieux"
@@ -99,15 +180,494 @@ FAKE_CLAUDE_STREAM="$FIX/digest-ok.jsonl" "$JARVIS" ask --quiet "test écrit"
 assert "réponse enregistrée" test "$(cat "$JARVIS_RUN/last-reply")" = "J'ai retenu la fondue."
 assert "état revenu à idle" test "$(cat "$JARVIS_RUN/state")" = idle
 assert "échange journalisé" journal_has "échange : « test écrit »"
-assert "aucun wav synthétisé" bash -c "! ls '$JARVIS_RUN/'reply*.wav 2>/dev/null"
+assert "aucun wav synthétisé" test ! -s "$FAKE_PIPER_LOG"
+
+# ---- the one button, end to end
+t "press: idle → listening, le micro tourne vraiment"
+printf 'idle' >"$JARVIS_RUN/state"
+"$JARVIS" press
+# Before anything is waited for: the handle exists the moment `press` returns,
+# because it is reserved in the foreground and not by the recorder a fork
+# later. An abort landing in that fork used to find nothing to kill.
+assert "la poignée est réservée avant que l'oreille s'ouvre" test -e "$JARVIS_RUN/pids/record"
+mic_ready
+assert "état listening" state_is listening
+assert "groupe enregistré" waitfor test -s "$JARVIS_RUN/pids/record"
+rec=$(cat "$JARVIS_RUN/pids/record" 2>/dev/null)
+assert "enregistreur vivant" alive "$rec"
+assert "le poisson suit" grep -q 'macarchy.jarvis setState listening' "$FAKE_SHELL_LOG"
+"$JARVIS" cancel
+assert "état idle" state_is idle
+assert "enregistreur arrêté" waitfor dead "$rec"
+
+t "press: la séquence complète jusqu'à la fenêtre de relance"
+export JARVIS_WAKE=1
+printf 'idle' >"$JARVIS_RUN/state"
+"$JARVIS" press
+mic_ready
+FAKE_TRANSCRIPT="quelle heure est-il" FAKE_CLAUDE_STREAM="$FIX/digest-ok.jsonl" "$JARVIS" press
+assert "états traversés dans l'ordre" \
+	test "$(states_seen)" = "listening transcribing thinking speaking followup"
+assert "langue épinglée depuis l'âme" grep -q 'language = "fr"' "$JARVIS_RUN/voxtype.toml"
+assert "transcript entendu" grep -q 'heard: quelle heure est-il' "$JARVIS_STATE/jarvis.log"
+assert "réponse synthétisée en français" grep -q "fr_FR.*J'ai retenu la fondue." "$FAKE_PIPER_LOG"
+assert "jouée en état speaking" grep -q ' speaking$' "$FAKE_PLAY_LOG"
+assert "échange journalisé" journal_has "échange : « quelle heure est-il »"
+"$JARVIS" settle
+assert "le silence referme la fenêtre" state_is idle
+
+t "presser et annuler ensemble : le micro ne reste pas ouvert derrière"
+printf 'idle' >"$JARVIS_RUN/state"
+# The abort arrives after the press has taken the machine and before the
+# recorder exists — the window that used to leave the microphone open for the
+# rest of the session with nothing on disk to close it by. FAKE_PACTL_SLEEP
+# holds the press exactly there, so this is a moment and not a race.
+FAKE_PACTL_SLEEP=1 "$JARVIS" press &
+presser=$!
+assert "la machine est prise" waitfor state_is listening
+"$JARVIS" cancel
+wait "$presser" 2>/dev/null
+assert "état idle" state_is idle
+assert "aucune poignée abandonnée" test ! -e "$JARVIS_RUN/pids/record"
+# The recorder creates the WAV as its first act and the abort removed it, so
+# the file coming back is the ear opening behind the abort — the whole bug,
+# and a witness that cannot be confused with the process asking about it.
+sleep 0.2
+assert "et l'oreille ne s'est pas rouverte derrière" test ! -e "$JARVIS_RUN/utterance.wav"
+
+t "press: sans audio, retour immédiat à idle"
+printf 'idle' >"$JARVIS_RUN/state"
+FAKE_RECORD_SILENT=1 "$JARVIS" press
+mic_ready
+assert "en écoute" state_is listening
+"$JARVIS" press
+assert "état idle" state_is idle
+assert "aucun appel cerveau" test ! -s "$FAKE_CLAUDE_LOG"
+
+t "press: transcript vide → échec noté, retour à idle"
+printf 'idle' >"$JARVIS_RUN/state"
+"$JARVIS" press
+mic_ready
+FAKE_TRANSCRIPT="" "$JARVIS" press
+assert "échec noté" grep -q "transcript vide" "$JARVIS_MEMORY/FAILURES.md"
+assert "excuse dite à voix haute" grep -q "Je n'ai rien entendu." "$FAKE_PIPER_LOG"
+assert "état idle" state_is idle
+assert "aucun appel cerveau" test ! -s "$FAKE_CLAUDE_LOG"
+
+t "voix en panne: l'état redescend au lieu de rester speaking"
+printf 'idle' >"$JARVIS_RUN/state"
+FAKE_PIPER_FAIL=1 FAKE_CLAUDE_STREAM="$FIX/digest-ok.jsonl" "$JARVIS" ask "bonjour"
+assert "piper appelé" test -s "$FAKE_PIPER_LOG"
+assert "rien joué" test ! -s "$FAKE_PLAY_LOG"
+assert "état idle" state_is idle
+
+t "barge-in: la parole est coupée net et l'oreille se rouvre"
+printf 'idle' >"$JARVIS_RUN/state"
+FAKE_PLAY_SLEEP=10 "$JARVIS" say "La batterie est à trente-huit pour cent." &
+sayer=$!
+assert "il parle" waitfor state_is speaking
+pressable
+"$JARVIS" press
+assert "joueur coupé" waitfor grep -q 'coupé' "$FAKE_PLAY_LOG"
+# Talking over him is a gesture, not a defect. It used to be filed in
+# FAILURES.md, and one line there schedules a dream whose job is to rewrite
+# LEARNED.md — so pressing a key manufactured persona changes.
+assert "l'interruption n'est pas un échec" test ! -e "$JARVIS_MEMORY/FAILURES.md"
+assert "l'oreille se rouvre" waitfor test -s "$JARVIS_RUN/pids/record"
+mic_ready
+rec=$(cat "$JARVIS_RUN/pids/record" 2>/dev/null)
+assert "un enregistreur tourne" alive "$rec"
+# The interrupted invocation wakes from its player still believing it owns
+# `speaking`. Its epoch moved when the press claimed, so it writes nothing:
+# the ear the press opened is the state that survives.
+wait "$sayer" 2>/dev/null
+assert "l'état reste celui de la nouvelle écoute" state_is listening
+"$JARVIS" cancel
+assert "tout est arrêté" waitfor dead "$rec"
+assert "état idle" state_is idle
+
+# ---- the owned transition: chantier 2
+t "table de transitions : le code et sa documentation sont d'accord"
+assert "grille identique au témoin" bash -c \
+	"JARVIS_FSM_DRYRUN=1 '$TESTS_DIR/../bin/jarvis-fsm.sh' | diff -u '$FIX/transitions.txt' -"
+
+t "époque périmée : une étape dépassée n'écrit plus rien"
+printf 'idle' >"$JARVIS_RUN/state"
+# The table driven alone, without a body: an invocation claims the machine,
+# somebody else claims it, and the first one is deaf from then on.
+assert "l'étape dépassée ne bouge plus" bash -c '
+	set -u
+	. "$1"
+	claim
+	mine || { echo "la revendication ne se voit pas"; exit 1; }
+	transition ask || { echo "idle:ask refusé"; exit 1; }
+	( MY_EPOCH=""; claim )
+	mine && { echo "elle se croit encore propriétaire"; exit 1; }
+	transition speak && { echo "elle a écrit malgré tout"; exit 1; }
+	[[ $(state) == thinking ]] || { echo "état modifié : $(state)"; exit 1; }
+	exit 0
+' _ "$TESTS_DIR/../bin/jarvis-fsm.sh"
+printf 'idle' >"$JARVIS_RUN/state"
+rm -f "$JARVIS_RUN/state.rec"
+assert "couple hors table refusé" bash -c '
+	set -u
+	. "$1"
+	transition finish && { echo "idle:finish accepté"; exit 1; }
+	[[ $(state) == idle ]] || exit 1
+	exit 0
+' _ "$TESTS_DIR/../bin/jarvis-fsm.sh"
+
+t "flux coupé : la réponse partielle est gardée, pas perdue"
+out="$SB/reply"
+# A reply longer than a pipe buffer, so a reader that walks away is felt
+# whatever the scheduling: the parser's writes fail mid-stream, exactly as
+# they do when a barge-in closes the voice's end.
+python3 -c '
+import sys
+print("{\"type\":\"stream_event\",\"event\":{\"type\":\"content_block_start\",\"content_block\":{\"type\":\"text\"}}}")
+line = "{\"type\":\"stream_event\",\"event\":{\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"%s. \"}}}"
+for _ in range(400):
+    print(line % ("la batterie est a trente-huit pour cent " * 8))
+' >"$SB/long.jsonl"
+"$TESTS_DIR/../bin/jarvis-sentences" "$out.txt" <"$SB/long.jsonl" | head -1 >/dev/null
+assert "la réponse partielle est écrite" test -s "$out.txt"
+assert "l'interruption est signalée" test -e "$out.txt.interrupted"
+assert "la boîte noire le dit" grep -q 'flux interrompu' "$JARVIS_MEMORY/trace/$(today).log"
+
+t "annuler pendant la parole : la demande s'arrête pour de bon"
+printf 'idle' >"$JARVIS_RUN/state"
+printf 'test-session-id' >"$JARVIS_STATE/conversation"
+FAKE_PLAY_SLEEP=10 FAKE_CLAUDE_STREAM="$FIX/digest-ok.jsonl" "$JARVIS" ask "raconte-moi une histoire" &
+asker=$!
+assert "la voix est sortie" waitfor test -s "$FAKE_PLAY_LOG"
+"$JARVIS" cancel
+wait "$asker" 2>/dev/null
+assert "joueur coupé" grep -q 'coupé' "$FAKE_PLAY_LOG"
+assert "état idle" state_is idle
+assert "un seul appel au cerveau" test "$(grep -c . "$FAKE_CLAUDE_LOG")" = 1
+assert "aucune réponse enregistrée" test ! -e "$JARVIS_RUN/last-reply"
+assert "rien au journal" bash -c "! grep -q 'échange :' '$JARVIS_MEMORY/journal/$(today).md' 2>/dev/null"
+assert "rien dans la boîte noire" bash -c "! grep -q 'reply «' '$JARVIS_MEMORY/trace/$(today).log' 2>/dev/null"
+assert "aucune phrase synthétisée après l'annulation" test "$(grep -c . "$FAKE_PIPER_LOG")" = 1
+assert "conversation intacte" test "$(cat "$JARVIS_STATE/conversation")" = test-session-id
+assert "plus aucun groupe en vie" bash -c "! ls '$JARVIS_RUN/pids/'* 2>/dev/null"
+
+t "annuler entre la question et le cerveau : rien n'est dépensé"
+printf 'idle' >"$JARVIS_RUN/state"
+FAKE_SHELL_SLEEP=0.6 FAKE_CLAUDE_STREAM="$FIX/digest-ok.jsonl" "$JARVIS" ask "raconte" &
+asker=$!
+# The bubble is the last thing sent before the brain is called, and the fish
+# holds it: waiting for that line puts the abort inside the one window where
+# the brain group does not exist yet and a kill has nothing to reach. The
+# question used to be asked anyway — paid for, and answered into a void.
+assert "la bulle est partie, le cerveau pas encore" \
+	waitfor grep -q 'macarchy.jarvis heard' "$FAKE_SHELL_LOG"
+"$JARVIS" cancel
+wait "$asker" 2>/dev/null
+assert "état idle" state_is idle
+assert "le cerveau n'a jamais été appelé" test ! -s "$FAKE_CLAUDE_LOG"
+assert "et rien n'a été dit" test ! -s "$FAKE_PIPER_LOG"
+
+t "double pression : une seule question, un seul échange"
+printf 'idle' >"$JARVIS_RUN/state"
+"$JARVIS" press
+mic_ready
+# The button under a thumb and the wake daemon's silence timer, at the same
+# instant. Whichever wins the machine does the exchange; the other has to
+# find it taken — by the dead time, by the ignore arm, or by the epoch.
+export FAKE_TRANSCRIPT="quelle heure est-il" FAKE_CLAUDE_STREAM="$FIX/digest-ok.jsonl"
+"$JARVIS" press &
+twin_a=$!
+"$JARVIS" press &
+twin_b=$!
+wait "$twin_a" "$twin_b" 2>/dev/null
+unset FAKE_TRANSCRIPT FAKE_CLAUDE_STREAM
+assert "un seul appel au cerveau" test "$(grep -c . "$FAKE_CLAUDE_LOG")" = 1
+assert "une seule ligne au journal" test "$(grep -c 'échange :' "$JARVIS_MEMORY/journal/$(today).md")" = 1
+assert "une seule réponse synthétisée" test "$(grep -c . "$FAKE_PIPER_LOG")" = 1
+assert "la pression perdante est écartée" \
+	grep -qE 'press ignored|refused|dropped' "$JARVIS_STATE/jarvis.log"
+
+t "un rêve ne parle pas par-dessus un échange"
+printf 'idle' >"$JARVIS_RUN/state"
+FAKE_PLAY_SLEEP=0.4 FAKE_CLAUDE_STREAM="$FIX/five.jsonl" "$JARVIS" ask "fais le point" &
+asker=$!
+assert "il parle" waitfor state_is speaking
+FAKE_CLAUDE_STREAM="$FIX/report.jsonl" "$JARVIS" dream --quiet
+assert "le rêve n'a pas pris le corps" bash -c "! grep -q 'state: sleeping' '$JARVIS_STATE/jarvis.log'"
+assert "le rêve n'a pas couché l'état" bash -c "[[ \$(cat '$JARVIS_RUN/state') != idle ]]"
+wait "$asker" 2>/dev/null
+assert "les cinq phrases sont synthétisées" test "$(grep -c . "$FAKE_PIPER_LOG")" = 5
+assert "les cinq phrases sont jouées" test "$(grep -c . "$FAKE_PLAY_LOG")" = 5
+assert "le rêve n'a rien dit" bash -c "! grep -q 'disque' '$FAKE_PIPER_LOG'"
+assert "l'échange finit chez lui" state_is idle
+
+t "voix en panne : l'échec est noté, pas avalé"
+printf 'idle' >"$JARVIS_RUN/state"
+FAKE_PIPER_FAIL=1 FAKE_CLAUDE_STREAM="$FIX/five.jsonl" "$JARVIS" ask "fais le point"
+assert "il s'arrête à la première" test "$(grep -c . "$FAKE_PIPER_LOG")" = 1
+assert "échec noté en français" grep -q 'voix : synthèse impossible' "$JARVIS_MEMORY/FAILURES.md"
+assert "état idle" state_is idle
+
+t "aparté : une ronde attend son tour et arrive quand même"
+# The sandbox starts busy on purpose: a mission report or a round finishing
+# mid-answer used to wipe the bubble the user was reading.
+FAKE_CLAUDE_STREAM="$FIX/report.jsonl" "$JARVIS" heartbeat
+assert "rien n'est passé au poisson" bash -c "! grep -q 'macarchy.jarvis reply' '$FAKE_SHELL_LOG' 2>/dev/null"
+assert "l'aparté est garé" grep -q 'disque' "$JARVIS_STATE/aside-pending"
+assert "l'émotion est garée" test "$(cat "$JARVIS_STATE/emote-pending")" = worried
+"$JARVIS" cancel
+assert "l'aparté est arrivé" grep -q 'macarchy.jarvis reply.*disque' "$FAKE_SHELL_LOG"
+assert "l'émotion aussi" grep -q 'macarchy.jarvis emote worried' "$FAKE_SHELL_LOG"
+assert "plus rien en attente" test ! -e "$JARVIS_STATE/aside-pending"
+
+t "un échec passager n'efface pas la conversation"
+printf 'idle' >"$JARVIS_RUN/state"
+printf 'test-session-id' >"$JARVIS_STATE/conversation"
+# The stream produces nothing parsable; the non-streaming retry answers.
+FAKE_CLAUDE_REPLY="Bien sûr." "$JARVIS" ask --quiet "et alors"
+assert "réponse rattrapée" test "$(cat "$JARVIS_RUN/last-reply")" = "Bien sûr."
+assert "conversation conservée" test "$(cat "$JARVIS_STATE/conversation")" = test-session-id
+assert "les deux appels reprennent la même session" \
+	test "$(grep -c -- '--resume test-session-id' "$FAKE_CLAUDE_LOG")" = 2
+
+# ---- the gesture of aborting: chantier 3
+t "presser pendant la réflexion : trop tôt ne fait rien, à temps annule"
+printf 'idle' >"$JARVIS_RUN/state"
+FAKE_CLAUDE_SLEEP=8 FAKE_CLAUDE_STREAM="$FIX/digest-ok.jsonl" "$JARVIS" ask "raconte-moi une histoire" &
+asker=$!
+assert "il réfléchit" waitfor state_is thinking
+# Inside the second and a half: a thumb that bounced on the key that STARTED
+# this request must not be able to destroy it.
+sleep 0.5
+"$JARVIS" press
+assert "la pression trop tôt ne fait rien" state_is thinking
+assert "et elle est expliquée" grep -q 'press ignored: thinking for less than 1.5 s' "$JARVIS_STATE/jarvis.log"
+sleep 1.8
+"$JARVIS" press
+wait "$asker" 2>/dev/null
+assert "état idle" state_is idle
+assert "passé par l'état d'annulation" grep -q 'state: cancelling' "$JARVIS_STATE/jarvis.log"
+assert "le poisson a joué l'abandon" grep -q 'macarchy.jarvis abort' "$FAKE_SHELL_LOG"
+assert "l'annulation est notée avec l'étape et le geste" \
+	grep -qE 'annulé pendant sa réflexion après [0-9]+ s \(touche\)' "$JARVIS_MEMORY/ABORTS.md"
+assert "ce n'est pas un échec" test ! -e "$JARVIS_MEMORY/FAILURES.md"
+assert "il n'a rien dit" test ! -s "$FAKE_PIPER_LOG"
+assert "plus aucun groupe en vie" bash -c "! ls '$JARVIS_RUN/pids/'* 2>/dev/null"
+
+t "annuler : sous deux secondes rien ne s'écrit, au-delà tout est daté"
+printf 'transcribing' >"$JARVIS_RUN/state"
+printf 'state=transcribing since=%s owner=0 epoch=3 ask=x-3\n' "$(date +%s%3N)" >"$JARVIS_RUN/state.rec"
+"$JARVIS" cancel --from touche
+assert "état idle" state_is idle
+assert "un doigt qui ripe n'est pas un motif" test ! -e "$JARVIS_MEMORY/ABORTS.md"
+printf 'speaking' >"$JARVIS_RUN/state"
+printf 'state=speaking since=%s owner=0 epoch=4 ask=x-4\n' "$(($(date +%s%3N) - 12000))" >"$JARVIS_RUN/state.rec"
+"$JARVIS" cancel --say --from voix
+assert "l'étape, la durée et le geste" \
+	grep -q 'annulé pendant sa réponse après 12 s (voix)' "$JARVIS_MEMORY/ABORTS.md"
+assert "toujours pas un échec" test ! -e "$JARVIS_MEMORY/FAILURES.md"
+assert "et --say le dit à voix haute" grep -q 'Annulé.' "$FAKE_PIPER_LOG"
+assert "état idle" state_is idle
+
+# Parler par-dessus lui écrit dans le même journal que les autres abandons,
+# et ce journal se lit — par l'utilisateur et par les rêves, qui en cherchent
+# le motif. Un « barge-in » anglais au milieu d'une phrase française y était
+# invisible à la relecture et illisible à la lecture.
+t "barge-in : l'abandon est daté dans la langue de la maison"
+printf 'speaking' >"$JARVIS_RUN/state"
+printf 'state=speaking since=%s owner=%s epoch=5 ask=x-5\n' \
+	"$(($(date +%s%3N) - 12000))" "$$" >"$JARVIS_RUN/state.rec"
+"$JARVIS" press
+assert "l'oreille s'est rouverte" state_is listening
+assert "l'étape, la durée et le geste, en français" \
+	grep -q 'annulé pendant sa réponse après 12 s (touche)' "$JARVIS_MEMORY/ABORTS.md"
+# Les entrées seulement : le titre du fichier porte son propre nom.
+assert "aucun mot anglais dans les entrées" \
+	bash -c "! grep '^- \[' '$JARVIS_MEMORY/ABORTS.md' | grep -qiE 'barge|cancel|abort|press'"
+assert "ce n'est toujours pas un échec" test ! -e "$JARVIS_MEMORY/FAILURES.md"
+"$JARVIS" cancel
+
+# Le propriétaire est ce qui permet au chien de garde de distinguer une étape
+# lente d'une étape dont plus personne ne s'occupe. `say` prend la machine
+# sans la déplacer — et la remise à zéro du repos, appliquée à cette prise-là,
+# effaçait l'identité que l'invocation venait de demander.
+t "prendre une machine au repos : l'identité est gardée, pas effacée"
+printf 'idle' >"$JARVIS_RUN/state"
+FAKE_PLAY_SLEEP=3 "$JARVIS" say "Bonjour." &
+sayer=$!
+assert "il parle" waitfor state_is speaking
+assert "le propriétaire est nommé" \
+	bash -c "! grep -q 'owner=0 ' '$JARVIS_RUN/state.rec'"
+"$JARVIS" cancel
+wait "$sayer" 2>/dev/null
+assert "et le repos le relâche" grep -q 'owner=0 ' "$JARVIS_RUN/state.rec"
+
+t "presser pendant un rêve : le rêve s'arrête vraiment, puis l'oreille s'ouvre"
+printf 'idle' >"$JARVIS_RUN/state"
+FAKE_CLAUDE_SLEEP=8 FAKE_CLAUDE_STREAM="$FIX/report.jsonl" "$JARVIS" dream &
+dreamer=$!
+assert "il dort" waitfor state_is sleeping
+assert "le rêve a un groupe" waitfor test -s "$JARVIS_RUN/pids/dream"
+dream_pgid=$(cat "$JARVIS_RUN/pids/dream" 2>/dev/null)
+pressable
+"$JARVIS" press
+assert "la session du rêve est tuée" waitfor dead "$dream_pgid"
+assert "l'oreille est ouverte" state_is listening
+wait "$dreamer" 2>/dev/null
+assert "le rêve n'a rien journalisé" bash -c "! grep -q 'rêve :' '$JARVIS_MEMORY/journal/$(today).md' 2>/dev/null"
+"$JARVIS" cancel
+
+t "le micro parle enfin français"
+printf 'idle' >"$JARVIS_RUN/state"
+"$JARVIS" press
+mic_ready
+assert "à l'ouverture" grep -q "J'écoute… Appuie à nouveau quand tu as fini." "$FAKE_NOTIFY_LOG"
+"$JARVIS" cancel
+assert "à l'annulation" grep -q 'Annulé.' "$FAKE_NOTIFY_LOG"
+assert "plus rien en anglais" bash -c \
+	"! grep -qE 'Listening|Press again|Thinking…|No audio captured|Cancelled' '$FAKE_NOTIFY_LOG'"
+
+t "les oreilles : la table de décision du daemon de réveil"
+assert "aucun cas raté" python3 "$TESTS_DIR/test_wake_fsm.py"
+
+# ---- the watchdog: chantier 4
+t "chien de garde : une étape figée est libérée et le groupe tué"
+printf 'thinking' >"$JARVIS_RUN/state"
+# stderr goes nowhere: killing the group makes the little shell around it
+# report « Terminated », which is the test working, not the test complaining.
+bash -c '. "$1"; group_run brain sleep 30' _ "$TESTS_DIR/../bin/jarvis-fsm.sh" 2>/dev/null &
+assert "le groupe tourne" waitfor test -s "$JARVIS_RUN/pids/brain"
+wedged=$(cat "$JARVIS_RUN/pids/brain" 2>/dev/null)
+# A record frozen three minutes ago, and an owner that is this very suite —
+# alive, so only the clock can condemn it.
+printf 'state=thinking since=%s owner=%s epoch=1 ask=x-1\n' "$(($(date +%s%3N) - 200000))" "$$" >"$JARVIS_RUN/state.rec"
+"$JARVIS" watchdog
+assert "retour au repos" state_is idle
+assert "le groupe est tué" waitfor dead "$wedged"
+assert "plus de fichier de groupe" test ! -e "$JARVIS_RUN/pids/brain"
+assert "l'échec est noté en français" \
+	grep -q 'chien de garde : figé pendant sa réflexion' "$JARVIS_MEMORY/FAILURES.md"
+assert "le poisson s'inquiète" grep -q 'macarchy.jarvis emote worried' "$FAKE_SHELL_LOG"
+assert "l'utilisateur est prévenu en français" \
+	grep -q "s'était figé pendant sa réflexion" "$FAKE_NOTIFY_LOG"
+assert "aucun appel au cerveau" test ! -s "$FAKE_CLAUDE_LOG"
+
+t "chien de garde : une étape fraîche n'est pas touchée"
+printf 'thinking' >"$JARVIS_RUN/state"
+printf 'state=thinking since=%s owner=0 epoch=1 ask=x-1\n' "$(date +%s%3N)" >"$JARVIS_RUN/state.rec"
+"$JARVIS" watchdog
+assert "toujours en réflexion" state_is thinking
+assert "aucun échec noté" test ! -e "$JARVIS_MEMORY/FAILURES.md"
+
+t "chien de garde : un cerveau qui écrit encore gagne un sursis, une fois"
+printf 'thinking' >"$JARVIS_RUN/state"
+mkdir -p "$JARVIS_MEMORY/trace"
+touch "$JARVIS_MEMORY/trace/$(today).log"
+printf 'state=thinking since=%s owner=0 epoch=1 ask=x-1\n' "$(($(date +%s%3N) - 200000))" >"$JARVIS_RUN/state.rec"
+"$JARVIS" watchdog
+assert "sursis accordé" state_is thinking
+assert "et le sursis est journalisé" grep -q 'one extension' "$JARVIS_STATE/jarvis.log"
+printf 'state=thinking since=%s owner=0 epoch=1 ask=x-1\n' "$(($(date +%s%3N) - 400000))" >"$JARVIS_RUN/state.rec"
+"$JARVIS" watchdog
+assert "mais il ne vaut qu'une fois" state_is idle
+
+t "chien de garde : la fenêtre de relance se referme sans bruit"
+printf 'followup' >"$JARVIS_RUN/state"
+printf 'state=followup since=%s owner=0 epoch=1 ask=x-1\n' "$(($(date +%s%3N) - 20000))" >"$JARVIS_RUN/state.rec"
+"$JARVIS" watchdog
+assert "refermée" state_is idle
+assert "sans échec" test ! -e "$JARVIS_MEMORY/FAILURES.md"
+assert "sans rien dire" test ! -s "$FAKE_NOTIFY_LOG"
+
+t "chien de garde : une décision périmée ne tue rien"
+printf 'idle' >"$JARVIS_RUN/state"
+rm -f "$JARVIS_RUN/state.rec"
+assert "la revendication est refusée quand l'époque a bougé" bash -c '
+	set -u
+	. "$1"
+	claim
+	seen=$REC_EPOCH
+	( MY_EPOCH=""; claim )
+	claim_if "$seen" cancel && { echo "elle a revendiqué malgré tout"; exit 1; }
+	[[ $(state) == idle ]] || { echo "état modifié : $(state)"; exit 1; }
+	rec_read
+	claim_if "$REC_EPOCH" cancel || { echo "la décision fraîche est refusée"; exit 1; }
+	[[ $(state) == cancelling ]] || { echo "état : $(state)"; exit 1; }
+	exit 0
+' _ "$TESTS_DIR/../bin/jarvis-fsm.sh"
+
+t "tick : la pulsation commence par libérer la machine"
+printf 'quota %s' "$(($(date +%s) + 3600))" >"$JARVIS_STATE/brain"
+printf 'thinking' >"$JARVIS_RUN/state"
+printf 'state=thinking since=%s owner=0 epoch=1 ask=x-1\n' "$(($(date +%s%3N) - 400000))" >"$JARVIS_RUN/state.rec"
+"$JARVIS" tick
+assert "machine libérée" state_is idle
+assert "aucun appel cerveau" test ! -s "$FAKE_CLAUDE_LOG"
+assert "l'heure de silence est écrite pour le poisson" test -s "$JARVIS_STATE/quiet"
+assert "le bilan de santé du jour a tourné" test -e "$JARVIS_STATE/last-doctor"
+assert "seul le rouge y est gardé" bash -c "! grep -q '^✓' '$JARVIS_STATE/last-doctor'"
+# The log line rather than the notification: at night the diagnosis still
+# runs and only its notification is held back, so this assertion is the one
+# that does not depend on the hour the suite is run at.
+assert "et ce qui vient de rougir est signalé" \
+	grep -q 'doctor: nouveau(x) problème(s)' "$JARVIS_STATE/jarvis.log"
+# Seen on the live machine before it was fixed: « a;b c » instead of
+# « a; b; c », because paste cycles through the delimiters it is given.
+assert "en une ligne lisible" bash -c \
+	"! grep -q 'nouveau(x) problème(s).*;[^ ]' '$JARVIS_STATE/jarvis.log'"
+
+t "tick : le bilan ne signale que ce qui vient de rougir"
+printf 'idle' >"$JARVIS_RUN/state"
+# Everything that is red today was already red yesterday: nothing to say.
+"$JARVIS" doctor --quiet | sort >"$JARVIS_STATE/last-doctor"
+"$JARVIS" tick
+assert "rien de neuf, rien de dit" bash -c "! grep -q 'bilan de santé' '$FAKE_NOTIFY_LOG'"
+
+t "doctor : une machine bloquée est signalée avec son remède"
+printf 'speaking' >"$JARVIS_RUN/state"
+printf 'state=speaking since=%s owner=0 epoch=2 ask=x-2\n' "$(($(date +%s%3N) - 3600000))" >"$JARVIS_RUN/state.rec"
+"$JARVIS" doctor --quiet >"$SB/doctor.out"
+rc=$?
+assert "la ligne et le remède" \
+	grep -q 'machine bloquée en « speaking » depuis 60 min (omarchy-jarvis cancel)' "$SB/doctor.out"
+assert "--quiet ne montre que le rouge" bash -c "! grep -q '^✓\|^ℹ' '$SB/doctor.out'"
+assert "le code de sortie compte les problèmes" test "$rc" = "$(grep -c '^✗' "$SB/doctor.out")"
+printf 'idle' >"$JARVIS_RUN/state"
+rm -f "$JARVIS_RUN/state.rec"
+"$JARVIS" doctor >"$SB/doctor2.out"
+assert "au repos, pas de ligne de blocage" bash -c "! grep -q 'machine bloquée' '$SB/doctor2.out'"
+assert "et l'état est vert" grep -q '✓ état : idle' "$SB/doctor2.out"
+
+t "doctor : une planche manquante et un poisson périmé se voient"
+"$JARVIS" look
+assert "le poisson est conforme" bash -c '"$1" doctor | grep -q "✓ poisson conforme"' _ "$JARVIS"
+rm -f "$JARVIS_SPRITES/worried.png"
+assert "planche manquante" bash -c '"$1" doctor | grep -q "✗ planches du poisson"' _ "$JARVIS"
+printf 'B1 E1 M1 T1 braise\n' >"$JARVIS_SPRITES/.look"
+assert "poisson périmé" bash -c '"$1" doctor | grep -q "✗ poisson conforme"' _ "$JARVIS"
+
+t "un seul échec ne programme plus un rêve"
+printf 'idle' >"$JARVIS_RUN/state"
+printf -- '- [x] un échec isolé\n' >"$JARVIS_MEMORY/FAILURES.md"
+"$JARVIS" maybe-dream
+assert "aucun rêve" test ! -s "$FAKE_CLAUDE_LOG"
+printf -- '- [x] un\n- [x] deux\n- [x] trois\n' >"$JARVIS_MEMORY/FAILURES.md"
+FAKE_CLAUDE_STREAM="$FIX/report.jsonl" "$JARVIS" maybe-dream
+assert "un motif, lui, se consolide" test -s "$FAKE_CLAUDE_LOG"
 
 # ---- look
-t "look: génère les onze planches depuis l'âme"
-export JARVIS_SPRITES="$SB/sprites"
+t "look: génère les planches depuis l'âme"
 "$JARVIS" look
-assert "onze planches" test "$(ls "$JARVIS_SPRITES"/*.png | wc -l)" = 11
+# By name, not by count: the sheets the mascot actually asks for by name are
+# the contract, and counting them meant every new sheet added to
+# sprites/generate.py arrived as a red line in a file its author does not own.
+assert "toutes les planches attendues" bash -c '
+	for sheet in idle listening thinking speaking cancel sleeping tired dnd worried proud curious celebrate; do
+		[[ -e "$1/$sheet.png" ]] || { echo "planche manquante : $sheet"; exit 1; }
+	done' _ "$JARVIS_SPRITES"
 assert "canevas 72 de large" bash -c "python3 '$TESTS_DIR/../sprites/preview.py' --no-ascii --scale 1 --out /dev/null '$JARVIS_SPRITES/tired.png' | grep -q '144x56'"
-unset JARVIS_SPRITES
+assert "le poisson a rechargé ses planches" grep -q 'macarchy.jarvis reload' "$FAKE_SHELL_LOG"
 
 # ---- every shape configuration, every part-wise move, attached
 t "sprites: les 256 configurations s'attachent"
@@ -125,11 +685,24 @@ t "save: un texte copié devient une note"
 FAKE_CLIP="trois lignes de notes" "$JARVIS" save
 assert "fichier .md" bash -c "ls '$JARVIS_BOX/input/'note-*.md"
 t "greet: résume ce qui s'est passé, une fois par demi-heure"
-mkdir -p "$JARVIS_MEMORY/journal"; printf -- '- 08:00 ronde : Le disque est presque plein.\n- 08:30 digestion : contrat.pdf → knowledge/inbox/contrat.md\n' >"$JARVIS_MEMORY/journal/$(today).md"
+printf 'idle' >"$JARVIS_RUN/state"
+# Seeded relative to now: the journal holds clock faces, so a fixed 08:00
+# would make this test depend on the hour it is run at.
+mkdir -p "$JARVIS_MEMORY/journal"
+printf -- '- %s ronde : Le disque est presque plein.\n- %s digestion : contrat.pdf → knowledge/inbox/contrat.md\n' \
+	"$(date -d '-2 hours' +%H:%M)" "$(date -d '-1 hour' +%H:%M)" >"$JARVIS_MEMORY/journal/$(today).md"
 touch -d '3 hours ago' "$JARVIS_RUN/last-ask"
 "$JARVIS" greet
 assert "greet journalisé dans le log" bash -c "grep -q 'greet: Le disque est presque plein.' '$JARVIS_STATE/jarvis.log'"
+assert "bulle envoyée au poisson" grep -q "macarchy.jarvis reply Pendant ton absence" "$FAKE_SHELL_LOG"
 assert "second appel silencieux" bash -c "! '$JARVIS' greet 2>&1 | grep -q ."
+
+t "greet: une absence d'une nuit raconte quand même la matinée"
+mkdir -p "$JARVIS_MEMORY/journal"
+printf -- '- %s ronde : Le disque est presque plein.\n' "$(date -d '-1 hour' +%H:%M)" >"$JARVIS_MEMORY/journal/$(today).md"
+touch -d 'yesterday 18:00' "$JARVIS_RUN/last-ask"
+"$JARVIS" greet
+assert "la ronde du matin est racontée" bash -c "grep -q 'greet: Le disque est presque plein.' '$JARVIS_STATE/jarvis.log'"
 
 # ---- rotate
 t "rotate: résume et clôt la conversation"
