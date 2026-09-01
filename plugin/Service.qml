@@ -431,7 +431,7 @@ Item {
     // where the voice did, the tail is cut, and he recoils.
     function abort(): void { service.playAbort() }
 
-    // The written exchange: a small prompt bar (SUPER+ALT+K). Enter sends
+    // The written exchange: a small prompt bar (SUPER+ALT+E). Enter sends
     // to `ask --quiet`, the reply lands in the philactère.
     function prompt(): void {
       if (!service.promptOpen) promptField.text = ""

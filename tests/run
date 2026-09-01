@@ -41,7 +41,12 @@ sandbox() {
 		JARVIS_NO_DESKTOP=1 JARVIS_WAKE=0 \
 		FAKE_CLAUDE_LOG="$SB/claude.log" FAKE_PIPER_LOG="$SB/piper.log" \
 		FAKE_PLAY_LOG="$SB/play.log" FAKE_SHELL_LOG="$SB/shell.log" \
-		FAKE_VOXTYPE_LOG="$SB/voxtype.log" FAKE_NOTIFY_LOG="$SB/notify.log"
+		FAKE_VOXTYPE_LOG="$SB/voxtype.log" FAKE_NOTIFY_LOG="$SB/notify.log" \
+		FAKE_PACTL_LOG="$SB/pactl.log"
+	# The soul lives in the repository, not in the sandbox — so a test that
+	# has not asked for one of its own must never inherit the doctored copy
+	# left exported by the previous test.
+	unset JARVIS_SOUL
 	mkdir -p "$JARVIS_RUN" "$JARVIS_STATE" "$JARVIS_MEMORY/knowledge"
 	cp "$TESTS_DIR"/../memory/*_PROMPT.md "$JARVIS_MEMORY/"
 	echo test >"$JARVIS_MEMORY/knowledge/VERSION"
@@ -104,6 +109,17 @@ mic_ready() {
 		waitfor state_is listening && pressable
 }
 states_seen() { sed -n 's/^[^ ]* state: //p' "$JARVIS_STATE/jarvis.log" | paste -sd' ' -; }
+# `assert` runs its command through "$@", and `!` is a shell keyword rather
+# than a command — so a negated expectation needs a real one to run.
+not() { ! "$@"; }
+journal_lacks() { ! journal_has "$1"; }
+# A soul of one's own, for the settings a test needs to vary. The real one
+# lives in the repository rather than the sandbox, so JARVIS_SOUL moves it
+# for the length of a test exactly as JARVIS_RUN moves the state.
+soul_with() {
+	sed "/^- langue:/a - $1" "$TESTS_DIR/../SOUL.md" >"$SB/SOUL.md"
+	export JARVIS_SOUL="$SB/SOUL.md"
+}
 
 # ---- the scripts themselves parse
 t "hygiène : tout s'analyse avant de tourner"
@@ -275,6 +291,113 @@ assert "échec noté" grep -q "transcript vide" "$JARVIS_MEMORY/FAILURES.md"
 assert "excuse dite à voix haute" grep -q "Je n'ai rien entendu." "$FAKE_PIPER_LOG"
 assert "état idle" state_is idle
 assert "aucun appel cerveau" test ! -s "$FAKE_CLAUDE_LOG"
+
+# ---- le micro qui n'est pas là
+#
+# Le 2026-09-01 à 23:07 : micro coupé, et il a quand même pris l'air
+# d'écouter — le poisson, « J'écoute… », cinq secondes d'enregistrement —
+# puis whisper a rendu le générique Amara et il l'a dit à voix haute.
+# Faire semblant d'écouter est le défaut ; l'hallucination n'est que ce
+# qui en sort.
+t "micro coupé : il tend le clavier au lieu de faire semblant d'écouter"
+printf 'idle' >"$JARVIS_RUN/state"
+FAKE_MIC_MUTED=1 "$JARVIS" press
+assert "il n'est jamais passé en écoute" test "$(states_seen)" = ""
+assert "état idle" state_is idle
+assert "aucun micro ouvert" test ! -e "$JARVIS_RUN/utterance.wav"
+assert "aucune poignée réservée" test ! -e "$JARVIS_RUN/pids/record"
+assert "la barre de saisie s'ouvre" grep -q 'macarchy.jarvis prompt' "$FAKE_SHELL_LOG"
+assert "il dit pourquoi" grep -qi 'micro' "$FAKE_NOTIFY_LOG"
+# Couper son micro est un geste délibéré : il ne le défait jamais de
+# lui-même, et c'est le journal des écritures pactl qui en témoigne.
+assert "il ne réactive rien tout seul" test ! -s "$FAKE_PACTL_LOG"
+assert "aucun appel cerveau" test ! -s "$FAKE_CLAUDE_LOG"
+assert "ce n'est pas une panne" no_failures
+
+t "micro coupé : le mode prevenir se contente de dire pourquoi"
+printf 'idle' >"$JARVIS_RUN/state"
+soul_with "micro-coupe: prevenir"
+FAKE_MIC_MUTED=1 "$JARVIS" press
+assert "il dit pourquoi" grep -qi 'micro' "$FAKE_NOTIFY_LOG"
+assert "aucune barre de saisie" not grep -q 'macarchy.jarvis prompt' "$FAKE_SHELL_LOG"
+assert "il n'est jamais passé en écoute" test "$(states_seen)" = ""
+assert "aucun micro ouvert" test ! -e "$JARVIS_RUN/utterance.wav"
+
+t "micro coupé : le mode reactiver le rouvre, le dit, et écoute pour de bon"
+printf 'idle' >"$JARVIS_RUN/state"
+soul_with "micro-coupe: reactiver"
+FAKE_MIC_MUTED=1 "$JARVIS" press
+assert "le micro est réactivé" grep -q 'set-source-mute .* 0' "$FAKE_PACTL_LOG"
+assert "il l'annonce" grep -qi 'micro' "$FAKE_NOTIFY_LOG"
+mic_ready
+assert "et il écoute vraiment" state_is listening
+"$JARVIS" cancel
+
+# Le Control Center lit les réglages dans `status`, pas dans l'âme : c'est
+# par là que le sélecteur du panneau connaît le mode courant.
+t "status : le mode « micro coupé » est publié pour le Control Center"
+soul_with "micro-coupe: prevenir"
+"$JARVIS" status >"$SB/status.out"
+assert "le mode courant est publié" grep -q '^micro_coupe=prevenir' "$SB/status.out"
+
+# Un micro ouvert mais mort — jack débranché, graphe cassé, gain à zéro —
+# rend un WAV bien dodu qui n'est que des zéros. Mesuré : 30 octets non
+# nuls sur 78 ko de capture muette, contre 66 819 pour une vraie pièce
+# silencieuse. Whisper n'a rien à faire là-dedans.
+t "capture muette : whisper n'est jamais appelé"
+printf 'idle' >"$JARVIS_RUN/state"
+printf 'une vraie question' >"$JARVIS_RUN/last-ask"
+FAKE_RECORD_ZEROS=1 "$JARVIS" press
+mic_ready
+"$JARVIS" press
+assert "l'oreille n'a pas été dérangée" test ! -s "$FAKE_VOXTYPE_LOG"
+assert "aucun appel cerveau" test ! -s "$FAKE_CLAUDE_LOG"
+assert "il le dit" grep -qi "rien entendu" "$FAKE_NOTIFY_LOG"
+assert "état idle" state_is idle
+assert "la dernière question n'a pas bougé" \
+	test "$(cat "$JARVIS_RUN/last-ask")" = "une vraie question"
+
+# ---- ce qu'il entend n'est pas toujours quelqu'un
+#
+# Whisper answers silence with the subtitle credits it was trained on, and
+# that string used to reach the brain, the speakers and the journal as a
+# real question — nine times on 2026-09-01. The empty-transcript guard above
+# never fires on it: whisper does not return nothing, it returns boilerplate.
+t "bruit : une hallucination de sous-titres n'atteint ni le cerveau ni la voix"
+printf 'idle' >"$JARVIS_RUN/state"
+printf 'une vraie question' >"$JARVIS_RUN/last-ask"
+"$JARVIS" press
+mic_ready
+FAKE_TRANSCRIPT="Sous-titres réalisés par la communauté d'Amara.org" "$JARVIS" press
+assert "aucun appel cerveau" test ! -s "$FAKE_CLAUDE_LOG"
+assert "rien n'est dit à voix haute" test ! -s "$FAKE_PIPER_LOG"
+assert "état idle" state_is idle
+assert "journalisé comme bruit" grep -q "noise: Sous-titres" "$JARVIS_STATE/jarvis.log"
+assert "aucun échange au journal" journal_lacks "Amara"
+# Le point crucial : une hallucination poussait $LAST_ASK en avant, et la
+# ronde suivante se croyait alors de trop pendant dix minutes.
+assert "la dernière question n'a pas bougé" \
+	test "$(cat "$JARVIS_RUN/last-ask")" = "une vraie question"
+# Ce n'est pas une panne : rien à distiller en leçon, rien à programmer en rêve.
+assert "aucun échec noté" no_failures
+
+t "bruit : la table entière se teste sans audio"
+assert "le générique Amara" "$JARVIS" noise? "Sous-titres réalisés par la communauté d'Amara.org"
+assert "l'appel à l'abonnement" "$JARVIS" noise? "Je vous invite à vous abonner à la chaîne."
+assert "le remerciement de fin de vidéo" "$JARVIS" noise? "Merci d'avoir regardé cette vidéo !"
+assert "Sous-titrage Société Radio-Canada" "$JARVIS" noise? "Sous-titrage Société Radio-Canada"
+assert "SousTitreur.com" "$JARVIS" noise? "SousTitreur.com"
+assert "Thanks for watching" "$JARVIS" noise? "Thanks for watching!"
+assert "un merci seul" "$JARVIS" noise? "Merci."
+assert "un « you » seul" "$JARVIS" noise? "you"
+assert "de la ponctuation seule" "$JARVIS" noise? " ... "
+assert "une chaîne vide" "$JARVIS" noise? ""
+# Les négatifs comptent autant : un filtre qui mange une vraie demande est
+# pire que l'hallucination qu'il attrape.
+assert "une vraie demande passe" not "$JARVIS" noise? "Verrouille mon ordinateur."
+assert "un merci dans une phrase passe" not "$JARVIS" noise? "Merci, tu peux éteindre le wifi ?"
+assert "une question sur les sous-titres passe" \
+	not "$JARVIS" noise? "Trouve-moi les sous-titres de ce film."
 
 t "voix en panne: l'état redescend au lieu de rester speaking"
 printf 'idle' >"$JARVIS_RUN/state"
@@ -660,6 +783,15 @@ rm -f "$JARVIS_RUN/state.rec"
 "$JARVIS" doctor >"$SB/doctor2.out"
 assert "au repos, pas de ligne de blocage" bash -c "! grep -q 'machine bloquée' '$SB/doctor2.out'"
 assert "et l'état est vert" grep -q '✓ état : idle' "$SB/doctor2.out"
+
+# Le bilan a déclaré le micro vert toute la journée du 2026-09-01 : il ne
+# regardait que la TAILLE du fichier, et un micro coupé en produit un gros.
+t "doctor : un micro qui ne capte rien ne passe plus pour vert"
+printf 'idle' >"$JARVIS_RUN/state"
+FAKE_RECORD_ZEROS=1 "$JARVIS" doctor --quiet --mic >"$SB/mic.out"
+assert "la capture muette est signalée" grep -q '^✗ micro : capture' "$SB/mic.out"
+"$JARVIS" doctor --quiet --mic >"$SB/mic2.out"
+assert "et une capture vivante reste verte" not grep -q '^✗ micro : capture' "$SB/mic2.out"
 
 t "doctor : une planche manquante et un poisson périmé se voient"
 "$JARVIS" look

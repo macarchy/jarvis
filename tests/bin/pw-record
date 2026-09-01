@@ -8,6 +8,11 @@ SIGINT in every child it backgrounds, and a bash script cannot take back a
 signal that was ignored on entry, so a shell stub could only ever die of
 SIGTERM — while the pipeline sends SIGINT. Silence (nothing captured at
 all) is FAKE_RECORD_SILENT=1.
+
+FAKE_RECORD_ZEROS=1 is the other silence, and the one that fooled everything
+for a day: a muted or dead node records perfectly well, at length, and every
+sample is zero. The file is big, its header is intact, and only its CONTENT
+says nothing came through.
 """
 
 import os
@@ -17,6 +22,7 @@ import time
 
 out = sys.argv[-1]
 silent = os.environ.get("FAKE_RECORD_SILENT") == "1"
+zeros = os.environ.get("FAKE_RECORD_ZEROS") == "1"
 signal.signal(signal.SIGINT, lambda *_: os._exit(0))
 signal.signal(signal.SIGTERM, lambda *_: os._exit(0))
 # The recorder is backgrounded by the FSM and outlives the invocation that
@@ -32,7 +38,11 @@ with open(out, "wb", buffering=0) as wav:
         wav.write(b"RIFF____WAVEfmt ")
     while True:
         if not silent:
-            wav.write(b"audio")
+            # A real recorder writes 32 kB a second, and the pipeline now
+            # judges a capture by how much of it is NOT zero — so a fake
+            # that dribbled five bytes a tick read as digital silence and
+            # would have made that guard look correct while it was not.
+            wav.write(b"\0" * 320 if zeros else b"audio" * 64)
         # A recorder outlives its invocation on purpose, so it also has to
         # know when its sandbox is gone: an unlinked file means the run
         # cleaned up around it and there is nothing left to record into.

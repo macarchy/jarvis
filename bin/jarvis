@@ -48,6 +48,11 @@ STATE_FILE="$RUN_DIR/state"
 CONV_FLAG="$STATE_DIR/conversation"
 LAST_ASK="$RUN_DIR/last-ask"
 MEMORY_DIR="${JARVIS_MEMORY:-$JARVIS_DIR/memory}"
+# The soul lives in the repository rather than in a sandbox, because it is
+# edited by hand and by the Control Center. JARVIS_SOUL moves it anyway, for
+# the same reason as every other override here: a setting that changes what
+# the pipeline DOES is a setting the test suite has to be able to vary.
+SOUL_FILE="${JARVIS_SOUL:-$JARVIS_DIR/SOUL.md}"
 FAILURES="$MEMORY_DIR/FAILURES.md"
 SUGGESTIONS="$MEMORY_DIR/SUGGESTIONS.md"
 LAST_REPLY="$RUN_DIR/last-reply"
@@ -286,7 +291,7 @@ journal() {
 # default when the line is missing. The Control Center writes these lines.
 setting() {
 	local v
-	v=$(grep -m1 "^- $1:" "$JARVIS_DIR/SOUL.md" 2>/dev/null | sed "s/^- $1: *//; s/ *$//")
+	v=$(grep -m1 "^- $1:" "$SOUL_FILE" 2>/dev/null | sed "s/^- $1: *//; s/ *$//")
 	printf '%s' "${v:-$2}"
 }
 
@@ -301,7 +306,7 @@ look_signature() {
 
 # Write one soul setting (the Control Center does the same with sed).
 set_setting() {
-	local soul="$JARVIS_DIR/SOUL.md"
+	local soul="$SOUL_FILE"
 	if grep -q "^- $1:" "$soul"; then
 		sed -i "s/^- $1: .*/- $1: $2/" "$soul"
 	else
@@ -719,8 +724,57 @@ run_exchange() {
 # while he is still speaking — and it is the French word that says who asked,
 # exactly as `cancel --from` takes: the abort journal is read by the user and
 # by the dreams, and both read French.
+# Whether the node the recorder would actually read is muted. Only that node
+# is asked, and that is the point: on 2026-09-01 the hardware source was wide
+# open while the filter-chain output in front of it — the one $MIC_TARGET
+# names, the one pw-record reads — was muted. Everything looked healthy,
+# including the doctor, and nothing could hear.
+mic_muted() {
+	[[ $(pactl get-source-mute "$MIC_TARGET" 2>/dev/null) == *yes* ]]
+}
+
+# What he does instead of opening an ear nothing can come through, per the
+# soul's `micro-coupe`:
+#
+#   ecrire     (default) hand over the keyboard — the written prompt bar,
+#              whose Enter goes to `ask --quiet`. He cannot hear you, so he
+#              offers the other way in rather than a refusal.
+#   prevenir   say why, and no more.
+#
+# `reactiver` is handled at the call site, because it does not replace the
+# ear — it opens it. He never unmutes on his own under the other two: muting
+# a microphone is a deliberate gesture, and quietly undoing it is the one
+# thing a voice assistant must never do.
+mic_muted_fallback() {
+	if [[ $(setting micro-coupe ecrire) == prevenir ]]; then
+		notify "Ton micro est coupé" "Réactive-le pour me parler."
+		return 0
+	fi
+	notify "Ton micro est coupé" "Écris-moi — Entrée pour envoyer."
+	mascot prompt
+}
+
 do_listen() {
 	local trigger="${1:-}" target=() was="" held=0
+	# Before the machine is claimed, and that ordering IS the fix: on
+	# 2026-09-01 a muted microphone still got the fish, the « J'écoute… »
+	# and five seconds of recording, and whisper answered the silence with
+	# subtitle credits he then said out loud. Looking like he is listening
+	# while nothing can reach him is a worse defect than the hallucination
+	# it feeds, and it is the one the user actually sees.
+	if mic_muted; then
+		if [[ $(setting micro-coupe ecrire) == reactiver ]]; then
+			pactl set-source-mute "$MIC_TARGET" 0 2>/dev/null
+			notify "Micro réactivé" "Je t'écoute."
+		else
+			# A press during a reply is still an order to stop talking,
+			# muted microphone or not — so the abort runs first, in the
+			# same French the abort journal is read in.
+			[[ -n $trigger ]] && do_cancel --from "$trigger"
+			mic_muted_fallback
+			return 0
+		fi
+	fi
 	# How long the reply had been running has to be read BEFORE the claim:
 	# claiming moves `since` to now.
 	if [[ -n $trigger ]]; then
@@ -766,6 +820,33 @@ do_listen() {
 	return 0
 }
 
+# ------------------------------------------------------------------ le bruit
+
+# True when a transcript is not somebody talking.
+#
+# The empty-transcript guard below cannot catch this, and that is the whole
+# problem: whisper never answers silence with nothing. It answers with the
+# thing it read most during training — subtitle credits — so an empty room
+# becomes « Sous-titres réalisés par la communauté d'Amara.org », and every
+# organ downstream treats it as a question. It cost a brain call, a spoken
+# reply, a journal line the dreams later read as fact, and a $LAST_ASK
+# pushed forward that suppressed the next round for ten minutes. Nine times
+# on 2026-09-01.
+#
+# The table is memory/NOISE.md, one ERE per line. Each is anchored HERE
+# rather than in the file, so a pattern always describes a WHOLE transcript
+# and « trouve-moi les sous-titres de ce film » cannot fall into one that
+# describes an entire credit line. That anchoring is what the negative
+# assertions in tests/run exist to hold.
+is_noise() {
+	local pats
+	pats=$(sed '/<!--/,/-->/d' "$MEMORY_DIR/NOISE.md" 2>/dev/null |
+		sed 's/[[:space:]]*$//' | grep -v '^[[:space:]]*$' | grep -v '^#' |
+		sed 's/^/^(/; s/$/)$/')
+	[[ -n $pats ]] || return 1
+	grep -qiE -f <(printf '%s\n' "$pats") <<<"$1"
+}
+
 do_finish() {
 	local text lang pgid
 	# Claim and leave `listening` FIRST, before the recorder is even
@@ -790,11 +871,25 @@ do_finish() {
 		notify "Jarvis" "Je n'ai rien entendu."
 		return 1
 	fi
+	# The other silence, and the one that fooled every check for a day: a
+	# muted or dead node records perfectly well. The file is long, its header
+	# is intact, and every sample is zero — so `-s` above is satisfied and
+	# whisper, handed digital silence, answers with the subtitle credits it
+	# was trained on. Counting the non-NUL bytes settles it for nothing:
+	# measured here, 30 in 78 kB of muted capture (the header, and no more)
+	# against 66 819 for a real quiet room, whose dither is never zero. This
+	# catches the unplugged jack and the broken graph too, not only the mute.
+	if (($(tr -d '\0' <"$WAV" | wc -c) <= 64)); then
+		rm -f "$WAV"
+		transition rest
+		notify "Je n'ai rien entendu." "Ton micro ne capte rien."
+		return 1
+	fi
 	notify "Je réfléchis…"
 	# The soul's `langue` setting pins the STT language (fr | en | auto):
 	# whisper's auto-detection is unreliable on short clips. The effective
 	# config is derived fresh so a settings change applies immediately.
-	lang=$(grep -m1 '^- langue:' "$JARVIS_DIR/SOUL.md" 2>/dev/null | sed 's/^- langue: *//; s/ *$//')
+	lang=$(grep -m1 '^- langue:' "$SOUL_FILE" 2>/dev/null | sed 's/^- langue: *//; s/ *$//')
 	case "$lang" in fr | en) ;; *) lang=auto ;; esac
 	sed "s/^language = .*/language = \"$lang\"/" "$STT_CONFIG" >"$RUN_DIR/voxtype.toml"
 	text=$(group_run stt "$VOXTYPE" -c "$RUN_DIR/voxtype.toml" transcribe "$WAV" 2>>"$LOG" | tail -1)
@@ -805,6 +900,18 @@ do_finish() {
 		note_failure "transcript vide : la reconnaissance vocale n'a rien produit"
 		do_speak "Je n'ai rien entendu."
 		return 1
+	fi
+	# Nobody said that. It is not a failure either — there is nothing to
+	# distil into a lesson and nothing to schedule a dream about — so it
+	# goes no further than the log and a puzzled fish. In particular
+	# $LAST_ASK is left exactly where it was: it is what the rounds read to
+	# know whether they would be interrupting, and a hallucination that
+	# moves it steals the next ten minutes from a user who never spoke.
+	if is_noise "$text"; then
+		log "noise: $text"
+		transition rest
+		mascot_emote curious
+		return 0
 	fi
 	transition ask || return 1
 	run_exchange "$text"
@@ -1105,6 +1212,15 @@ say)
 note)
 	shift
 	note_failure "$*"
+	;;
+# The noise table, assertable without a microphone: exit 0 means « personne
+# n'a dit ça ». It is how the whole of memory/NOISE.md — the credits it must
+# catch AND the real requests it must never eat — is held by tests/run in
+# milliseconds, with no audio, no model and no real time.
+noise\?)
+	shift
+	is_noise "$*"
+	exit $?
 	;;
 dream)
 	# Consolidate memory: a dedicated Claude session reads the failure
@@ -1665,6 +1781,13 @@ doctor)
 	}
 	# The only check that opens the microphone, which is why it is behind a
 	# flag: half a second of capture, and a file with something in it.
+	#
+	# « Something in it » used to mean a byte count, and that is how this
+	# line stayed green through the whole of 2026-09-01 while the node it
+	# names was muted: a muted capture is not a short file, it is a full one
+	# made of zeros. So it counts what is NOT zero, exactly as do_finish
+	# does — a check that cannot tell silence from sound is worse than none,
+	# because it is the line a user reads to rule the microphone out.
 	check_capture() {
 		local out pid size
 		out=$(mktemp) || return 1
@@ -1676,9 +1799,9 @@ doctor)
 		# header instead of leaving a file nothing can read.
 		kill -INT "$pid" 2>/dev/null
 		wait "$pid" 2>/dev/null
-		size=$(stat -c %s "$out" 2>/dev/null || echo 0)
+		size=$(tr -d '\0' <"$out" 2>/dev/null | wc -c)
 		rm -f "$out"
-		((size > 0))
+		((size > 64))
 	}
 
 	chk "claude (le cerveau)" bash -c 'command -v claude'
@@ -1737,6 +1860,11 @@ status)
 	printf 'brain=%s\n' "$(brain_status)"
 	printf 'quiet=%s\n' "$(quiet_now && echo oui || echo non)"
 	printf 'rondes=%s\nreves=%s\nsilence=%s\n' "$(setting rondes oui)" "$(setting reves oui)" "$(setting silence 23-7)"
+	# The key carries a hyphen in the soul and an underscore here: these
+	# lines are read as `key=value` by the panel, and its parser splits on
+	# the first `=` only — a hyphen would be fine, but every other key here
+	# is already an identifier and consistency is worth more than the hyphen.
+	printf 'micro_coupe=%s\n' "$(setting micro-coupe ecrire)"
 	printf 'corps=%s\noeil=%s\ncriniere=%s\nqueue=%s\ncouleur=%s\n' "$(setting corps B1)" "$(setting oeil E1)" "$(setting criniere M1)" "$(setting queue T1)" "$(setting couleur or)"
 	printf 'now=%s\nlast_ask_at=%s\nlast_heartbeat=%s\nnext_heartbeat=%s\nlast_dream=%s\n' \
 		"$now" "$last_ask" "$last_hb" "$next_hb" "$(stat -c %Y "$STATE_DIR/last-dream" 2>/dev/null || echo 0)"
@@ -1781,7 +1909,7 @@ suggestion)
 	fi
 	;;
 *)
-	echo "usage: jarvis [press|cancel [--say] [--from <mot>]|reset|settle|watchdog|ask [--quiet] <text>|say <text>|state|status|dispatch [--dir <dir>] <task>|dream [--quiet]|maybe-dream|heartbeat|tick|digest|doctor [--quiet] [--mic]|rotate|look [random]|lastcmd|missed [min]|save|greet|index|note <text>|suggestions|suggestion <n> accept|reject]" >&2
+	echo "usage: jarvis [press|cancel [--say] [--from <mot>]|reset|settle|watchdog|ask [--quiet] <text>|say <text>|state|status|dispatch [--dir <dir>] <task>|dream [--quiet]|maybe-dream|heartbeat|tick|digest|doctor [--quiet] [--mic]|rotate|look [random]|lastcmd|missed [min]|save|greet|index|note <text>|noise? <text>|suggestions|suggestion <n> accept|reject]" >&2
 	exit 1
 	;;
 esac
