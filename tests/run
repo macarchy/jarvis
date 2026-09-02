@@ -1151,6 +1151,81 @@ assert "la ronde du matin est racontée" bash -c "grep -q 'greet: Le disque est 
 # The mascot's five-minute Timer and the systemd minute both run `tick`, and
 # nothing kept them apart: a beat landing inside a beat busy closing a stale
 # conversation found the flag still there and closed it a second time.
+# ---- routines: what he does at a fixed hour
+#
+# memory/ROUTINES.md, one line per routine, run from the pulse. The hour is
+# JARVIS_NOW here, so a test can stand at ten o'clock whenever it runs.
+tick_at() { JARVIS_NOW="$(date -d "today $1" +%s)" "$JARVIS" tick; }
+t "routines : la grammaire, la liste, l'interrupteur"
+printf 'idle' >"$JARVIS_RUN/state"
+assert "ajout d'une quotidienne" "$JARVIS" routine add "18:30 * say Pense à brancher le Mac."
+assert "ajout d'une semaine" "$JARVIS" routine add "- 08:00 lun-ven ask --quiet Briefing du matin"
+assert "ajout d'une ponctuelle" "$JARVIS" routine add "2030-01-01 09:00 once notify Bonne année"
+assert "une ligne sans verbe est refusée" not "$JARVIS" routine add "08:00 * bonjour"
+assert "un jour inconnu est refusé" not "$JARVIS" routine add "08:00 lun-fri say x"
+assert "une heure impossible est refusée" not "$JARVIS" routine add "25:00 * say x"
+assert "l'en-tête du fichier est resté" grep -q '^# ROUTINES.md' "$JARVIS_MEMORY/ROUTINES.md"
+"$JARVIS" routines >"$SB/r"
+assert "trois routines numérotées" test "$(cut -f1,2,3,5 "$SB/r" | paste -sd'|')" = "1	on	18:30	say|2	on	08:00	ask --quiet|3	on	2030-01-01 09:00	notify"
+assert "la prochaine est calculée" test "$(cut -f7 "$SB/r" | sort -n | head -1)" -gt "$(date +%s)"
+assert "off" "$JARVIS" routine 2 off
+assert "la ligne porte off" grep -q '^- off 08:00 lun-ven ask --quiet Briefing du matin$' "$JARVIS_MEMORY/ROUTINES.md"
+assert "et ne compte plus" test "$("$JARVIS" status | grep '^routines=')" = "routines=2"
+assert "on" "$JARVIS" routine 2 on
+assert "la ligne est rétablie" grep -q '^- 08:00 lun-ven ask --quiet Briefing du matin$' "$JARVIS_MEMORY/ROUTINES.md"
+assert "delete" "$JARVIS" routine 3 delete
+assert "deux restent" test "$("$JARVIS" routines --json | python3 -c 'import json,sys; x=json.load(sys.stdin); print(len(x), x[0]["text"], x[1]["days"])')" = "2 Pense à brancher le Mac. lun-ven"
+assert "un numéro inconnu est refusé" not "$JARVIS" routine 9 off
+
+t "routines : le pouls lance ce qui est dû, une fois, rattrape dix minutes, saute au-delà"
+printf 'idle' >"$JARVIS_RUN/state"
+soul_with "rondes: non"
+sed -i 's/^- silence: .*/- silence: non/' "$SB/SOUL.md"
+touch "$JARVIS_STATE/last-doctor-run"
+"$JARVIS" routine add "10:00 * say Il est dix heures." >/dev/null
+"$JARVIS" routine add "09:55 * notify Cinq minutes avant." >/dev/null
+"$JARVIS" routine add "09:30 * say Trop tôt." >/dev/null
+"$JARVIS" routine add "$(date +%F) 10:00 once say Une seule fois." >/dev/null
+"$JARVIS" routine add "off 10:00 * say Jamais." >/dev/null
+tick_at 10:00
+assert "la routine de dix heures est dite" grep -q 'Il est dix heures.' "$FAKE_PIPER_LOG"
+assert "la ponctuelle aussi" grep -q 'Une seule fois.' "$FAKE_PIPER_LOG"
+assert "celle de 9h55 est rattrapée" grep -q 'Cinq minutes avant.' "$FAKE_NOTIFY_LOG"
+assert "celle de 9h30 est sautée et journalisée" journal_has "routine sautée (machine endormie) : 09:30 \* say Trop tôt."
+assert "et pas dite" not grep -q 'Trop tôt.' "$FAKE_PIPER_LOG"
+assert "la désactivée ne tire pas" not grep -q 'Jamais.' "$FAKE_PIPER_LOG"
+assert "journalisée" journal_has "routine : 10:00 \* say Il est dix heures."
+assert "tracée" grep -q '⏰ routine : 10:00' "$JARVIS_MEMORY/trace/$(today).log"
+assert "la ponctuelle a disparu du fichier" not grep -q 'Une seule fois' "$JARVIS_MEMORY/ROUTINES.md"
+tick_at 10:01
+assert "une minute plus tard, rien ne se répète" test "$(grep -c 'Il est dix heures.' "$FAKE_PIPER_LOG")" = 1
+assert "les tampons sont posés" bash -c "ls '$JARVIS_STATE'/routines/* | wc -l | grep -q 4"
+
+t "routines : la nuit et l'occupation changent la forme, pas le rendez-vous"
+printf 'idle' >"$JARVIS_RUN/state"
+soul_with "rondes: non"
+sed -i 's/^- silence: .*/- silence: 0-24/' "$SB/SOUL.md"
+touch "$JARVIS_STATE/last-doctor-run"
+"$JARVIS" routine add "10:00 * say Bonne nuit." >/dev/null
+"$JARVIS" routine add "10:00 * ask Quelle heure est-il ?" >/dev/null
+tick_at 10:00
+assert "say devient notification" grep -q 'Bonne nuit.' "$FAKE_NOTIFY_LOG"
+assert "sans voix" test ! -s "$FAKE_PIPER_LOG"
+assert "ask est posée au cerveau" grep -q 'Quelle heure est-il' "$FAKE_CLAUDE_LOG"
+assert "et sans voix non plus" test ! -s "$FAKE_PIPER_LOG"
+sed -i 's/^- silence: .*/- silence: non/' "$SB/SOUL.md"
+printf 'speaking' >"$JARVIS_RUN/state"
+"$JARVIS" routine add "10:00 * say Pendant qu'il parle." >/dev/null
+tick_at 10:00
+assert "occupé : notification" grep -q "Pendant qu'il parle." "$FAKE_NOTIFY_LOG"
+printf 'idle' >"$JARVIS_RUN/state"
+printf 'quota %s' "$(( $(date +%s) + 3600 ))" >"$JARVIS_STATE/brain"
+"$JARVIS" routine add "10:00 * ask --quiet Fais le point." >/dev/null
+"$JARVIS" routine add "10:00 * notify Toujours là." >/dev/null
+tick_at 10:00
+assert "en quota, la question est sautée" journal_has "routine sautée (cerveau en quota) : 10:00 \* ask --quiet Fais le point."
+assert "mais la notification passe" grep -q 'Toujours là.' "$FAKE_NOTIFY_LOG"
+
 t "tick : deux pulsations à la fois n'en font qu'une"
 printf 'idle' >"$JARVIS_RUN/state"
 soul_with "rondes: non"
