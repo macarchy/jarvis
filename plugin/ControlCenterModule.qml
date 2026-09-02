@@ -477,12 +477,14 @@ Item {
             Layout.fillWidth: true
             visible: mod.lastReply.length > 0
             text: "→ " + mod.lastReply
+            // Rendered markdown (bold, lists). Elision is plain-text only,
+            // so the line count alone bounds it.
+            textFormat: Text.MarkdownText
             color: Color.popups.text
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             wrapMode: Text.WordWrap
             maximumLineCount: 4
-            elide: Text.ElideRight
           }
 
           // Under the last exchange: read the whole conversation, or take

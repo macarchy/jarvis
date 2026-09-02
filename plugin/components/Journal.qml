@@ -389,6 +389,9 @@ FocusScope {
           width: parent.width
           visible: text.length > 0
           text: String(card.modelData.reply || "")
+          // The brain writes markdown despite the soul (bold, lists): the
+          // voice strips it, the page renders it.
+          textFormat: Text.MarkdownText
           color: root.ink
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
