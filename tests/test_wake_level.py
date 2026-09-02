@@ -49,7 +49,8 @@ def serve():
             c.sendall(b"ok\n")
 
 
-threading.Thread(target=serve, daemon=True).start()
+thread = threading.Thread(target=serve, daemon=True)
+thread.start()
 clock = [0.0]
 s = wl.LevelSender(path=path, now=lambda: clock[0])
 check("premier envoi", s.send(0.5), True)
@@ -59,7 +60,9 @@ check("10 Hz : le second est retenu", s.send(0.6), False)
 clock[0] = 0.11
 check("après 100 ms il passe", s.send(0.6), True)
 check("deux lignes reçues", len(seen), 2)
+srv.shutdown(socket.SHUT_RDWR)      # wakes the blocked accept() with an error
 srv.close()
+thread.join(1.0)
 clock[0] = 1.0
 check("sans daemon, rien ne casse", s.send(0.7), False)
 os.unlink(path)
