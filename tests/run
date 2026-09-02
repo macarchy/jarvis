@@ -667,15 +667,23 @@ assert "la boîte noire le dit" grep -q 'flux interrompu' "$JARVIS_MEMORY/trace/
 t "annuler pendant la parole : la demande s'arrête pour de bon"
 printf 'idle' >"$JARVIS_RUN/state"
 printf 'test-session-id' >"$JARVIS_STATE/conversation"
+# The pair the Control Center shows. last-ask is written when the exchange
+# opens and last-reply when it closes, and an exchange that never closed
+# left the previous answer under the new question: on 2026-09-02 the panel
+# showed the 12:41 ask over the 12:40 reply for the rest of the afternoon.
+printf 'Réponse de tout à l'"'"'heure.' >"$JARVIS_RUN/last-reply"
 FAKE_PLAY_SLEEP=10 FAKE_CLAUDE_STREAM="$FIX/digest-ok.jsonl" "$JARVIS" ask "raconte-moi une histoire" &
 asker=$!
 assert "la voix est sortie" waitfor test -s "$FAKE_PLAY_LOG"
+assert "pendant la réponse, l'ancienne n'est plus affichée" \
+	bash -c "! grep -q 'tout à l' '$JARVIS_RUN/last-reply' 2>/dev/null"
 "$JARVIS" cancel
 wait "$asker" 2>/dev/null
 assert "joueur coupé" grep -q 'coupé' "$FAKE_PLAY_LOG"
 assert "état idle" state_is idle
 assert "un seul appel au cerveau" test "$(grep -c . "$FAKE_CLAUDE_LOG")" = 1
 assert "aucune réponse enregistrée" test ! -e "$JARVIS_RUN/last-reply"
+assert "la question reste, seule" test "$(cat "$JARVIS_RUN/last-ask")" = "raconte-moi une histoire"
 assert "rien au journal" bash -c "! grep -q 'échange :' '$JARVIS_MEMORY/journal/$(today).md' 2>/dev/null"
 assert "rien dans la boîte noire" bash -c "! grep -q 'reply «' '$JARVIS_MEMORY/trace/$(today).log' 2>/dev/null"
 assert "aucune phrase synthétisée après l'annulation" test "$(grep -c . "$FAKE_PIPER_LOG")" = 1

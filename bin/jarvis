@@ -769,6 +769,12 @@ run_exchange() {
 	mine || return 0
 	log "ask: $text"
 	printf '%s' "$text" >"$LAST_ASK"
+	# The two files are one pair for the Control Center: the question and
+	# ITS answer. The answer is written when the exchange closes, behind
+	# `mine`, and an exchange that never closed — cancelled, barged into —
+	# left the previous answer standing under the new question for the rest
+	# of the day. The old answer goes with the old question.
+	rm -f "$LAST_REPLY"
 	# Every ask shows in the philactère — spoken, typed from the Control
 	# Center, or piped through the CLI alike.
 	mascot heard "$text"
