@@ -1655,9 +1655,19 @@ tick)
 	#
 	# The watchdog runs first, before anything below reads the state: every
 	# guard here is written for a machine that tells the truth about what it
+	# is doing. And before the lock below, on purpose: it is the one job here
+	# that must never wait for another beat to finish — it claims under the
 	# machine's own lock and stands down by itself if the state moved.
 	"$JARVIS_BIN" watchdog
+	# One pulse at a time. Two clocks beat here — this unit's minute and the
 	# mascot's five — and nothing kept them apart: a five-minute beat landing
+	# inside a minute beat that was busy closing a stale conversation found
+	# the flag still there and closed it a second time, two summaries and
+	# two journal lines for one thread. The lock is held for the rest of the
+	# tick, and a beat that finds it taken has nothing left to do — the
+	# other beat is doing it.
+	exec 7>"$RUN_DIR/tick.lock"
+	flock -n 7 || exit 0
 	# One truth about the quiet hours, refreshed on the pulse and not only
 	# on a transition: a machine that idles across the 23:00 boundary wore
 	# yesterday's flag until somebody finally spoke to it.
@@ -1719,7 +1729,7 @@ tick)
 	stamp="$STATE_DIR/emote-updates"
 	if [[ ! -e $stamp || -z $(find "$stamp" -mmin -360 2>/dev/null) ]]; then
 		touch "$stamp"
-		(omarchy-update-available >/dev/null 2>&1 && mascot_emote curious) &
+		(exec 7>&-; omarchy-update-available >/dev/null 2>&1 && mascot_emote curious) &
 	fi
 	# Documents parked in the inbox while the brain was out: retry now.
 	if [[ -n $(find "$BOX_DIR/input/.pending" -maxdepth 1 -type f ! -name '.*' -print -quit 2>/dev/null) ]]; then
