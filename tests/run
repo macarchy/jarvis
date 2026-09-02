@@ -872,6 +872,12 @@ assert "conversation conservée" test "$(cat "$JARVIS_STATE/conversation")" = te
 assert "les deux appels reprennent la même session" \
 	test "$(grep -c -- '--resume test-session-id' "$FAKE_CLAUDE_LOG")" = 2
 
+t "un saut de ligne dans la réponse n'écrase pas l'IPC vers la Touch Bar"
+printf 'idle' >"$JARVIS_RUN/state"
+FAKE_CLAUDE_REPLY=$'Deux\nlignes' "$JARVIS" ask --quiet "et alors"
+assert "la Touch Bar reçoit une seule ligne aplatie" \
+	grep -q '^macarchy.jarvis reply Deux lignes$' "$FAKE_DFR_LOG"
+
 # ---- the gesture of aborting: chantier 3
 t "presser pendant la réflexion : trop tôt ne fait rien, à temps annule"
 printf 'idle' >"$JARVIS_RUN/state"

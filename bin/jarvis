@@ -193,6 +193,8 @@ touchbar() {
 	heard | reply | emote | abort) ;;
 	*) return 0 ;;
 	esac
+	# A newline inside a reply breaks the one-line IPC: collapse it to a space.
+	set -- "${@//$'\n'/ }"
 	macarchy-dfr macarchy.jarvis "$verb" "$@" >/dev/null 2>&1 || true
 }
 
