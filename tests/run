@@ -36,7 +36,7 @@ sandbox() {
 	sandboxes+=("$SB")
 	export JARVIS_RUN="$SB/run" JARVIS_STATE="$SB/state" \
 		JARVIS_MEMORY="$SB/memory" JARVIS_BOX="$SB/box" \
-		JARVIS_SPRITES="$SB/sprites" \
+		JARVIS_SPRITES="$SB/sprites" JARVIS_CLAUDE_PROJECTS="$SB/projects" \
 		JARVIS_PIPER="$TESTS_DIR/bin/piper" JARVIS_VOXTYPE="$TESTS_DIR/bin/voxtype" \
 		JARVIS_NO_DESKTOP=1 JARVIS_WAKE=0 \
 		FAKE_CLAUDE_LOG="$SB/claude.log" FAKE_PIPER_LOG="$SB/piper.log" \
@@ -121,6 +121,17 @@ journal_lacks() { ! journal_has "$1"; }
 soul_with() {
 	sed "/^- langue:/a - $1" "$TESTS_DIR/../SOUL.md" >"$SB/SOUL.md"
 	export JARVIS_SOUL="$SB/SOUL.md"
+}
+
+# The conversation as the CLI stores it: a transcript per session under the
+# project's directory (its path with / turned into -). `with_session` drops
+# the fixture there and makes it the live conversation.
+SESSION=11111111-2222-3333-4444-555555555555
+project_dir() { printf '%s/%s' "$JARVIS_CLAUDE_PROJECTS" "$(realpath "$TESTS_DIR/.." | tr / -)"; }
+with_session() {
+	mkdir -p "$(project_dir)"
+	cp "$FIX/session.jsonl" "$(project_dir)/$SESSION.jsonl"
+	printf '%s' "$SESSION" >"$JARVIS_STATE/conversation"
 }
 
 # ---- the scripts themselves parse
@@ -583,6 +594,90 @@ assert "une vraie demande passe" not "$JARVIS" noise? "Verrouille mon ordinateur
 assert "un merci dans une phrase passe" not "$JARVIS" noise? "Merci, tu peux éteindre le wifi ?"
 assert "une question sur les sous-titres passe" \
 	not "$JARVIS" noise? "Trouve-moi les sous-titres de ce film."
+
+# ---- the conversation, read as it is stored
+t "transcript : les derniers échanges, avec ce qu'il a pensé et fait"
+with_session
+"$JARVIS" transcript 1 >"$SB/t1"
+assert "le dernier échange" grep -q '^10:05 « Et la météo ? »' "$SB/t1"
+assert "sa réponse" grep -q '^  ⇒ Nuageux, dix-huit degrés.' "$SB/t1"
+assert "une réflexion vide (Sonnet) n'est pas montrée" not grep -q '✎' "$SB/t1"
+"$JARVIS" transcript >"$SB/t5"
+assert "la réflexion de Haiku" grep -q '^  ✎ Il demande l'"'"'heure, je lance date.' "$SB/t5"
+assert "l'appel d'outil" grep -q '^  → Bash: date +%H:%M' "$SB/t5"
+assert "son résultat" grep -q '^  ← 10:00' "$SB/t5"
+assert "deux échanges en JSON" \
+	test "$("$JARVIS" transcript --json | python3 -c 'import json,sys; x=json.load(sys.stdin); print(len(x), x[0]["tools"][0]["result"], x[1]["thoughts"])')" = "2 10:00 []"
+
+t "conversations : la liste, la courante marquée, les rondes à part"
+with_session
+# A round: one session opened on a prompt of several hundred characters.
+python3 - "$(project_dir)/22222222-0000-0000-0000-000000000000.jsonl" <<'PY'
+import json, sys
+S = "22222222-0000-0000-0000-000000000000"
+prompt = "Tu fais ta ronde : un tour d'horizon silencieux de la machine. " * 6
+open(sys.argv[1], "w").write("\n".join([
+    json.dumps({"parentUuid": None, "type": "user", "message": {"role": "user", "content": prompt}, "uuid": "r1", "timestamp": "2026-09-02T09:00:00.000Z", "sessionId": S}),
+    json.dumps({"parentUuid": "r1", "type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "RAS"}]}, "uuid": "r2", "timestamp": "2026-09-02T09:00:05.000Z", "sessionId": S}),
+]) + "\n")
+PY
+"$JARVIS" conversations >"$SB/list"
+assert "la courante est marquée et comptée" grep -q "^\*$SESSION	conversation	2026-09-02 10:00	2026-09-02 10:05	2	Quelle heure est-il ?" "$SB/list"
+assert "la ronde est une tâche" grep -q "^22222222-0000-0000-0000-000000000000	tâche	" "$SB/list"
+assert "en JSON aussi" \
+	test "$("$JARVIS" conversations --json | python3 -c 'import json,sys; x=json.load(sys.stdin); print(sum(1 for r in x if r["kind"]=="conversation"), [r["current"] for r in x if r["id"].startswith("1111")][0])')" = "1 True"
+
+# « Oublie ce que je viens de dire » : le transcript est coupé avant le
+# dernier tour (vérifié sur copie le 2026-09-02 : repris par --resume, il
+# ne connaît plus l'échange), le journal perd sa ligne, la paire affichée
+# recule d'un échange, et une copie est gardée.
+t "undo : le dernier échange est oublié partout"
+with_session
+printf 'idle' >"$JARVIS_RUN/state"
+mkdir -p "$JARVIS_MEMORY/journal"
+printf -- '# Journal\n\n- 10:00 échange : « Quelle heure est-il ? » → « Il est dix heures. »\n- 10:05 échange : « Et la météo ? » → « Nuageux, dix-huit degrés. »\n' >"$JARVIS_MEMORY/journal/$(today).md"
+printf 'Et la météo ?' >"$JARVIS_RUN/last-ask"
+printf 'Nuageux, dix-huit degrés.' >"$JARVIS_RUN/last-reply"
+assert "oublié" "$JARVIS" undo --quiet
+assert "un seul échange reste" test "$("$JARVIS" transcript --json | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')" = 1
+assert "copie gardée" bash -c "ls '$JARVIS_STATE'/undo/$SESSION-*.jsonl >/dev/null"
+assert "la ligne du journal est partie" journal_lacks "Et la météo"
+assert "la précédente reste" journal_has "Quelle heure est-il"
+assert "la paire recule" test "$(cat "$JARVIS_RUN/last-ask")|$(cat "$JARVIS_RUN/last-reply")" = "Quelle heure est-il ?|Il est dix heures."
+assert "tracé" grep -q 'oublié : « Et la météo ? »' "$JARVIS_MEMORY/trace/$(today).log"
+assert "la bulle est vidée" grep -q 'macarchy.jarvis heard $' "$FAKE_SHELL_LOG"
+assert "sans voix en --quiet" test ! -s "$FAKE_PIPER_LOG"
+assert "oublié encore" "$JARVIS" undo --quiet
+assert "plus rien à afficher" test ! -e "$JARVIS_RUN/last-ask"
+assert "et plus rien à oublier" not "$JARVIS" undo --quiet
+
+t "undo : refusé quand il est occupé ou sans conversation"
+with_session
+printf 'thinking' >"$JARVIS_RUN/state"
+assert "occupé : refus" not "$JARVIS" undo --quiet
+assert "transcript intact" test "$("$JARVIS" transcript --json | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')" = 2
+printf 'idle' >"$JARVIS_RUN/state"
+rm -f "$JARVIS_STATE/conversation"
+assert "sans conversation : refus" not "$JARVIS" undo --quiet
+assert "et il le dit à voix haute" bash -c "'$JARVIS' undo; grep -q 'rien à oublier' '$FAKE_PIPER_LOG'"
+
+t "undo à la voix : la phrase est reconnue, et seulement elle"
+assert "oublie ce que je viens de dire" "$JARVIS" undo? "Oublie ce que je viens de dire."
+assert "efface mon dernier message" "$JARVIS" undo? "efface mon dernier message"
+assert "annule ma dernière question" "$JARVIS" undo? "Annule ma dernière question !"
+assert "forget what I just said" "$JARVIS" undo? "Forget what I just said"
+assert "oublie pas le pain passe" not "$JARVIS" undo? "N'oublie pas d'acheter du pain."
+assert "efface le fichier passe" not "$JARVIS" undo? "Efface le fichier de test."
+with_session
+printf 'idle' >"$JARVIS_RUN/state"
+printf 'Et la météo ?' >"$JARVIS_RUN/last-ask"
+"$JARVIS" press
+mic_ready
+FAKE_TRANSCRIPT="Oublie ce que je viens de dire." "$JARVIS" press
+assert "il dit oublié" waitfor grep -q 'Oublié.' "$FAKE_PIPER_LOG"
+assert "sans cerveau" test ! -s "$FAKE_CLAUDE_LOG"
+assert "un seul échange reste" test "$("$JARVIS" transcript --json | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')" = 1
+assert "état idle" waitfor state_is idle
 
 t "voix en panne: l'état redescend au lieu de rester speaking"
 printf 'idle' >"$JARVIS_RUN/state"

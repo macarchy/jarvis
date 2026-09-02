@@ -1,0 +1,289 @@
+#!/usr/bin/env python3
+"""jarvis-transcript — read (and cut) the conversation the way it is stored.
+
+The conversation is a Claude Code transcript: one JSON line per event in
+~/.claude/projects/<project>/<session>.jsonl, where <project> is the
+working directory with every `/` turned into `-`. Nothing here is a
+format Jarvis owns: this file reads what the CLI writes, so that the
+journal window and the `undo` verb can show and cut real turns rather than
+our own copy of them.
+
+  jarvis-transcript list  [--json]                       the sessions
+  jarvis-transcript show  [--json] [--session ID] [N]    last N exchanges
+  jarvis-transcript undo  --session ID                   drop the last one
+
+Common options: --projects DIR (default ~/.claude/projects), --dir DIR (the
+project directory, default: this checkout), --current ID (marks the live
+session in `list`, and is the default for `show`).
+
+An "exchange" is a user turn made of text — not a tool result — and all the
+assistant did until the next one: its thoughts, its tool calls with their
+results, and the text it said. `undo` truncates the file just before the
+last such turn: verified on 2026-09-02 on a copy, a truncated transcript
+resumed with --resume no longer knows the exchange; moving `leafUuid`
+alone does not do it.
+"""
+
+import glob
+import json
+import os
+import sys
+import time
+from datetime import datetime, timezone
+
+THOUGHT = 300
+RESULT = 200
+
+
+def die(msg, code=1):
+    print(f"jarvis-transcript: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def parse_args(argv):
+    opts = {"json": False, "session": None, "projects": None, "dir": None,
+            "current": None, "n": None, "cmd": None}
+    it = iter(argv)
+    for a in it:
+        if a == "--json":
+            opts["json"] = True
+        elif a in ("--session", "--projects", "--dir", "--current"):
+            opts[a[2:]] = next(it, None)
+        elif a.startswith("--"):
+            die(f"unknown option {a}")
+        elif opts["cmd"] is None:
+            opts["cmd"] = a
+        elif a.isdigit():
+            opts["n"] = int(a)
+        else:
+            die(f"unexpected argument {a}")
+    if opts["cmd"] not in ("list", "show", "undo"):
+        die("usage: jarvis-transcript list|show|undo [options]", 2)
+    return opts
+
+
+def project_dir(opts):
+    projects = opts["projects"] or os.path.expanduser("~/.claude/projects")
+    work = os.path.realpath(opts["dir"] or os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+    return os.path.join(projects, work.replace("/", "-"))
+
+
+def local_hhmm(ts):
+    try:
+        d = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return ""
+    return d.astimezone().strftime("%H:%M")
+
+
+def local_stamp(ts):
+    try:
+        d = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return ""
+    return d.astimezone().strftime("%Y-%m-%d %H:%M")
+
+
+def squash(value, limit):
+    text = " ".join(str(value).split())
+    return text[:limit] + "…" if len(text) > limit else text
+
+
+def block_text(content):
+    """The text of a user/assistant content, string or block list."""
+    if isinstance(content, str):
+        return content
+    return " ".join(b.get("text", "") for b in content
+                    if isinstance(b, dict) and b.get("type") == "text")
+
+
+def user_text(ev):
+    """The text of a user turn, or None when the turn is a tool result."""
+    c = ev.get("message", {}).get("content")
+    if isinstance(c, str):
+        return c
+    if isinstance(c, list) and c and all(isinstance(b, dict) and b.get("type") == "text" for b in c):
+        return block_text(c)
+    return None
+
+
+def describe_tool(block):
+    name = block.get("name", "?")
+    inp = block.get("input", {}) or {}
+    if name == "Bash":
+        detail = inp.get("command", "")
+    elif name in ("Read", "Edit", "Write"):
+        detail = inp.get("file_path", "")
+    elif name == "WebSearch":
+        detail = inp.get("query", "")
+    else:
+        detail = json.dumps(inp, ensure_ascii=False)
+    return f"{name}: {squash(detail, RESULT)}"
+
+
+def read_lines(path):
+    events = []
+    with open(path, encoding="utf-8") as f:
+        for raw in f:
+            raw = raw.rstrip("\n")
+            if not raw.strip():
+                continue
+            try:
+                events.append((raw, json.loads(raw)))
+            except ValueError:
+                events.append((raw, None))
+    return events
+
+
+def exchanges(events):
+    """Group the events into exchanges. Each carries `start`, the index of
+    its user line, which is where `undo` cuts."""
+    out = []
+    cur = None
+    by_tool = {}
+    for i, (_, ev) in enumerate(events):
+        if not ev or ev.get("isSidechain"):
+            continue
+        kind = ev.get("type")
+        if kind == "user":
+            text = user_text(ev)
+            if text is not None:
+                cur = {"start": i, "at": ev.get("timestamp", ""), "ask": text.strip(),
+                       "reply": "", "thoughts": [], "tools": [], "last_uuid": ev.get("uuid")}
+                out.append(cur)
+                continue
+            if cur is None:
+                continue
+            for b in ev.get("message", {}).get("content", []) or []:
+                if isinstance(b, dict) and b.get("type") == "tool_result":
+                    tool = by_tool.get(b.get("tool_use_id"))
+                    if tool is None:
+                        continue
+                    c = b.get("content")
+                    text = c if isinstance(c, str) else block_text(c or [])
+                    if b.get("is_error"):
+                        tool["error"] = squash(text, RESULT)
+                    else:
+                        tool["result"] = squash(text, RESULT)
+            cur["last_uuid"] = ev.get("uuid", cur["last_uuid"])
+        elif kind == "assistant" and cur is not None:
+            cur["last_uuid"] = ev.get("uuid", cur["last_uuid"])
+            for b in ev.get("message", {}).get("content", []) or []:
+                if not isinstance(b, dict):
+                    continue
+                t = b.get("type")
+                if t == "thinking":
+                    # Sonnet 5 stores its thinking as an empty block and a
+                    # signature; only what is really there is shown.
+                    thought = squash(b.get("thinking", ""), THOUGHT)
+                    if thought:
+                        cur["thoughts"].append(thought)
+                elif t == "text":
+                    text = b.get("text", "").strip()
+                    if text:
+                        cur["reply"] = (cur["reply"] + " " + text).strip()
+                elif t == "tool_use":
+                    tool = {"call": describe_tool(b), "result": "", "error": ""}
+                    by_tool[b.get("id")] = tool
+                    cur["tools"].append(tool)
+    return out
+
+
+def session_path(opts, sid):
+    return os.path.join(project_dir(opts), f"{sid}.jsonl")
+
+
+def public(x):
+    return {"at": local_hhmm(x["at"]), "ask": x["ask"], "reply": x["reply"],
+            "thoughts": x["thoughts"], "tools": x["tools"]}
+
+
+def cmd_show(opts):
+    sid = opts["session"] or opts["current"]
+    if not sid:
+        die("no session (--session or --current)", 3)
+    path = session_path(opts, sid)
+    if not os.path.exists(path):
+        die(f"no transcript for {sid}", 3)
+    n = opts["n"] or 5
+    xs = [public(x) for x in exchanges(read_lines(path))][-n:]
+    if opts["json"]:
+        print(json.dumps(xs, ensure_ascii=False))
+        return
+    for x in xs:
+        print(f"{x['at']} « {x['ask']} »")
+        for t in x["thoughts"]:
+            print(f"  ✎ {t}")
+        for t in x["tools"]:
+            print(f"  → {t['call']}")
+            if t["error"]:
+                print(f"  ✗ {t['error']}")
+            elif t["result"]:
+                print(f"  ← {t['result']}")
+        if x["reply"]:
+            print(f"  ⇒ {x['reply']}")
+        print()
+
+
+def cmd_list(opts):
+    d = project_dir(opts)
+    rows = []
+    for path in glob.glob(os.path.join(d, "*.jsonl")):
+        sid = os.path.basename(path)[:-6]
+        xs = exchanges(read_lines(path))
+        if not xs:
+            continue
+        # Rounds, dreams, digests and missions are sessions in this same
+        # directory, opened on a prompt of several hundred characters; a
+        # conversation starts with a sentence.
+        kind = "conversation" if len(xs[0]["ask"]) < 300 else "tâche"
+        rows.append({"id": sid, "kind": kind, "current": sid == opts["current"],
+                     "started": local_stamp(xs[0]["at"]), "ended": local_stamp(xs[-1]["at"]),
+                     "exchanges": len(xs), "first": squash(xs[0]["ask"], 120),
+                     "mtime": os.path.getmtime(path)})
+    rows.sort(key=lambda r: r["mtime"], reverse=True)
+    for r in rows:
+        del r["mtime"]
+    if opts["json"]:
+        print(json.dumps(rows, ensure_ascii=False))
+        return
+    for r in rows:
+        print("\t".join([("*" if r["current"] else "") + r["id"], r["kind"], r["started"],
+                         r["ended"], str(r["exchanges"]), r["first"]]))
+
+
+def cmd_undo(opts):
+    sid = opts["session"]
+    if not sid:
+        die("undo needs --session", 3)
+    path = session_path(opts, sid)
+    if not os.path.exists(path):
+        die(f"no transcript for {sid}", 3)
+    events = read_lines(path)
+    xs = exchanges(events)
+    if not xs:
+        die("nothing to forget", 4)
+    last = xs[-1]
+    kept = [raw for raw, ev in events[:last["start"]] if not (ev and ev.get("type") == "last-prompt")]
+    previous = xs[-2] if len(xs) > 1 else None
+    if previous is not None:
+        kept.append(json.dumps({"type": "last-prompt", "lastPrompt": previous["ask"],
+                                "leafUuid": previous["last_uuid"], "sessionId": sid},
+                               ensure_ascii=False))
+    tmp = path + ".undo-tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write("".join(line + "\n" for line in kept))
+    os.replace(tmp, path)
+    print(json.dumps({"forgotten": {"ask": last["ask"], "reply": last["reply"]},
+                      "previous": None if previous is None else
+                      {"ask": previous["ask"], "reply": previous["reply"]},
+                      "remaining": len(xs) - 1}, ensure_ascii=False))
+
+
+def main():
+    opts = parse_args(sys.argv[1:])
+    {"list": cmd_list, "show": cmd_show, "undo": cmd_undo}[opts["cmd"]](opts)
+
+
+if __name__ == "__main__":
+    main()
