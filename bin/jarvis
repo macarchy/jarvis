@@ -176,7 +176,25 @@ log() { printf '%s %s\n' "$(date +%FT%T)" "$*" >>"$LOG"; }
 notify() { notify-send -a "Jarvis" -t 5000 "$1" "${2-}" 2>/dev/null || true; }
 
 # Animate the Babel fish; harmless when the shell or plugin is not running.
-mascot() { omarchy-shell macarchy.jarvis "$@" >/dev/null 2>&1 || true; }
+# The same words reach the Touch Bar (macarchy-dfr's macarchy.jarvis module).
+mascot() {
+	omarchy-shell macarchy.jarvis "$@" >/dev/null 2>&1 || true
+	touchbar "$@"
+}
+
+# The Touch Bar's share of the mascot channel. `setState` is the one verb
+# NOT forwarded here: on_state_change sends the bar the raw state, because
+# the bar tells followup from listening and transcribing from thinking where
+# the QML aliases them. Costs one macarchy-dfr client per call (~30 ms).
+touchbar() {
+	local verb=$1
+	shift
+	case $verb in
+	heard | reply | emote | abort) ;;
+	*) return 0 ;;
+	esac
+	macarchy-dfr macarchy.jarvis "$verb" "$@" >/dev/null 2>&1 || true
+}
 
 # Everything the body says about the CURRENT exchange goes through mascot()
 # directly. Everything else — an emotion Jarvis chose to punctuate a reply
@@ -478,7 +496,7 @@ box_init() {
 # then calls this — so none of what follows can ever be holding the lock
 # while it waits on the shell's IPC.
 on_state_change() {
-	local sprite=$1 pid
+	local sprite=$1
 	# The mascot has no transcribing or followup sprite; it ponders through
 	# the one and stays perked up through the other. `cancelling` sends
 	# nothing at all: the abort has an animation of its own (`mascot abort`,
@@ -488,12 +506,10 @@ on_state_change() {
 	[[ $1 == transcribing ]] && sprite=thinking
 	[[ $1 == followup ]] && sprite=listening
 	[[ $1 == cancelling ]] || mascot setState "$sprite"
-	# The Touch Bar key wears the state too (omarchy-dfr renders it on USR1).
-	# JARVIS_NO_DESKTOP keeps the suite's hundreds of transitions off the
-	# real Touch Bar: that daemon lives outside every sandbox.
-	if [[ -z ${JARVIS_NO_DESKTOP:-} ]]; then
-		pid=$(cat "${XDG_RUNTIME_DIR:-/tmp}/omarchy-dfr/daemon.pid" 2>/dev/null) && kill -USR1 "$pid" 2>/dev/null
-	fi
+	# The Touch Bar wears the raw state (its module tells followup from
+	# listening). The suite's hundreds of transitions land in a fake
+	# macarchy-dfr on its PATH, never on the real bar.
+	macarchy-dfr macarchy.jarvis state "$1" >/dev/null 2>&1 || true
 	# One truth about the quiet hours, and it is this one: the mascot used to
 	# hardcode its own 23-7 night and curled up asleep whatever the soul said.
 	printf '%s' "$(quiet_now && echo 1 || echo 0)" >"$STATE_DIR/quiet"

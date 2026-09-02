@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# The Touch Bar channel, recorded instead of dropped: every state, heard,
+# reply, emote and abort the FSM sends lands in $FAKE_DFR_LOG.
+printf '%s\n' "$*" >>"${FAKE_DFR_LOG:-/dev/null}"
+exit 0
