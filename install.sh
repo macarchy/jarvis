@@ -17,7 +17,7 @@ python3 sprites/generate.py
 # three file copies.
 dest="$HOME/.config/omarchy/plugins/macarchy.jarvis"
 staging=$(mktemp -d "$HOME/.config/omarchy/plugins/.macarchy.jarvis.XXXXXX")
-cp -r plugin/manifest.json plugin/Service.qml plugin/components "$staging/"
+cp -r plugin/manifest.json plugin/Service.qml plugin/ControlCenterModule.qml plugin/components "$staging/"
 rm -rf "$dest.previous"
 if [[ -e $dest ]]; then
 	mv "$dest" "$dest.previous"
