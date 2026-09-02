@@ -199,3 +199,150 @@ def test_regenerated_sheets_are_reloaded(sprites):
     cairo.ImageSurface(cairo.FORMAT_ARGB32, 72 * 8, 56).write_to_png(str(sprites / "idle.png"))
     rig.mod.resheet()                       # what api.watch_file(".look") calls when `look` touches it
     assert w.frames == 8
+
+
+def _load_module():
+    spec = importlib.util.spec_from_file_location("touchbar_under_test", PLUGIN)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _widgets(layout):
+    return layout.left.widgets
+
+
+def _text(layout):
+    return next(w for w in _widgets(layout) if isinstance(w, Label) and w.params.get("_role") == "text")
+
+
+def _close(layout):
+    return next(w for w in _widgets(layout) if isinstance(w, Button))
+
+
+def test_typewriter_keeps_its_place_when_the_text_only_grows():
+    tw = _load_module().Typewriter()
+    tw.set("Bonjour.")
+    assert tw.advance(0.1) == "Bonj"                       # 40 cps
+    tw.set("Bonjour. Il est dix heures.")
+    assert tw.advance(0.1) == "Bonjour."                  # continues, no restart
+    tw.set("Autre chose")
+    assert tw.advance(0.05) == "Au"                        # a different text starts over
+    tw.advance(10)
+    assert tw.done
+
+
+def test_bands_hump_in_the_middle_and_stay_in_range():
+    m = _load_module()
+    b = m.bands_for(0.8, 12, 0.0)
+    assert len(b) == 12 and all(0.0 <= v <= 1.0 for v in b)
+    assert max(b[5], b[6]) > max(b[0], b[11])
+    assert m.bands_for(0.0, 12, 3.0) == [0.0] * 12
+    assert 0.05 < m.breathing(0.0) < 0.35 and 0.05 < m.breathing(0.6) < 0.35
+
+
+def test_tail_that_fits_keeps_the_end_of_a_long_answer():
+    m = _load_module()
+    measure = lambda s: 10 * len(s)
+    assert m.tail_that_fits("court", 100, measure) == "court"
+    out = m.tail_that_fits("un deux trois quatre cinq six sept", 120, measure)
+    assert out.startswith("…") and out.endswith("sept") and measure(out) <= 120
+    assert " " not in out[1:2]                              # cut on a word boundary, no leading space
+
+
+def test_listening_takes_the_bar_lit_with_a_meter_and_a_cancel(sprites):
+    rig = Rig()
+    rig.ipc("state", "listening")
+    assert ("wake",) in rig.hooks.calls
+    name, kw = rig.last_show()[1], rig.last_show()[2]
+    assert name == "jarvis" and kw.get("priority") == 50 and kw.get("timeout") is None
+    lay = rig.scene()
+    kinds = [type(w).__name__ for w in _widgets(lay)]
+    assert kinds == ["Sprite", "Meter", "Label", "Button"]
+    assert _widgets(lay)[0].sheet.endswith("listening.png")
+    assert _text(lay).text == "J'écoute…"
+    _close(lay).on_tap(0, 0)
+    assert rig.ran[-1] == "omarchy-jarvis cancel"
+
+
+def test_the_meter_follows_level_then_breathes_when_it_goes_quiet(sprites):
+    rig = Rig()
+    rig.ipc("state", "listening")
+    lay = rig.scene()
+    meter = next(w for w in _widgets(lay) if isinstance(w, Meter))
+    assert meter is rig.mod.scene_widgets["meter"]
+    rig.ipc("level", "0.9")
+    rig.advance(0.1)
+    live = list(meter.bands)
+    assert max(live) > 0.5
+    rig.advance(0.5)                                          # no level for 300 ms: breathing, not flat
+    assert 0.0 < max(meter.bands) < 0.5
+    a = list(meter.bands); rig.advance(0.3); b = list(meter.bands)
+    assert a != b
+
+
+def test_thinking_types_the_transcript_with_beating_dots(sprites):
+    rig = Rig()
+    rig.ipc("state", "listening")
+    rig.ipc("state", "transcribing")
+    rig.ipc("heard", "Quelle heure est-il ?")
+    rig.ipc("state", "thinking")
+    lay = rig.scene()
+    dots = next(w for w in _widgets(lay) if isinstance(w, Label) and w.params.get("_role") == "dots")
+    full = "Quelle heure est-il ?"
+    rig.advance(0.25)                                         # ~10 chars at 40 cps (float steps: 9 or 10)
+    part = _text(lay).text
+    assert 8 <= len(part) <= 11 and full.startswith(part)
+    rig.advance(1.0)
+    assert _text(lay).text == full
+    assert dots.text in ("·", "··", "···")
+    _close(lay).on_tap(0, 0)
+    assert rig.ran[-1] == "omarchy-jarvis press"
+
+
+def test_speaking_types_the_reply_and_shows_the_tail_when_it_overflows(sprites):
+    rig = Rig()
+    rig.ipc("state", "listening"); rig.ipc("state", "thinking"); rig.ipc("state", "speaking")
+    rig.ipc("reply", "Il est dix heures.")
+    lay = rig.scene()
+    text = _text(lay)
+    from macarchy_dfr.geometry import Rect
+    text.rect = Rect(0, 0, 200, 60)                           # narrow on purpose (fake measure = 8 px/char)
+    rig.advance(0.5)
+    assert text.text == "Il est dix heures."
+    rig.ipc("reply", "Il est dix heures. Le ciel est couvert sur Charleroi.")
+    rig.advance(2.0)
+    assert text.text.startswith("…") and text.text.endswith("Charleroi.")
+    _close(lay).on_tap(0, 0)
+    assert rig.ran[-1] == "omarchy-jarvis press"
+
+
+def test_followup_keeps_the_scene_with_a_dim_half_meter(sprites):
+    rig = Rig()
+    rig.ipc("state", "listening"); rig.ipc("state", "speaking"); rig.ipc("reply", "Voilà.")
+    rig.ipc("state", "followup")
+    lay = rig.scene()
+    meter = next(w for w in _widgets(lay) if isinstance(w, Meter))
+    assert meter.color == rig.api.theme.FG_DIM
+    rig.ipc("level", "1.0"); rig.advance(0.1)
+    assert max(meter.bands) < 0.6
+
+
+def test_idle_lingers_four_seconds_and_a_tap_outside_close_dismisses(sprites):
+    rig = Rig()
+    rig.ipc("state", "listening"); rig.ipc("state", "speaking"); rig.ipc("reply", "Voilà.")
+    rig.ipc("state", "idle")
+    assert rig.last_show()[2].get("timeout") == 4
+    lay = rig.scene()
+    _text(lay).on_tap(0, 0)
+    assert ("hide", "jarvis") in rig.hooks.calls
+    rig.hooks.calls.clear()
+    rig.ipc("state", "idle")                                  # still idle: nothing shown again
+    assert rig.last_show() is None
+
+
+def test_idle_from_sleeping_shows_nothing(sprites):
+    rig = Rig()
+    rig.ipc("state", "sleeping")
+    rig.ipc("state", "idle")
+    assert rig.last_show() is None
