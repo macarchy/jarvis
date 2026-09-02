@@ -161,10 +161,13 @@ assert "la mémoire existante est intacte" grep -q 'une leçon à moi' "$JARVIS_
 # ---- jarvis-sentences: blocks stay separated across tool calls
 t "sentences: espaces entre blocs"
 out="$SB/reply"
-"$TESTS_DIR/../bin/jarvis-sentences" --quiet "$out.txt" <"$FIX/blocks.jsonl"
+"$TESTS_DIR/../bin/jarvis-sentences" "$out.txt" <"$FIX/blocks.jsonl" >"$SB/spoken"
 assert "texte complet espacé" test "$(cat "$out.txt")" = "Je fais ma ronde. Un instant. RAS"
+assert "et dit phrase par phrase" \
+	test "$(paste -sd'|' "$SB/spoken")" = "Je fais ma ronde.|Un instant.|RAS"
 assert "la trace reste dans le bac à sable" \
 	grep -q '→ Bash: df -h /' "$JARVIS_MEMORY/trace/$(today).log"
+assert "le verdict de session est ok" test "$(cat "$out.txt.status")" = ok
 
 # Le cerveau met du gras malgré l'âme (« 1. **work-cd** », 2026-09-02) et
 # piper lit chaque astérisque : « astérisque astérisque work-cd astérisque
@@ -178,6 +181,39 @@ printf 'idle' >"$JARVIS_RUN/state"
 "$JARVIS" say "C'est **gras**, non ?"
 assert "say : la voix reçoit le texte nu" grep -q $'\tC\'est gras, non ?$' "$FAKE_PIPER_LOG"
 
+# En mode --quiet le fichier est le RAPPORT — le dernier bloc de texte — et
+# non la narration qui l'a précédé. Chaque ronde revenait « Je fais ma
+# ronde. Un instant. RAS », et un rapport qui n'est pas exactement « RAS »
+# est un constat : huit rondes du 2026-09-01 ont été journalisées, notifiées
+# et inquiétées pour avoir, en somme, dit qu'il n'y avait rien.
+t "sentences: en --quiet, le dernier bloc est le rapport"
+"$TESTS_DIR/../bin/jarvis-sentences" --quiet "$out.txt" <"$FIX/blocks.jsonl"
+assert "le rapport est le dernier bloc" test "$(cat "$out.txt")" = "RAS"
+# Un verdict périmé ne survit pas au lancement suivant.
+printf 'quota' >"$out.txt.error"
+"$TESTS_DIR/../bin/jarvis-sentences" --quiet "$out.txt" <"$FIX/ras.jsonl"
+assert "un .error périmé est effacé au départ" test ! -e "$out.txt.error"
+
+# Une phrase qui clôt un bloc de texte est complète sans espace derrière
+# elle. Elle restait dans le tampon jusqu'à l'ouverture du bloc SUIVANT,
+# c'est-à-dire après l'outil : « Un instant. » censé couvrir l'attente
+# arrivait l'attente finie. Ici le flux est coupé en deux par une pause,
+# et la première phrase doit être sortie avant que la suite n'arrive.
+t "sentences: une phrase de narration sort avant que l'outil ne rende"
+: >"$SB/spoken"
+{
+	head -n 3 "$FIX/narration.jsonl"
+	sleep 0.6
+	tail -n +4 "$FIX/narration.jsonl"
+} | "$TESTS_DIR/../bin/jarvis-sentences" "$out.txt" >"$SB/spoken" &
+sentences=$!
+sleep 0.3
+assert "la narration est déjà dite pendant l'outil" \
+	test "$(cat "$SB/spoken")" = "Je regarde."
+wait "$sentences"
+assert "puis la réponse" \
+	test "$(paste -sd'|' "$SB/spoken")" = "Je regarde.|Le disque est à huit pour cent."
+
 # ---- heartbeat
 t "heartbeat: RAS reste silencieux"
 FAKE_CLAUDE_STREAM="$FIX/ras.jsonl" "$JARVIS" heartbeat
@@ -187,6 +223,22 @@ assert "pas de ligne ronde au journal" bash -c "! grep -q 'ronde :' '$JARVIS_MEM
 t "heartbeat: un rapport est journalisé"
 FAKE_CLAUDE_STREAM="$FIX/report.jsonl" "$JARVIS" heartbeat
 assert "journal ronde" journal_has "ronde : Le disque est presque plein."
+
+# Le constat vu huit fois le 2026-09-01 : la ronde se raconte (« Je fais ma
+# ronde. Un instant. »), lance ses outils, puis conclut « RAS » — et la
+# narration collée devant faisait de « RAS » un rapport à signaler.
+t "heartbeat: une ronde qui se raconte avant de dire RAS reste silencieuse"
+FAKE_CLAUDE_STREAM="$FIX/blocks.jsonl" "$JARVIS" heartbeat
+assert "cerveau ok" test "$(cat "$JARVIS_STATE/brain")" = ok
+assert "pas de ligne ronde au journal" journal_lacks "ronde :"
+assert "pas d'inquiétude garée" test ! -e "$JARVIS_STATE/emote-pending"
+
+# Une limite atteinte APRÈS un début de réponse est encore une limite : le
+# verdict vient de l'événement de fin, pas des mots qui l'ont précédé.
+t "heartbeat: une limite après un début de ronde est un quota, pas un rapport"
+FAKE_CLAUDE_STREAM="$FIX/partial-then-limit.jsonl" "$JARVIS" heartbeat
+assert "statut quota" bash -c "grep -q '^quota ' '$JARVIS_STATE/brain'"
+assert "la narration n'est pas journalisée comme une ronde" journal_lacks "ronde :"
 
 t "heartbeat: l'avis de quota n'atteint pas la bulle"
 FAKE_CLAUDE_STREAM="$FIX/quota.jsonl" "$JARVIS" heartbeat
@@ -221,11 +273,35 @@ assert "fichier en .pending" test -e "$JARVIS_BOX/input/.pending/doc.md"
 assert "compteur intact" test "$(cat "$JARVIS_BOX/input/.pending/.tries.doc.md")" = 0
 assert "statut down" test "$(cat "$JARVIS_STATE/brain")" = down
 
+# Un échec réel : le cerveau a répondu, et il n'y a pas de fiche — c'est
+# le document qui ne donne rien, et ça se compte.
 t "digest: trois échecs réels → .failed"
 mkdir -p "$JARVIS_BOX/input"; echo x >"$JARVIS_BOX/input/doc.md"
-for _ in 1 2 3; do FAKE_CLAUDE_STREAM="$FIX/digest-error.jsonl" "$JARVIS" digest; done
+for _ in 1 2 3; do FAKE_CLAUDE_STREAM="$FIX/digest-ok.jsonl" "$JARVIS" digest; done
 assert "fichier en .failed" test -e "$JARVIS_BOX/input/.failed/doc.md"
 assert "échec noté" bash -c "grep -q 'abandonnée après 3 essais' '$JARVIS_MEMORY/FAILURES.md'"
+
+# Une erreur de connexion n'est pas la faute du document : elle gare sans
+# compter, et le cerveau est dit injoignable. Elle comptait comme un essai
+# parce que « API connection error » ne ressemble à aucune limite connue —
+# le texte votait, alors que l'événement de fin avait déjà dit « erreur ».
+t "digest: une erreur de session gare sans compter d'essai"
+mkdir -p "$JARVIS_BOX/input"; echo x >"$JARVIS_BOX/input/doc.md"
+FAKE_CLAUDE_STREAM="$FIX/digest-error.jsonl" "$JARVIS" digest
+assert "fichier en .pending" test -e "$JARVIS_BOX/input/.pending/doc.md"
+assert "compteur intact" test "$(cat "$JARVIS_BOX/input/.pending/.tries.doc.md")" = 0
+assert "statut down" test "$(cat "$JARVIS_STATE/brain")" = down
+# Garer n'est pas échouer : systemd filait chaque tel passage en « Failed
+
+# Le cerveau se prend pour son sujet : un article sur le rate limit d'une
+# API, digéré correctement, convainquait brain_check qu'il était hors quota
+# — l'autonomie s'arrêtait une heure et le document repassait à chaque
+# pulsation. Le verdict vient de l'événement de fin, pas des mots.
+t "digest: parler de rate limit n'est pas en subir un"
+mkdir -p "$JARVIS_BOX/input"; echo x >"$JARVIS_BOX/input/api.md"
+FAKE_CLAUDE_STREAM="$FIX/rate-limit-article.jsonl" FAKE_CLAUDE_FICHE=1 "$JARVIS" digest
+assert "original archivé" test -e "$JARVIS_BOX/input/.archive/api.md"
+assert "cerveau toujours ok" test "$(cat "$JARVIS_STATE/brain")" = ok
 
 # ---- ask --quiet
 t "ask --quiet: répond sans voix"

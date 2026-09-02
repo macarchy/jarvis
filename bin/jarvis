@@ -355,15 +355,15 @@ brain_set() {
 	fi
 }
 
-# Classify what came back from the brain. Returns 0 when it is a real
-# answer (and records `ok`), 1 when it is the brain reporting on itself:
-# a usage limit (with the reset hour when it says one), an empty answer,
-# or — for rounds only — a stall on a permission prompt.
-brain_check() {
+# The shape of a text the brain sent back ABOUT ITSELF, or nothing when it
+# reads as an answer: `down` for an empty one, `quota <until>` for a usage
+# limit (with the reset hour when it says one), `blocked` — rounds only —
+# for a stall on a permission prompt. Pure: it records nothing.
+brain_shape() {
 	local text="$1" kind="${2:-}" until
 	if [[ -z ${text// /} ]]; then
-		brain_set down
-		return 1
+		echo down
+		return
 	fi
 	if [[ $text =~ (hit|reached)\ your\ .*limit|[Uu]sage\ limit|[Rr]ate\ limit ]]; then
 		until=""
@@ -371,14 +371,50 @@ brain_check() {
 			until=$(date -d "${BASH_REMATCH[1]}" +%s 2>/dev/null)
 			[[ -n $until ]] && ((until <= $(date +%s))) && until=$((until + 86400))
 		fi
-		brain_set "quota ${until:-$(($(date +%s) + 3600))}"
-		return 1
+		echo "quota ${until:-$(($(date +%s) + 3600))}"
+		return
 	fi
 	if [[ $kind == ronde && $text =~ approbation|approuv|autorisation|permission ]]; then
-		brain_set blocked
+		echo blocked
+	fi
+}
+
+# Classify a text with nothing else to go on — the non-streaming calls.
+# Returns 0 when it is a real answer (and records `ok`), 1 when it is the
+# brain reporting on itself (and records what).
+brain_check() {
+	local shape
+	shape=$(brain_shape "$1" "${2:-}")
+	if [[ -n $shape ]]; then
+		brain_set "$shape"
 		return 1
 	fi
 	brain_set ok
+}
+
+# The same verdict for a STREAMED session, read from the sidecars
+# bin/jarvis-sentences leaves beside the reply file rather than from the
+# reply's words. <file>.error is the CLI reporting on itself and is judged by
+# its shape, `down` when the shape is new; <file>.status says `ok` when the
+# result event did, and then the answer is an answer whatever it contains —
+# a digested article about API rate limits used to park the inbox for an
+# hour, a round noting « permission refusée sur le backlight » used to be
+# filed as a stall and its finding thrown away. Only a stream that never
+# reached its result event (killed, cut) is still judged by its text.
+brain_verdict() {
+	local file="$1" kind="${2:-}" err status shape
+	err=$(cat "$file.error" 2>/dev/null)
+	status=$(cat "$file.status" 2>/dev/null)
+	if [[ -n $err ]]; then
+		shape=$(brain_shape "$err" "$kind")
+		brain_set "${shape:-down}"
+		return 1
+	fi
+	if [[ $status == ok ]]; then
+		brain_set ok
+		return 0
+	fi
+	brain_check "$(cat "$file" 2>/dev/null)" "$kind"
 }
 
 # What Jarvis says out loud instead of a broken answer. Like the other
@@ -724,7 +760,7 @@ stream_brain() {
 # `mine`, because each one of them is seconds long and the user may have said
 # stop in the middle of any of them.
 run_exchange() {
-	local text="$1" reply model err
+	local text="$1" reply model err shape
 	mine || return 0
 	log "ask: $text"
 	printf '%s' "$text" >"$LAST_ASK"
@@ -746,7 +782,9 @@ run_exchange() {
 		# throwing the id away here erased a whole morning's conversation
 		# every time a single turn failed transiently.
 		err=$(cat "$REPLY_TXT.error" 2>/dev/null)
-		if [[ -n $err ]] && ! brain_check "$err"; then
+		shape=$(brain_shape "$err")
+		if [[ -n $err && -n $shape ]]; then
+			brain_set "$shape"
 			reply=""
 		else
 			reply=$(brain "$text" "$model")
@@ -766,7 +804,9 @@ run_exchange() {
 		mascot reply "$reply"
 		do_speak "$reply" followup
 	else
-		brain_set ok
+		# The stream answered; its sidecars say whether the session ended
+		# well — a limit hit after a partial answer still counts as a limit.
+		brain_verdict "$REPLY_TXT" || true
 	fi
 	mine || return 0
 	log "reply: $reply"
@@ -1310,7 +1350,7 @@ dream)
 		"$JARVIS_DIR/bin/jarvis-sentences" --quiet "$RUN_DIR/dream.txt"
 	summary=$(cat "$RUN_DIR/dream.txt" 2>/dev/null)
 	log "dream(quiet=$quiet): $summary"
-	if ! brain_check "${summary:-$(cat "$RUN_DIR/dream.txt.error" 2>/dev/null)}"; then
+	if ! brain_verdict "$RUN_DIR/dream.txt"; then
 		# The brain reported on itself (brain_set already told the user);
 		# a usage notice is not a dream worth journaling or speaking.
 		mine && transition rest
@@ -1342,7 +1382,7 @@ heartbeat)
 	# A usage limit or a stall on a permission prompt is news about the
 	# brain, not about the machine: brain_set tells the user once, in
 	# French, and the raw notice stays out of the bubble.
-	brain_check "${report:-$(cat "$RUN_DIR/heartbeat.txt.error" 2>/dev/null)}" ronde || exit 1
+	brain_verdict "$RUN_DIR/heartbeat.txt" ronde || exit 1
 	if [[ -n ${report:-} && $report != "RAS" && ${report:0:4} != "RAS." ]]; then
 		journal "ronde : $report"
 		mascot_emote worried
@@ -1438,7 +1478,7 @@ digest)
 			-- "$(cat "$MEMORY_DIR/DIGEST_PROMPT.md")"$'\n\n'"Fichier : $f"$'\n'"Fiche : $fiche" 2>>"$LOG" |
 			"$JARVIS_DIR/bin/jarvis-sentences" --quiet "$RUN_DIR/digest.txt"
 		summary=$(cat "$RUN_DIR/digest.txt" 2>/dev/null)
-		if brain_check "${summary:-$(cat "$RUN_DIR/digest.txt.error" 2>/dev/null)}"; then
+		if brain_verdict "$RUN_DIR/digest.txt"; then
 			brain_ok=1
 		else
 			brain_ok=0
