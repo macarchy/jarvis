@@ -69,6 +69,7 @@ def sprites(tmp_path, monkeypatch):
         cairo.ImageSurface(cairo.FORMAT_ARGB32, 72 * n, 56).write_to_png(str(d / f"{name}.png"))
     (d / ".look").write_text("x")
     monkeypatch.setenv("JARVIS_SPRITES", str(d))
+    monkeypatch.setenv("JARVIS_RUN", str(tmp_path / "run" / "jarvis"))
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "run"))
     return d
