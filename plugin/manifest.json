@@ -2,20 +2,26 @@
   "schemaVersion": 1,
   "id": "macarchy.jarvis",
   "name": "Jarvis",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "author": "phmatray",
-  "description": "The Babel fish: Jarvis's pixel-art mascot animated by the voice pipeline, and his page in the Control Center",
+  "description": "The Babel fish: Jarvis's pixel-art mascot animated by the voice pipeline, his page in the Control Center, and his place on the Touch Bar",
   "kinds": [
     "service",
-    "control-center-module"
+    "control-center-module",
+    "touchbar-module"
   ],
   "keepLoaded": true,
   "entryPoints": {
     "service": "Service.qml",
-    "controlCenterModule": "ControlCenterModule.qml"
+    "controlCenterModule": "ControlCenterModule.qml",
+    "touchbarModule": "touchbar.py"
   },
   "controlCenterModule": {
     "apiVersion": 1,
     "order": 30
+  },
+  "touchbarModule": {
+    "apiVersion": 1,
+    "order": 40
   }
 }

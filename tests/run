@@ -968,6 +968,15 @@ assert "plus rien en anglais" bash -c \
 t "les oreilles : la table de décision du daemon de réveil"
 assert "aucun cas raté" python3 "$TESTS_DIR/test_wake_fsm.py"
 
+# ---- la Touch Bar
+t "touch bar: le module, chargé par le moteur de macarchy-dfr"
+# JARVIS_RUN/JARVIS_SPRITES sortent tout droit du bac à sable bash ci-dessus ;
+# le module les lit lui aussi (pour partager le vrai répertoire de bin/jarvis
+# en production), donc sans ce -u ses propres tests s'isolent avec tmp_path
+# mais lisent en fait le bac à sable du test précédent.
+assert "les tests du module passent (ou sont sautés sans moteur)" \
+	env -u JARVIS_RUN -u JARVIS_SPRITES python3 -m pytest -q "$TESTS_DIR/test_touchbar.py"
+
 # ---- the watchdog: chantier 4
 t "chien de garde : une étape figée est libérée et le groupe tué"
 printf 'thinking' >"$JARVIS_RUN/state"
