@@ -58,6 +58,7 @@ MEMORY_DIR="${JARVIS_MEMORY:-$JARVIS_DIR/memory}"
 # the pipeline DOES is a setting the test suite has to be able to vary.
 SOUL_FILE="${JARVIS_SOUL:-$JARVIS_DIR/SOUL.md}"
 FAILURES="$MEMORY_DIR/FAILURES.md"
+ROUTINES="$MEMORY_DIR/ROUTINES.md"
 SUGGESTIONS="$MEMORY_DIR/SUGGESTIONS.md"
 LAST_REPLY="$RUN_DIR/last-reply"
 # One line: `ok`, `quota <until-epoch>`, `blocked` or `down` — what the
@@ -1014,6 +1015,51 @@ forget_last() {
 	printf '%s\n' "$ask"
 }
 
+# The scheduled tasks of memory/ROUTINES.md, run from the pulse. The
+# parser (bin/jarvis-routines) says what is due and stamps it before this
+# runs anything, so a beat that dies mid-routine never fires it twice. What
+# a routine does depends on the hour and on him: in the quiet hours a
+# spoken line becomes a notification and a spoken question a written one;
+# while he is busy, the same; a brain out of quota skips what needs it.
+routines_run() {
+	local now status n verb text line spoken
+	now=${JARVIS_NOW:-$(date +%s)}
+	[[ -e $ROUTINES ]] || return 0
+	while IFS=$'\t' read -r status n verb text line; do
+		[[ -n $status ]] || continue
+		if [[ $status == skipped ]]; then
+			log "routine skipped: $line"
+			journal "routine sautée (machine endormie) : ${line#- }"
+			continue
+		fi
+		spoken=1
+		{ quiet_now || [[ $(state) != idle ]]; } && spoken=0
+		case "$(brain_status)" in
+		quota\ *)
+			if [[ $verb == ask* || $verb == dispatch ]]; then
+				log "routine skipped (quota): $line"
+				journal "routine sautée (cerveau en quota) : ${line#- }"
+				continue
+			fi
+			;;
+		esac
+		log "routine: $line"
+		trace "⏰ routine : ${line#- }"
+		journal "routine : ${line#- }"
+		case "$verb" in
+		say)
+			if ((spoken)); then "$JARVIS_BIN" say "$text"; else notify "Jarvis" "$text"; fi
+			;;
+		ask)
+			if ((spoken)); then "$JARVIS_BIN" ask "$text"; else "$JARVIS_BIN" ask --quiet "$text"; fi
+			;;
+		"ask --quiet") "$JARVIS_BIN" ask --quiet "$text" ;;
+		notify) notify "Jarvis" "$text" ;;
+		dispatch) "$JARVIS_BIN" dispatch "$text" ;;
+		esac
+	done < <("$JARVIS_DIR/bin/jarvis-routines" --file "$ROUTINES" due --now "$now" --stamps "$STATE_DIR/routines" 2>>"$LOG")
+}
+
 do_finish() {
 	local text lang pgid
 	# Claim and leave `listening` FIRST, before the recorder is even
@@ -1425,6 +1471,21 @@ undo)
 	notify "Jarvis" "Oublié : « $ask »"
 	((quiet)) || { claim; stage_guard; do_speak "$(fixed "Oublié." "Forgotten.")"; }
 	;;
+routines)
+	shift
+	exec "$JARVIS_DIR/bin/jarvis-routines" --file "$ROUTINES" list "$@"
+	;;
+routine)
+	# routine <n> on|off|delete — routine add "<line>"
+	shift
+	memory_init
+	if [[ ${1:-} == add ]]; then
+		shift
+		"$JARVIS_DIR/bin/jarvis-routines" --file "$ROUTINES" add "$*"
+	else
+		"$JARVIS_DIR/bin/jarvis-routines" --file "$ROUTINES" set "$@"
+	fi
+	;;
 transcript)
 	# The conversation as it was lived: the last N exchanges with what he
 	# thought and did between the question and the answer.
@@ -1822,6 +1883,9 @@ tick)
 			quiet_now || notify "Jarvis — bilan de santé" "$summary"
 		fi
 	fi
+	# The routines, before the quiet-hours exit: a reminder set for the
+	# evening still arrives at night, as a notification.
+	routines_run
 	# Quiet hours: nothing autonomous from here on.
 	quiet_now && exit 0
 	# A brain that said it is out of quota until a given hour: nothing that
@@ -2103,6 +2167,10 @@ status)
 	printf 'failures=%s\n' "$(grep '^- \[' "$FAILURES" 2>/dev/null | wc -l)"
 	printf 'lessons=%s\n' "$(grep '^- ' "$MEMORY_DIR/LEARNED.md" 2>/dev/null | wc -l)"
 	printf 'suggestions=%s\n' "$(grep '^- \[' "$SUGGESTIONS" 2>/dev/null | wc -l)"
+	# Active routines, and the soonest of them.
+	"$JARVIS_DIR/bin/jarvis-routines" --file "$ROUTINES" list 2>/dev/null |
+		awk -F'\t' '$2 == "on" { n++; if ($7 > 0 && (soon == 0 || $7 < soon)) soon = $7 }
+		             END { printf "routines=%d\nnext_routine=%d\n", n, soon }'
 	;;
 suggestions)
 	# The dream's proposals, one per line: `<n>\t<date>\t<text>` with the

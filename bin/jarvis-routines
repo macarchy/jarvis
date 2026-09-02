@@ -1,0 +1,272 @@
+#!/usr/bin/env python3
+"""jarvis-routines — the scheduled tasks in memory/ROUTINES.md.
+
+One routine per line, edited by hand, by the journal window, and by Jarvis
+himself at the user's word:
+
+  - 08:00 lun-ven ask --quiet Briefing du matin : agenda, mails, batterie
+  - 18:30 * say Pense à brancher le Mac.
+  - 2026-09-03 15:00 once say Appeler Marc.
+  - off 03:00 dim dispatch Nettoie ~/Jarvis/output des exports anciens
+
+Grammar: `- [off] (HH:MM <days> | YYYY-MM-DD HH:MM once) <verb> <text>`,
+days `*`, `lun`…`dim`, ranges `lun-ven`, lists `lun,mer`; verbs `say`,
+`ask`, `ask --quiet`, `notify`, `dispatch`. Lines that are not routines
+(comments, blank, prose) are kept as they are and never numbered.
+
+  jarvis-routines --file F list [--json] [--now EPOCH]
+  jarvis-routines --file F due --now EPOCH --stamps DIR
+  jarvis-routines --file F set N on|off|delete
+  jarvis-routines --file F add "<line without the dash>"
+
+`due` prints the routines to run now, one per line, tab-separated:
+`due|skipped <n> <verb> <text> <line>`. A routine is due when its last
+scheduled time is within the past ten minutes and its stamp (the scheduled
+epoch, in DIR under a hash of the line) is older than that time; the stamp
+is written here, so a beat that crashes after reading never fires twice.
+A scheduled time older than ten minutes and never stamped is reported
+`skipped` once — the machine was asleep — and stamped. A `once` routine is
+removed from the file as it is returned.
+"""
+
+import hashlib
+import json
+import os
+import re
+import sys
+import time
+from datetime import datetime, timedelta
+
+DAYS = ["lun", "mar", "mer", "jeu", "ven", "sam", "dim"]
+VERBS = ["ask --quiet", "ask", "say", "notify", "dispatch"]
+CATCH_UP = 600
+LINE = re.compile(
+    r"^- (?:(?P<off>off) )?(?:(?P<date>\d{4}-\d{2}-\d{2}) (?P<htime>\d{1,2}:\d{2}) once"
+    r"|(?P<time>\d{1,2}:\d{2}) (?P<days>[a-z*,\-]+))"
+    r" (?P<verb>ask --quiet|ask|say|notify|dispatch) (?P<text>\S.*?)\s*$")
+
+
+def die(msg, code=1):
+    print(f"jarvis-routines: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def parse_days(spec):
+    """The set of weekday indexes (0 = lundi) a spec names, or None when
+    the spec is not one."""
+    if spec == "*":
+        return set(range(7))
+    out = set()
+    for part in spec.split(","):
+        if "-" in part:
+            a, b = part.split("-", 1)
+            if a not in DAYS or b not in DAYS:
+                return None
+            i, j = DAYS.index(a), DAYS.index(b)
+            k = i
+            while True:
+                out.add(k)
+                if k == j:
+                    break
+                k = (k + 1) % 7
+        elif part in DAYS:
+            out.add(DAYS.index(part))
+        else:
+            return None
+    return out
+
+
+def parse_line(line):
+    m = LINE.match(line)
+    if not m:
+        return None
+    hh, mm = (m.group("htime") or m.group("time")).split(":")
+    hh, mm = int(hh), int(mm)
+    if hh > 23 or mm > 59:
+        return None
+    r = {"on": m.group("off") is None, "verb": m.group("verb"), "text": m.group("text"),
+         "hour": hh, "minute": mm, "line": line.rstrip()}
+    if m.group("date"):
+        try:
+            datetime.strptime(m.group("date"), "%Y-%m-%d")
+        except ValueError:
+            return None
+        r.update(once=True, date=m.group("date"), days="once", when=f"{m.group('date')} {hh:02d}:{mm:02d}")
+    else:
+        days = parse_days(m.group("days"))
+        if days is None:
+            return None
+        r.update(once=False, date=None, days=m.group("days"), dayset=days, when=f"{hh:02d}:{mm:02d}")
+    # The stamp key ignores on/off: switching a routine off and on again
+    # must not make it fire for a time it already fired at.
+    r["key"] = hashlib.sha1(r["line"].replace("- off ", "- ", 1).encode()).hexdigest()[:16]
+    return r
+
+
+def read(path):
+    try:
+        lines = open(path, encoding="utf-8").read().split("\n")
+    except FileNotFoundError:
+        lines = []
+    routines = []
+    for i, line in enumerate(lines):
+        r = parse_line(line)
+        if r:
+            r["index"] = i
+            r["n"] = len(routines) + 1
+            routines.append(r)
+    return lines, routines
+
+
+def write(path, lines):
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    os.replace(tmp, path)
+
+
+def last_scheduled(r, now):
+    """The most recent scheduled epoch <= now, or None."""
+    t = datetime.fromtimestamp(now)
+    if r["once"]:
+        d = datetime.strptime(r["date"], "%Y-%m-%d").replace(hour=r["hour"], minute=r["minute"])
+        return d.timestamp() if d <= t else None
+    for back in range(0, 8):
+        d = (t - timedelta(days=back)).replace(hour=r["hour"], minute=r["minute"], second=0, microsecond=0)
+        if d <= t and d.weekday() in r["dayset"]:
+            return d.timestamp()
+    return None
+
+
+def next_scheduled(r, now):
+    """The next scheduled epoch >= now, or 0."""
+    if not r["on"]:
+        return 0
+    t = datetime.fromtimestamp(now)
+    if r["once"]:
+        d = datetime.strptime(r["date"], "%Y-%m-%d").replace(hour=r["hour"], minute=r["minute"])
+        return int(d.timestamp()) if d >= t - timedelta(seconds=CATCH_UP) else 0
+    for ahead in range(0, 8):
+        d = (t + timedelta(days=ahead)).replace(hour=r["hour"], minute=r["minute"], second=0, microsecond=0)
+        if d >= t and d.weekday() in r["dayset"]:
+            return int(d.timestamp())
+    return 0
+
+
+def public(r, now):
+    return {"n": r["n"], "on": r["on"], "when": r["when"], "days": r["days"], "once": r["once"],
+            "verb": r["verb"], "text": r["text"], "next": next_scheduled(r, now), "line": r["line"]}
+
+
+def cmd_list(path, args, now):
+    _, routines = read(path)
+    rows = [public(r, now) for r in routines]
+    if "--json" in args:
+        print(json.dumps(rows, ensure_ascii=False))
+        return
+    for r in rows:
+        print("\t".join([str(r["n"]), "on" if r["on"] else "off", r["when"], r["days"],
+                         r["verb"], r["text"], str(r["next"])]))
+
+
+def cmd_due(path, args, now, stamps):
+    os.makedirs(stamps, exist_ok=True)
+    lines, routines = read(path)
+    remove = []
+    for r in routines:
+        if not r["on"]:
+            continue
+        sched = last_scheduled(r, now)
+        if sched is None:
+            continue
+        stamp_path = os.path.join(stamps, r["key"])
+        try:
+            stamped = float(open(stamp_path).read().strip() or 0)
+        except (OSError, ValueError):
+            stamped = 0
+        if stamped >= sched:
+            continue
+        with open(stamp_path, "w") as f:
+            f.write(str(int(sched)))
+        status = "due" if now - sched <= CATCH_UP else "skipped"
+        print("\t".join([status, str(r["n"]), r["verb"], r["text"], r["line"]]))
+        if r["once"]:
+            remove.append(r["index"])
+    if remove:
+        for i in sorted(remove, reverse=True):
+            del lines[i]
+        write(path, lines)
+
+
+def cmd_set(path, args):
+    if len(args) != 2 or not args[0].isdigit() or args[1] not in ("on", "off", "delete"):
+        die("usage: set N on|off|delete", 2)
+    lines, routines = read(path)
+    n = int(args[0])
+    if not 1 <= n <= len(routines):
+        die(f"no routine {n}", 3)
+    r = routines[n - 1]
+    if args[1] == "delete":
+        del lines[r["index"]]
+    else:
+        body = r["line"][len("- off "):] if not r["on"] else r["line"][len("- "):]
+        lines[r["index"]] = ("- " if args[1] == "on" else "- off ") + body
+    write(path, lines)
+    print(r["line"])
+
+
+def cmd_add(path, args):
+    if len(args) != 1:
+        die("usage: add \"<line>\"", 2)
+    body = args[0].strip()
+    body = body[2:] if body.startswith("- ") else body
+    line = "- " + body
+    if parse_line(line) is None:
+        die("ligne invalide — attendu : [off] HH:MM <jours> <verbe> <texte> "
+            "ou AAAA-MM-JJ HH:MM once <verbe> <texte>", 2)
+    lines, _ = read(path)
+    while lines and lines[-1] == "":
+        lines.pop()
+    lines.append(line)
+    lines.append("")
+    write(path, lines)
+    print(line)
+
+
+def main():
+    argv = sys.argv[1:]
+    path = None
+    stamps = None
+    now = None
+    rest = []
+    it = iter(argv)
+    for a in it:
+        if a == "--file":
+            path = next(it, None)
+        elif a == "--stamps":
+            stamps = next(it, None)
+        elif a == "--now":
+            now = float(next(it, "0"))
+        else:
+            rest.append(a)
+    if not path or not rest:
+        die("usage: jarvis-routines --file F list|due|set|add …", 2)
+    if now is None:
+        now = time.time()
+    cmd, args = rest[0], rest[1:]
+    if cmd == "list":
+        cmd_list(path, args, now)
+    elif cmd == "due":
+        if not stamps:
+            die("due needs --stamps DIR", 2)
+        cmd_due(path, args, now, stamps)
+    elif cmd == "set":
+        cmd_set(path, args)
+    elif cmd == "add":
+        cmd_add(path, args)
+    else:
+        die(f"unknown command {cmd}", 2)
+
+
+if __name__ == "__main__":
+    main()
