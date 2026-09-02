@@ -125,6 +125,7 @@ def test_setup_registers_the_fish_and_spawns_nothing(sprites):
     rig = Rig()
     assert "macarchy.jarvis.fish" in rig.host.registry.names("macarchy.jarvis")
     assert rig.loop.children == {}
+    assert rig.mod._anim is None
 
 
 def test_fish_is_a_pill_sprite_that_presses_and_opens_the_page(sprites):
@@ -386,3 +387,26 @@ def test_tap_dismiss_cancels_the_linger(sprites):
     lay = rig.scene()
     _text(lay).on_tap(0, 0)
     assert rig.mod._linger is None
+
+
+def test_the_animation_timer_only_runs_while_something_needs_it(sprites):
+    rig = Rig()
+    assert rig.mod._anim is None
+    rig.ipc("state", "listening")
+    assert rig.mod._anim is not None
+    rig.ipc("state", "speaking"); rig.ipc("reply", "Voilà.")
+    rig.ipc("state", "idle")
+    assert rig.mod._anim is not None                         # la scène linger encore
+    rig.mod._dismiss()
+    rig.mod.animate()
+    assert rig.mod._anim is None
+
+
+def test_an_emotion_wakes_the_timer_and_it_sleeps_again_after(sprites):
+    rig = Rig()
+    w = rig.fish()
+    rig.ipc("emote", "proud")
+    assert rig.mod._anim is not None
+    rig.advance(6.1)
+    assert rig.mod._anim is None
+    assert w.sheet.endswith("idle.png")

@@ -134,6 +134,7 @@ class Module:
         self.scene_widgets = {}          # ce que la scène affichée contient, par rôle ; vide = pas de scène
         self._last_text = None
         self._linger = None              # le minuteur des quatre secondes de fin d'échange
+        self._anim = None                # le minuteur de 20 Hz, à la demande seulement
         api.widget("fish", self.fish)
         api.ipc("state", self.on_state)
         api.ipc("emote", self.on_emote)
@@ -142,8 +143,13 @@ class Module:
         api.ipc("heard", self.on_heard)
         api.ipc("reply", self.on_reply)
         api.ipc("level", self.on_level)
-        api.every(0.05, self.animate)
         api.watch_file(os.path.join(SPRITES_DIR, ".look"), self.resheet)
+
+    def _ensure_animating(self):
+        """Démarre le minuteur de 20 Hz s'il ne tourne pas déjà : rien ne
+        l'entretient tant que personne ne l'a réveillé."""
+        if self._anim is None:
+            self._anim = self.api.every(0.05, self.animate)
 
     # ---- le bouton ----------------------------------------------------------
     def fish(self, api, **p):
@@ -179,6 +185,7 @@ class Module:
         """`omarchy-jarvis look` a regénéré les planches : tout le monde relit la sienne."""
         for b in list(self.buttons):
             self._dress(b, self.button_sheet(), force=True)
+        self._ensure_animating()
 
     # ---- les verbes ---------------------------------------------------------
     def on_state(self, state="idle", *_):
@@ -189,6 +196,7 @@ class Module:
         self.state = state
         if state == "cancelling":
             self.cancel_until = self.api.now() + CANCEL_SECONDS
+            self._ensure_animating()
         if state == "listening":
             self.heard, self.reply = "", ""
             self.writer = Typewriter()
@@ -200,11 +208,13 @@ class Module:
         if name in FPS and self.state == "idle":
             self.emote, self.emote_until = name, self.api.now() + EMOTE_SECONDS
             self._sync_buttons()
+            self._ensure_animating()
 
     def on_abort(self, *_):
         self.cancel_until = self.api.now() + CANCEL_SECONDS
         self._dismiss()
         self._sync_buttons()
+        self._ensure_animating()
 
     def on_heard(self, *words):
         # No rebuild: every scene has its text label, `animate` types into it.
@@ -226,10 +236,12 @@ class Module:
     def _sync_scene(self):
         if self.state in SCENE_STATES:
             self.api.show_scene("jarvis", priority=50, dismissable=False)
+            self._ensure_animating()
         elif self.state == "idle" and self.scene_widgets:
             # Fin de l'échange : la scène reste quatre secondes, un tap la ferme.
             self.api.show_scene("jarvis", priority=50, timeout=IDLE_LINGER)
             self._arm_linger()
+            self._ensure_animating()
         else:
             self._dismiss()
 
@@ -299,3 +311,7 @@ class Module:
             if "dots" in w:
                 w["dots"].set_text("·" * (1 + int(now * 3) % 3))
         self._sync_buttons()
+        if not w and now >= self.emote_until and now >= self.cancel_until:
+            if self._anim:
+                self._anim.cancel()
+            self._anim = None
