@@ -263,6 +263,7 @@ def test_listening_takes_the_bar_lit_with_a_meter_and_a_cancel(sprites):
     assert ("wake",) in rig.hooks.calls
     name, kw = rig.last_show()[1], rig.last_show()[2]
     assert name == "jarvis" and kw.get("priority") == 50 and kw.get("timeout") is None
+    assert kw.get("dismissable") is False
     lay = rig.scene()
     kinds = [type(w).__name__ for w in _widgets(lay)]
     assert kinds == ["Sprite", "Meter", "Label", "Button"]
@@ -340,6 +341,7 @@ def test_idle_lingers_four_seconds_and_a_tap_outside_close_dismisses(sprites):
     rig.ipc("state", "listening"); rig.ipc("state", "speaking"); rig.ipc("reply", "Voilà.")
     rig.ipc("state", "idle")
     assert rig.last_show()[2].get("timeout") == 4
+    assert rig.last_show()[2].get("dismissable", True) is True
     lay = rig.scene()
     _text(lay).on_tap(0, 0)
     assert ("hide", "jarvis") in rig.hooks.calls

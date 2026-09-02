@@ -225,7 +225,7 @@ class Module:
     # ---- la scène -------------------------------------------------------------
     def _sync_scene(self):
         if self.state in SCENE_STATES:
-            self.api.show_scene("jarvis", priority=50)
+            self.api.show_scene("jarvis", priority=50, dismissable=False)
         elif self.state == "idle" and self.scene_widgets:
             # Fin de l'échange : la scène reste quatre secondes, un tap la ferme.
             self.api.show_scene("jarvis", priority=50, timeout=IDLE_LINGER)
