@@ -10,7 +10,7 @@ ce dépôt sont refusés aussi — n'essaie ni /sys, ni upower, ni acpi.
    une fenêtre à 100 (mode voyage) — suggère de remettre la limite.
 2. Disque : `df -h /` — signale au-dessus de 90 %.
 3. Daemons : `omarchy-als status` (le daemon doit tourner),
-   `pgrep -f "omarchy-dfr daemon"` (Touch Bar — c'est un script python,
+   `pgrep -f "macarchy-dfr daemon"` (Touch Bar — c'est un script python,
    jamais `pgrep -x`), `pgrep -f omarchy-pinch`. Signale tout daemon mort.
 4. Mémoire : `grep -c "^- \[" memory/FAILURES.md` — seules ces lignes
    sont des entrées (le reste est commentaire). Au-delà de cinq, mentionne
