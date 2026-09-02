@@ -62,7 +62,13 @@ TRACE = os.path.join(TRACE_DIR, time.strftime("%Y-%m-%d") + ".log")
 # A sentence ends at . ! ? … or : (optionally inside quotes/brackets)
 # followed by whitespace. Newlines count as whitespace; markdown never
 # reaches the voice anyway (the soul forbids it).
-BOUNDARY = re.compile(r'[.!?…:]["»)\]]?[ \t]*\n|[.!?…]["»)\]]?[ \t]+')
+# A number followed by a full stop — « 1. work-cd », « 2. work-4c » — is a
+# list marker, not the end of a sentence: cut there, the voice said « un. »
+# then paused, then went on (2026-09-02 12:40). Lookbehinds must be fixed
+# width, so one per length: the marker is one or two digits, at the start
+# or after whitespace.
+BOUNDARY = re.compile(r'[.!?…:]["»)\]]?[ \t]*\n'
+                      r'|(?<!^\d)(?<!\s\d)(?<!^\d\d)(?<!\s\d\d)[.!?…]["»)\]]?[ \t]+')
 
 # The soul forbids markdown and the brain writes it anyway on anything
 # list-shaped (« 1. **work-cd** », 2026-09-02). espeak swallows most of
