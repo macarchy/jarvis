@@ -968,11 +968,11 @@ is_undo() {
 
 # Drop the last exchange of the live conversation: the transcript is cut
 # before its user turn (a copy is kept first), the journal loses its line,
-# the pair the Control Center shows steps back one exchange. Prints the
+# the pair the Control Center shows is cleared. Prints the
 # forgotten ask on stdout. Returns 1, with the reason on stderr, when there
 # is nothing to forget.
 forget_last() {
-	local id out ask prev_ask prev_reply day file
+	local id out ask day file
 	id=$(cat "$CONV_FLAG" 2>/dev/null)
 	if [[ -z $id ]]; then
 		echo "aucune conversation en cours" >&2
@@ -985,8 +985,6 @@ forget_last() {
 		return 1
 	}
 	ask=$(printf '%s' "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin)["forgotten"]["ask"])')
-	prev_ask=$(printf '%s' "$out" | python3 -c 'import json,sys; p=json.load(sys.stdin)["previous"]; print(p["ask"] if p else "")')
-	prev_reply=$(printf '%s' "$out" | python3 -c 'import json,sys; p=json.load(sys.stdin)["previous"]; print(p["reply"] if p else "")')
 	# The journal line of that exchange, and only the last one that matches:
 	# the same question asked twice in a day loses one line, not two.
 	day=$(date +%F)
@@ -1003,12 +1001,11 @@ forget_last() {
 			open(path, "w", encoding="utf-8").write("\n".join(lines))
 		PY
 	fi
-	if [[ -n $prev_ask ]]; then
-		printf '%s' "$prev_ask" >"$LAST_ASK"
-		printf '%s' "$prev_reply" >"$LAST_REPLY"
-	else
-		rm -f "$LAST_ASK" "$LAST_REPLY"
-	fi
+	# The panel shows nothing after an undo. It used to step back to the
+	# previous exchange, and that read as « nothing happened, the last
+	# message is still there » (2026-09-02 14:05): a forgotten exchange
+	# leaves an empty line, the earlier ones stay in the journal window.
+	rm -f "$LAST_ASK" "$LAST_REPLY"
 	log "undo: « $ask »"
 	trace "— dernier échange oublié : « $ask » —"
 	mascot heard ""

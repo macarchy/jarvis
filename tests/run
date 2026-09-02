@@ -648,12 +648,11 @@ assert "un seul échange reste" test "$("$JARVIS" transcript --json | python3 -c
 assert "copie gardée" bash -c "ls '$JARVIS_STATE'/undo/$SESSION-*.jsonl >/dev/null"
 assert "la ligne du journal est partie" journal_lacks "Et la météo"
 assert "la précédente reste" journal_has "Quelle heure est-il"
-assert "la paire recule" test "$(cat "$JARVIS_RUN/last-ask")|$(cat "$JARVIS_RUN/last-reply")" = "Quelle heure est-il ?|Il est dix heures."
+assert "le panneau ne montre plus rien" test ! -e "$JARVIS_RUN/last-ask" -a ! -e "$JARVIS_RUN/last-reply"
 assert "tracé" grep -q 'oublié : « Et la météo ? »' "$JARVIS_MEMORY/trace/$(today).log"
 assert "la bulle est vidée" grep -q 'macarchy.jarvis heard $' "$FAKE_SHELL_LOG"
 assert "sans voix en --quiet" test ! -s "$FAKE_PIPER_LOG"
 assert "oublié encore" "$JARVIS" undo --quiet
-assert "plus rien à afficher" test ! -e "$JARVIS_RUN/last-ask"
 assert "et plus rien à oublier" not "$JARVIS" undo --quiet
 
 t "undo : refusé quand il est occupé ou sans conversation"
