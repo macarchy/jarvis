@@ -16,15 +16,22 @@ PLUGIN = os.path.join(os.path.dirname(HERE), "plugin", "touchbar.py")
 
 
 def _engine_root():
+    """The first candidate that actually holds the engine: the real
+    `macarchy-dfr` on PATH (not a test's own fake, which has no
+    `macarchy_dfr/modules.py`), else the sibling checkout."""
     exe = shutil.which("macarchy-dfr")
+    candidates = []
     if exe:
-        return os.path.dirname(os.path.dirname(os.path.realpath(exe)))
-    sibling = os.path.join(os.path.dirname(os.path.dirname(HERE)), "macarchy-dfr")
-    return sibling if os.path.isdir(sibling) else None
+        candidates.append(os.path.dirname(os.path.dirname(os.path.realpath(exe))))
+    candidates.append(os.path.join(os.path.dirname(os.path.dirname(HERE)), "macarchy-dfr"))
+    for root in candidates:
+        if os.path.exists(os.path.join(root, "macarchy_dfr", "modules.py")):
+            return root
+    return None
 
 
 ROOT = _engine_root()
-if ROOT is None or not os.path.exists(os.path.join(ROOT, "macarchy_dfr", "modules.py")):
+if ROOT is None:
     pytest.skip("macarchy-dfr introuvable", allow_module_level=True)
 sys.path.insert(0, ROOT)
 
