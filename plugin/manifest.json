@@ -1,15 +1,21 @@
 {
   "schemaVersion": 1,
   "id": "macarchy.jarvis",
-  "name": "Jarvis Mascot",
-  "version": "1.1.0",
+  "name": "Jarvis",
+  "version": "1.2.0",
   "author": "phmatray",
-  "description": "The Babel fish: Jarvis's pixel-art mascot, animated by the voice pipeline's states, cancellation included",
+  "description": "The Babel fish: Jarvis's pixel-art mascot animated by the voice pipeline, and his page in the Control Center",
   "kinds": [
-    "service"
+    "service",
+    "control-center-module"
   ],
   "keepLoaded": true,
   "entryPoints": {
-    "service": "Service.qml"
+    "service": "Service.qml",
+    "controlCenterModule": "ControlCenterModule.qml"
+  },
+  "controlCenterModule": {
+    "apiVersion": 1,
+    "order": 30
   }
 }
