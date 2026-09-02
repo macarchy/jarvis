@@ -30,6 +30,7 @@ import os
 import subprocess
 import sys
 import time
+import traceback
 
 import numpy as np
 import openwakeword
@@ -50,7 +51,23 @@ RUN_DIR = os.environ.get("JARVIS_RUN") or os.path.join(
 STATE_FILE = os.path.join(RUN_DIR, "state")
 MIC_TARGET = os.environ.get("JARVIS_MIC", "effect_output.j493-mic")
 
-CHUNK = 1280                    # 80 ms at 16 kHz
+CHUNK = 1280                    # 80 ms at 16 kHz: one model frame
+FRAME_S = CHUNK / 16000
+# How many frames are read per wakeup while he only waits for his name. The
+# model costs 2 ms per frame in a tight loop and 18 ms when woken once per
+# frame: this machine's little cores idle at 600 MHz and schedutil never
+# ramps for a task awake 3 % of the time, so every burst runs at the bottom
+# clock, and this daemon sat at 26 % of a core for a job worth 3. Measured
+# here, frames per read against the core: 1 → 24 %, 4 → 15 %, 6 → 11 %,
+# 8 → 10 %, 12 → 8 %. Eight costs the wake word up to 640 ms of latency,
+# less than the word itself takes to say. The two states where timing IS
+# the job — an open ear waiting for the end of a sentence, a follow-up
+# window waiting for its first syllable — keep reading one frame at a time;
+# they last seconds, the wait lasts the day.
+# openwakeword scores every frame of a longer chunk and keeps the maximum,
+# and the decision table below still sees every 80 ms frame on its own.
+BATCH = max(1, int(os.environ.get("JARVIS_WAKE_BATCH", "8")))
+PRECISE_STATES = ("listening", "followup")
 # With the accent verifier the score IS the verifier's probability
 # (positives saturate near 1.0, phonetic twins stay under ~0.75), so the
 # threshold sits high. Without it, the base model's English-native scores
@@ -69,9 +86,22 @@ def state():
         return "idle"
 
 
+# The daemon's one line of speech: stderr, where journalctl keeps it. He
+# used to die with nothing said at all — every failure below propagated out
+# of the capture loop and out of main(), and a daemon that exits on the
+# first transient error (a PipeWire restart taking pactl with it, the CLI
+# missing from a PATH the user manager did not import) is a daemon whose
+# absence is noticed nine hours later, by a user who is not being heard.
+def log(msg):
+    print(f"jarvis-wake: {msg}", file=sys.stderr, flush=True)
+
+
 def run(args):
-    subprocess.Popen(["omarchy-jarvis", *args],
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        subprocess.Popen(["omarchy-jarvis", *args],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError as e:
+        log(f"cannot run omarchy-jarvis {' '.join(args)}: {e}")
 
 
 def trace_score(score):
@@ -87,8 +117,12 @@ def trace_score(score):
 
 
 def mic_args():
-    have = subprocess.run(["pactl", "list", "sources", "short"],
-                          capture_output=True, text=True).stdout
+    try:
+        have = subprocess.run(["pactl", "list", "sources", "short"],
+                              capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError) as e:
+        log(f"pactl unavailable ({e}); recording from the default source")
+        have = ""
     target = ["--target", MIC_TARGET] if MIC_TARGET in have else []
     return ["pw-record", *target, "--rate", "16000", "--channels", "1",
             "--format", "s16", "-"]
@@ -107,21 +141,42 @@ def main():
     floor = 60.0                # RMS in int16 units, adapts continuously
 
     while True:
-        proc = subprocess.Popen(mic_args(), stdout=subprocess.PIPE)
+        try:
+            proc = subprocess.Popen(mic_args(), stdout=subprocess.PIPE)
+        except OSError as e:
+            log(f"cannot open the microphone: {e}")
+            time.sleep(1.0)
+            continue
         try:
             while True:
-                raw = proc.stdout.read(CHUNK * 2)
+                mode = state()
+                batch = 1 if mode in PRECISE_STATES else BATCH
+                raw = proc.stdout.read(CHUNK * 2 * batch)
                 if not raw or len(raw) < CHUNK * 2:
                     break
                 audio = np.frombuffer(raw, dtype=np.int16)
-                rms = float(np.sqrt(np.mean(audio.astype(np.float32) ** 2)))
+                # A short read is the recorder dying mid-batch: whole frames
+                # only, the model takes nothing else.
+                frames = audio[: len(audio) // CHUNK * CHUNK].reshape(-1, CHUNK)
                 now = time.monotonic()
-                mode = state()
                 score = None
                 if fsm.wants_score(mode):
-                    score = max(model.predict(audio).values())
+                    score = max(model.predict(frames.reshape(-1)).values())
                     trace_score(score)
-                action, floor = fsm.decide(mode, rms, floor, score, now, st)
+                # The table decides frame by frame, as it always has — the
+                # noise floor, the silence hold and the follow-up window are
+                # all tuned in 80 ms steps. The batch's score belongs to its
+                # last frame; the first action ends the batch, since the
+                # state it was read against is no longer true.
+                action = ""
+                for i, frame in enumerate(frames):
+                    rms = float(np.sqrt(np.mean(frame.astype(np.float32) ** 2)))
+                    at = now - (len(frames) - 1 - i) * FRAME_S
+                    last = i == len(frames) - 1
+                    action, floor = fsm.decide(mode, rms, floor,
+                                               score if last else None, at, st)
+                    if action:
+                        break
                 if not action:
                     continue
                 # The model only ever fired if it was asked, so this is
@@ -129,6 +184,14 @@ def main():
                 if score is not None:
                     model.reset()
                 run(fsm.command_for(action, mode))
+        except KeyboardInterrupt:
+            raise
+        except Exception:
+            # A frame that blew up is one frame. Say what it was, reopen the
+            # ear, and go on listening — the alternative was the silence the
+            # user only found out about by not being heard.
+            log("capture loop error, restarting:\n" + traceback.format_exc())
+            model.reset()
         finally:
             proc.kill()
         time.sleep(1.0)         # pw-record died; let the graph settle

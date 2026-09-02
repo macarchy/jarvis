@@ -106,14 +106,29 @@ check("rien ne se ferme avant six secondes",
 check("puis la fenêtre se referme, une fois",
       ears.seconds("followup", 2.0), ["settle"])
 
-# Une fenêtre ne se consomme qu'une fois. L'état met une fourche et un
+# Un press par reprise, pas un par trame. L'état met une fourche et un
 # démarrage de shell à changer — une trame entière — et chaque trame de la
 # phrase prononcée relançait un press dans cet intervalle.
 ears = Ears()
 check("une reprise de parole rouvre l'oreille, une seule fois",
-      ears.seconds("followup", 1.0, rms=SPEECH), ["press"])
+      ears.seconds("followup", 0.4, rms=SPEECH), ["press"])
 check("et la fermeture ne se répète pas non plus",
       Ears().seconds("followup", 20.0), ["settle"])
+
+# Mais un press peut ne rien changer : la machine refuse celui qui tombe
+# dans son propre temps mort (250 ms après une transition). La fenêtre qui
+# avait tiré puis cessé de regarder restait ouverte — ni relance, ni
+# fermeture — jusqu'au chien de garde. L'état toujours à « followup » une
+# demi-seconde plus tard, c'est un press perdu : on le retire.
+ears = Ears()
+check("un press perdu est retenté une demi-seconde plus tard",
+      ears.seconds("followup", 1.0, rms=SPEECH), ["press", "press"])
+# Et une fenêtre dont le press s'est perdu se referme quand même à six
+# secondes, comme n'importe quelle fenêtre inutilisée.
+ears = Ears()
+check("le press part", ears.frame("followup", rms=SPEECH), "press")
+check("la fenêtre au press perdu se referme quand même",
+      ears.seconds("followup", 6.5), ["settle"])
 
 # --- le mot de réveil, état par état ---------------------------------------
 
