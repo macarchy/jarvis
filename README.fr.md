@@ -167,6 +167,20 @@ son propre groupe de processus, est ce qui rend l'annulation vraie — tuer le
 groupe est ce qui atteint les sous-processus que `claude` a lancés pour ses
 propres outils, ce qu'un pid nu ne fait jamais.
 
+**Touch Bar** — avec [macarchy-dfr](https://github.com/macarchy/macarchy-dfr)
+installé, le plugin est aussi un `touchbar-module` : le poisson s'installe
+sur la barre elle-même, là où était la touche micro — un appui pour
+déclencher, un appui long pour ouvrir sa page du Control Center. La barre
+est à lui pendant qu'il travaille : elle se remplit d'un vumètre pendant
+qu'il écoute (nourri par le daemon de réveil), tape le transcript au fur
+et à mesure qu'il réfléchit, et tape sa réponse au fur et à mesure qu'elle
+est parlée ; une ✕ interrompt. `bin/jarvis` et `jarvis-wake.py` publient
+via `macarchy-dfr macarchy.jarvis state|heard|reply|level|emote|abort` —
+rien de différent de la machine à états qui signale n'importe quel autre
+auditeur. `install.sh` copie [`plugin/touchbar.py`](plugin/touchbar.py)
+avec le reste du plugin, et le daemon le récupère au prochain
+`macarchy-dfr reload`.
+
 ## Le faire tien
 
 [`SOUL.md`](SOUL.md), c'est qui il est — le ton, l'humour, le tutoiement ou le

@@ -156,6 +156,18 @@ has moved. That, plus running each external stage in its own process group, is
 what makes cancelling real — killing the group is what reaches the
 subprocesses `claude` spawned for its own tools, which a bare pid never does.
 
+**Touch Bar** — with [macarchy-dfr](https://github.com/macarchy/macarchy-dfr)
+installed, the plugin is also a `touchbar-module`: the fish sits on the bar
+itself, where the mic key used to be — tap to press, long-press to open his
+Control Center page. The bar is his while he works: it fills with a meter
+while he listens (fed by the wake daemon), types the transcript out as he
+thinks, and types his reply as it is spoken; a ✕ interrupts. `bin/jarvis`
+and `jarvis-wake.py` publish over
+`macarchy-dfr macarchy.jarvis state|heard|reply|level|emote|abort` — no
+different from the FSM signalling any other listener. `install.sh` copies
+[`plugin/touchbar.py`](plugin/touchbar.py) with the rest of the plugin, and
+the daemon picks it up on `macarchy-dfr reload`.
+
 ## Making him yours
 
 [`SOUL.md`](SOUL.md) is who he is — tone, humour, whether he uses *tu* or
