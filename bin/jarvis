@@ -76,6 +76,11 @@ SPRITES_DIR="${JARVIS_SPRITES:-$HOME/.local/share/jarvis/sprites}"
 # everything downstream of it — recording, transcription, speaking — went
 # untested because of it. JARVIS_PIPER/JARVIS_VOXTYPE swap in the fakes.
 PIPER="${JARVIS_PIPER:-$JARVIS_DIR/piper/piper}"
+# How this script calls itself. Not `$0`: a mission's subshell `cd`s into the
+# target directory before it says its report, and a relative `$0` — the
+# `bin/jarvis dispatch --dir …` of anyone working in the checkout — no longer
+# names anything from there. The say was swallowed by its own `2>/dev/null`.
+JARVIS_BIN="$JARVIS_DIR/bin/jarvis"
 VOXTYPE="${JARVIS_VOXTYPE:-voxtype}"
 VOICE_EN="$JARVIS_DIR/models/en_GB-alan-medium.onnx"
 STT_CONFIG="$JARVIS_DIR/voxtype.toml"
@@ -1277,7 +1282,7 @@ dispatch)
 		trace "mission terminée : $summary"
 		mascot_aside "$summary"
 		notify "Jarvis — mission terminée" "$summary"
-		[[ $(state) == idle ]] && ! quiet_now && "$0" say "$summary"
+		[[ $(state) == idle ]] && ! quiet_now && "$JARVIS_BIN" say "$summary"
 	) >/dev/null 2>&1 &
 	disown
 	echo "mission lancée : $mission"
@@ -1493,7 +1498,7 @@ digest)
 			digested=1
 			mascot_emote curious
 			notify "Jarvis — document digéré" "${summary:-$base}"
-			[[ $(state) == idle ]] && ! quiet_now && "$0" say "$summary"
+			[[ $(state) == idle ]] && ! quiet_now && "$JARVIS_BIN" say "$summary"
 		elif ((brain_ok)); then
 			# The brain answered but produced no fiche: the file's fault.
 			t=$((${tries[$base]} + 1))
@@ -1513,6 +1518,12 @@ digest)
 		fi
 	done
 	((digested)) && "$JARVIS_DIR/bin/jarvis-index" --inbox >/dev/null 2>&1
+	# Whatever was digested. A run that only parked files — the brain out,
+	# a document that gave no fiche yet — used to leave the arithmetic
+	# above as its exit status, and systemd filed every such run as
+	# « Failed to start Jarvis inbox digestion ». Parked is handled: the
+	# pulse retries it, and the failure journal says when it gives up.
+	exit 0
 	;;
 lastcmd)
 	# The last finished shell command, straight from atuin's database
@@ -1644,8 +1655,9 @@ tick)
 	#
 	# The watchdog runs first, before anything below reads the state: every
 	# guard here is written for a machine that tells the truth about what it
-	# is doing.
-	"$0" watchdog
+	# machine's own lock and stands down by itself if the state moved.
+	"$JARVIS_BIN" watchdog
+	# mascot's five — and nothing kept them apart: a five-minute beat landing
 	# One truth about the quiet hours, refreshed on the pulse and not only
 	# on a transition: a machine that idles across the 23:00 boundary wore
 	# yesterday's flag until somebody finally spoke to it.
@@ -1662,7 +1674,7 @@ tick)
 		"$JARVIS_DIR/bin/jarvis-index" --inbox >/dev/null 2>&1
 	fi
 	if [[ "$(omarchy version 2>/dev/null)" != "$(cat "$MEMORY_DIR/knowledge/VERSION" 2>/dev/null)" ]]; then
-		"$0" index
+		"$JARVIS_BIN" index
 	fi
 	# Once a day, the self-check — deterministic, no brain, no voice — and
 	# only what went red SINCE the last one is worth saying out of it. A
@@ -1677,7 +1689,7 @@ tick)
 	stamp="$STATE_DIR/last-doctor-run"
 	if [[ ! -e $stamp || -z $(find "$stamp" -mmin -1440 2>/dev/null) ]]; then
 		touch "$stamp"
-		red=$("$0" doctor --quiet | sort)
+		red=$("$JARVIS_BIN" doctor --quiet | sort)
 		new=$(comm -13 <(sort -u "$STATE_DIR/last-doctor" 2>/dev/null) <(printf '%s\n' "$red" | grep -v '^$'))
 		printf '%s\n' "$red" >"$STATE_DIR/last-doctor"
 		if [[ -n ${new//[[:space:]]/} ]]; then
@@ -1711,21 +1723,21 @@ tick)
 	fi
 	# Documents parked in the inbox while the brain was out: retry now.
 	if [[ -n $(find "$BOX_DIR/input/.pending" -maxdepth 1 -type f ! -name '.*' -print -quit 2>/dev/null) ]]; then
-		"$0" digest
+		"$JARVIS_BIN" digest
 	fi
 	# A conversation untouched for eight hours is over: consolidate
 	# and close it — a night's sleep rotates every morning.
 	if [[ -e $CONV_FLAG && -z $(find "$CONV_FLAG" -mmin -480 2>/dev/null) ]]; then
-		"$0" rotate
+		"$JARVIS_BIN" rotate
 	fi
 	# Then: nap first if there is memory to digest, otherwise consider a
 	# round. Each branch keeps its own guards; the soul can switch either off.
-	[[ $(setting reves oui) == non ]] || "$0" maybe-dream
+	[[ $(setting reves oui) == non ]] || "$JARVIS_BIN" maybe-dream
 	[[ $(state) == idle ]] || exit 0
 	[[ $(setting rondes oui) == non ]] && exit 0
 	[[ -e $LAST_ASK && -n $(find "$LAST_ASK" -mmin -10 2>/dev/null) ]] && exit 0
 	[[ -e $STATE_DIR/last-heartbeat && -n $(find "$STATE_DIR/last-heartbeat" -mmin -60 2>/dev/null) ]] && exit 0
-	exec "$0" heartbeat
+	exec "$JARVIS_BIN" heartbeat
 	;;
 maybe-dream)
 	# The opportunistic nap, ticked whenever Jarvis idles: dream only when
@@ -1743,7 +1755,7 @@ maybe-dream)
 	((${entries:-0} >= 3)) || exit 0
 	[[ -e $LAST_ASK && -n $(find "$LAST_ASK" -mmin -10 2>/dev/null) ]] && exit 0
 	[[ -e $STATE_DIR/last-dream && -n $(find "$STATE_DIR/last-dream" -mmin -30 2>/dev/null) ]] && exit 0
-	exec "$0" dream --quiet
+	exec "$JARVIS_BIN" dream --quiet
 	;;
 rotate)
 	# Close a stale conversation: ask the session itself for the summary
@@ -1987,7 +1999,7 @@ suggestion)
 	# this repository and removes it; `suggestion <n> reject` just removes
 	# it. Both leave a line in the journal — nothing disappears silently.
 	n=${2:-} verb=${3:-}
-	entry=$("$0" suggestions | awk -F'\t' -v n="$n" '$1 == n { print $3 }')
+	entry=$("$JARVIS_BIN" suggestions | awk -F'\t' -v n="$n" '$1 == n { print $3 }')
 	if [[ -z $entry || $verb != accept && $verb != reject ]]; then
 		echo "usage: jarvis suggestion <n> accept|reject" >&2
 		exit 1
@@ -1997,7 +2009,7 @@ suggestion)
 	if [[ $verb == accept ]]; then
 		journal "suggestion confiée : « $entry »"
 		trace "suggestion confiée : « $entry »"
-		"$0" dispatch --dir "$JARVIS_DIR" "Une suggestion issue d'un de tes rêves (memory/SUGGESTIONS.md) vient d'être approuvée par l'utilisateur : « $entry ». Mets-la en œuvre dans ce dépôt (bin/, memory/*.md, CLAUDE.md, .claude/settings.json) de façon minimale et vérifiable ; si elle demande une décision humaine ou un accès que tu n'as pas, écris précisément ce qui manque dans memory/SUGGESTIONS.md plutôt que d'improviser."
+		"$JARVIS_BIN" dispatch --dir "$JARVIS_DIR" "Une suggestion issue d'un de tes rêves (memory/SUGGESTIONS.md) vient d'être approuvée par l'utilisateur : « $entry ». Mets-la en œuvre dans ce dépôt (bin/, memory/*.md, CLAUDE.md, .claude/settings.json) de façon minimale et vérifiable ; si elle demande une décision humaine ou un accès que tu n'as pas, écris précisément ce qui manque dans memory/SUGGESTIONS.md plutôt que d'improviser."
 	else
 		journal "suggestion rejetée : « $entry »"
 		trace "suggestion rejetée : « $entry »"

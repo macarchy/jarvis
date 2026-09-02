@@ -6,4 +6,12 @@ Type=oneshot
 # User units do not inherit the session PATH: rebuild the parts
 # digestion needs (mise-installed claude, omarchy bins).
 Environment=PATH=%h/.local/share/mise/installs/claude/latest:%h/.local/bin:%h/.local/share/mise/shims:/usr/share/omarchy/bin:/usr/local/bin:/usr/bin
+# The same reasoning as the pulse's timeout, one unit over: Type=oneshot
+# leaves TimeoutStartSec infinite, and a digestion is a `claude` session per
+# file. One that hangs on a dead network holds this unit in `activating` for
+# the rest of the login session — and a path unit does not fire again while
+# its service is still running, so every document dropped after it waits
+# with it. Fifteen minutes is past the longest honest batch and the kill
+# takes the whole control group; the pulse retries what was parked.
+TimeoutStartSec=900
 ExecStart=%h/Work/jarvis/bin/jarvis digest

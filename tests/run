@@ -288,10 +288,14 @@ assert "échec noté" bash -c "grep -q 'abandonnée après 3 essais' '$JARVIS_ME
 t "digest: une erreur de session gare sans compter d'essai"
 mkdir -p "$JARVIS_BOX/input"; echo x >"$JARVIS_BOX/input/doc.md"
 FAKE_CLAUDE_STREAM="$FIX/digest-error.jsonl" "$JARVIS" digest
+rc=$?
 assert "fichier en .pending" test -e "$JARVIS_BOX/input/.pending/doc.md"
 assert "compteur intact" test "$(cat "$JARVIS_BOX/input/.pending/.tries.doc.md")" = 0
 assert "statut down" test "$(cat "$JARVIS_STATE/brain")" = down
 # Garer n'est pas échouer : systemd filait chaque tel passage en « Failed
+# to start Jarvis inbox digestion » parce que l'arithmétique du dernier
+# `((digested)) && …` servait de code de sortie.
+assert "et le passage sort à zéro" test "$rc" = 0
 
 # Le cerveau se prend pour son sujet : un article sur le rate limit d'une
 # API, digéré correctement, convainquait brain_check qu'il était hors quota
@@ -1038,6 +1042,25 @@ printf -- '- %s ronde : Le disque est presque plein.\n' "$(date -d '-1 hour' +%H
 touch -d 'yesterday 18:00' "$JARVIS_RUN/last-ask"
 "$JARVIS" greet
 assert "la ronde du matin est racontée" bash -c "grep -q 'greet: Le disque est presque plein.' '$JARVIS_STATE/jarvis.log'"
+
+
+# ---- a mission's report survives a relative invocation
+#
+# The mission's subshell `cd`s into its directory before it says its report,
+# and called itself through `$0`: relative — `bin/jarvis dispatch` from the
+# checkout — that named nothing from there, and the say vanished into its
+# own `2>/dev/null`.
+t "dispatch : le compte rendu est dit même lancé par un chemin relatif"
+printf 'idle' >"$JARVIS_RUN/state"
+soul_with "rondes: non"
+sed -i 's/^- silence: .*/- silence: non/' "$SB/SOUL.md"
+# The mission's directory sits deeper than the caller's, so a path relative
+# to the one names nothing from the other — siblings would resolve alike.
+mkdir -p "$SB/cwd" "$SB/projet/sous"
+rel=$(realpath --relative-to="$SB/cwd" "$JARVIS")
+(cd "$SB/cwd" && FAKE_CLAUDE_STREAM="$FIX/digest-ok.jsonl" "$rel" dispatch --dir "$SB/projet/sous" "range ce dossier" >/dev/null)
+assert "mission journalisée" waitfor journal_has "mission terminée : J'ai retenu la fondue."
+assert "et dite à voix haute" waitfor grep -q "J'ai retenu la fondue." "$FAKE_PIPER_LOG"
 
 # ---- rotate
 t "rotate: résume et clôt la conversation"
