@@ -1043,6 +1043,26 @@ touch -d 'yesterday 18:00' "$JARVIS_RUN/last-ask"
 "$JARVIS" greet
 assert "la ronde du matin est racontée" bash -c "grep -q 'greet: Le disque est presque plein.' '$JARVIS_STATE/jarvis.log'"
 
+# ---- two clocks, one pulse
+#
+# The mascot's five-minute Timer and the systemd minute both run `tick`, and
+# nothing kept them apart: a beat landing inside a beat busy closing a stale
+# conversation found the flag still there and closed it a second time.
+t "tick : deux pulsations à la fois n'en font qu'une"
+printf 'idle' >"$JARVIS_RUN/state"
+soul_with "rondes: non"
+sed -i 's/^- silence: .*/- silence: non/' "$SB/SOUL.md"
+printf 'stale-session' >"$JARVIS_STATE/conversation"
+touch -d '-9 hours' "$JARVIS_STATE/conversation"
+touch "$JARVIS_STATE/last-doctor-run"
+FAKE_CLAUDE_REPLY="Nous avons parlé du disque." FAKE_CLAUDE_SLEEP=1 "$JARVIS" tick &
+first=$!
+sleep 0.3
+FAKE_CLAUDE_REPLY="Nous avons parlé du disque." "$JARVIS" tick
+wait "$first"
+assert "une seule rotation au journal" \
+	test "$(grep -c 'conversation résumée' "$JARVIS_MEMORY/journal/$(today).md")" = 1
+assert "un seul appel au cerveau" test "$(grep -c -- '--resume stale-session' "$FAKE_CLAUDE_LOG")" = 1
 
 # ---- a mission's report survives a relative invocation
 #
