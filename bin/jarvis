@@ -560,6 +560,10 @@ after_speaking() {
 # must not take the speakers back when its wav is finally ready.
 do_speak() {
 	local text="$1" follow="${2:-}" wav="$RUN_DIR/reply.wav"
+	# Same rule as jarvis-sentences: espeak reads asterisks and tildes aloud,
+	# and the non-streamed replies (fallback turn, dream summary, `say`)
+	# come from the same brain that writes « **gras** » despite the soul.
+	text=$(printf '%s' "$text" | sed 's/\*\{1,\}//g; s/~~//g')
 	[[ -n $text ]] || return 0
 	mine || return 0
 	if ((QUIET)); then

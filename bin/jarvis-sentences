@@ -49,6 +49,13 @@ TRACE = os.path.join(TRACE_DIR, time.strftime("%Y-%m-%d") + ".log")
 # reaches the voice anyway (the soul forbids it).
 BOUNDARY = re.compile(r'[.!?…:]["»)\]]?[ \t]*\n|[.!?…]["»)\]]?[ \t]+')
 
+# The soul forbids markdown and the brain writes it anyway on anything
+# list-shaped (« 1. **work-cd** », 2026-09-02). espeak swallows most of
+# it — underscores, backticks, bullets, a leading # — but reads every
+# asterisk out loud, « astérisque astérisque work-cd astérisque
+# astérisque », and a ~~ as « tilde tilde ». Those two stop here.
+VOICED_MARKUP = re.compile(r"\*+|~~")
+
 # The CLI reporting on itself rather than answering — a usage limit.
 LIMIT = re.compile(r"(hit|reached) your .*limit|usage limit|rate limit", re.I)
 
@@ -101,7 +108,7 @@ def separate():
 
 
 def emit(text):
-    text = " ".join(text.split())
+    text = " ".join(VOICED_MARKUP.sub("", text).split())
     if text and not quiet:
         print(text, flush=True)
 

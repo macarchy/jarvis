@@ -166,6 +166,18 @@ assert "texte complet espacé" test "$(cat "$out.txt")" = "Je fais ma ronde. Un 
 assert "la trace reste dans le bac à sable" \
 	grep -q '→ Bash: df -h /' "$JARVIS_MEMORY/trace/$(today).log"
 
+# Le cerveau met du gras malgré l'âme (« 1. **work-cd** », 2026-09-02) et
+# piper lit chaque astérisque : « astérisque astérisque work-cd astérisque
+# astérisque ». Les marques markdown s'arrêtent avant la voix.
+t "sentences: le markdown ne se prononce pas"
+out="$SB/reply"
+"$TESTS_DIR/../bin/jarvis-sentences" "$out.txt" <"$FIX/bold.jsonl" >"$SB/spoken"
+assert "phrases sans astérisque ni tilde" \
+	test "$(paste -sd'|' "$SB/spoken")" = "Trois sessions : 1.|work-cd en attente.|Celle-ci, c'est jarvis, pas work."
+printf 'idle' >"$JARVIS_RUN/state"
+"$JARVIS" say "C'est **gras**, non ?"
+assert "say : la voix reçoit le texte nu" grep -q $'\tC\'est gras, non ?$' "$FAKE_PIPER_LOG"
+
 # ---- heartbeat
 t "heartbeat: RAS reste silencieux"
 FAKE_CLAUDE_STREAM="$FIX/ras.jsonl" "$JARVIS" heartbeat
