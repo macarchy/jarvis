@@ -46,6 +46,10 @@ LOG="$STATE_DIR/jarvis.log"
 WAV="$RUN_DIR/utterance.wav"
 STATE_FILE="$RUN_DIR/state"
 CONV_FLAG="$STATE_DIR/conversation"
+# Where the CLI keeps the conversation itself: one transcript per session
+# under the project's directory. Read by `transcript`, `conversations`,
+# cut by `undo`; the override is the test suite's, as everywhere here.
+CLAUDE_PROJECTS="${JARVIS_CLAUDE_PROJECTS:-$HOME/.claude/projects}"
 LAST_ASK="$RUN_DIR/last-ask"
 MEMORY_DIR="${JARVIS_MEMORY:-$JARVIS_DIR/memory}"
 # The soul lives in the repository rather than in a sandbox, because it is
@@ -954,6 +958,62 @@ is_noise() {
 	grep -qiE -f <(printf '%s\n' "$pats") <<<"$1"
 }
 
+# « Oublie ce que je viens de dire » is not a question for the brain: the
+# brain is what would be asked to forget, from inside the very turn to be
+# forgotten. The machine answers it itself, before any exchange opens.
+is_undo() {
+	grep -qiE "^ *(oublie (ce que je viens de dire|ma derni[èe]re (question|demande)|mon dernier message)|efface (mon dernier message|ma derni[èe]re (question|demande))|annule ma derni[èe]re (question|demande)|forget (what i just said|my last (message|question))|delete my last (message|question)) *[.!?]* *$" <<<"$1"
+}
+
+# Drop the last exchange of the live conversation: the transcript is cut
+# before its user turn (a copy is kept first), the journal loses its line,
+# the pair the Control Center shows steps back one exchange. Prints the
+# forgotten ask on stdout. Returns 1, with the reason on stderr, when there
+# is nothing to forget.
+forget_last() {
+	local id out ask prev_ask prev_reply day file
+	id=$(cat "$CONV_FLAG" 2>/dev/null)
+	if [[ -z $id ]]; then
+		echo "aucune conversation en cours" >&2
+		return 1
+	fi
+	mkdir -p "$STATE_DIR/undo"
+	cp -f "$CLAUDE_PROJECTS/$(realpath "$JARVIS_DIR" | tr / -)/$id.jsonl" "$STATE_DIR/undo/$id-$(date +%s).jsonl" 2>/dev/null
+	out=$("$JARVIS_DIR/bin/jarvis-transcript" undo --projects "$CLAUDE_PROJECTS" --dir "$JARVIS_DIR" --session "$id" 2>>"$LOG") || {
+		echo "rien à oublier" >&2
+		return 1
+	}
+	ask=$(printf '%s' "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin)["forgotten"]["ask"])')
+	prev_ask=$(printf '%s' "$out" | python3 -c 'import json,sys; p=json.load(sys.stdin)["previous"]; print(p["ask"] if p else "")')
+	prev_reply=$(printf '%s' "$out" | python3 -c 'import json,sys; p=json.load(sys.stdin)["previous"]; print(p["reply"] if p else "")')
+	# The journal line of that exchange, and only the last one that matches:
+	# the same question asked twice in a day loses one line, not two.
+	day=$(date +%F)
+	file="$MEMORY_DIR/journal/$day.md"
+	if [[ -e $file ]]; then
+		python3 - "$file" "$ask" <<-'PY'
+			import sys
+			path, ask = sys.argv[1], sys.argv[2]
+			lines = open(path, encoding="utf-8").read().split("\n")
+			for i in range(len(lines) - 1, -1, -1):
+			    if "échange : « " + ask + " »" in lines[i]:
+			        del lines[i]
+			        break
+			open(path, "w", encoding="utf-8").write("\n".join(lines))
+		PY
+	fi
+	if [[ -n $prev_ask ]]; then
+		printf '%s' "$prev_ask" >"$LAST_ASK"
+		printf '%s' "$prev_reply" >"$LAST_REPLY"
+	else
+		rm -f "$LAST_ASK" "$LAST_REPLY"
+	fi
+	log "undo: « $ask »"
+	trace "— dernier échange oublié : « $ask » —"
+	mascot heard ""
+	printf '%s\n' "$ask"
+}
+
 do_finish() {
 	local text lang pgid
 	# Claim and leave `listening` FIRST, before the recorder is even
@@ -1018,6 +1078,16 @@ do_finish() {
 		log "noise: $text"
 		transition rest
 		mascot_emote curious
+		return 0
+	fi
+	if is_undo "$text"; then
+		log "undo (voice): $text"
+		transition rest
+		if forget_last >/dev/null; then
+			do_speak "$(fixed "Oublié." "Forgotten.")"
+		else
+			do_speak "$(fixed "Il n'y a rien à oublier." "There is nothing to forget.")"
+		fi
 		return 0
 	fi
 	transition ask || return 1
@@ -1328,6 +1398,42 @@ noise\?)
 	shift
 	is_noise "$*"
 	exit $?
+	;;
+undo\?)
+	shift
+	is_undo "$*"
+	exit $?
+	;;
+undo)
+	# Forget the last exchange (see forget_last). Only from rest: cutting
+	# the transcript under a brain that is writing to it is not forgetting,
+	# it is corrupting. --quiet: no voice (the journal window's button).
+	shift
+	quiet=0
+	[[ ${1:-} == --quiet ]] && quiet=1
+	case "$(state)" in
+	idle | sleeping) ;;
+	*)
+		echo "jarvis : occupé ($(state)), rien n'est oublié" >&2
+		exit 1
+		;;
+	esac
+	if ! ask=$(forget_last); then
+		((quiet)) || { claim; stage_guard; do_speak "$(fixed "Il n'y a rien à oublier." "There is nothing to forget.")"; }
+		exit 1
+	fi
+	notify "Jarvis" "Oublié : « $ask »"
+	((quiet)) || { claim; stage_guard; do_speak "$(fixed "Oublié." "Forgotten.")"; }
+	;;
+transcript)
+	# The conversation as it was lived: the last N exchanges with what he
+	# thought and did between the question and the answer.
+	shift
+	exec "$JARVIS_DIR/bin/jarvis-transcript" show --projects "$CLAUDE_PROJECTS" --dir "$JARVIS_DIR" --current "$(cat "$CONV_FLAG" 2>/dev/null)" "$@"
+	;;
+conversations)
+	shift
+	exec "$JARVIS_DIR/bin/jarvis-transcript" list --projects "$CLAUDE_PROJECTS" --dir "$JARVIS_DIR" --current "$(cat "$CONV_FLAG" 2>/dev/null)" "$@"
 	;;
 dream)
 	# Consolidate memory: a dedicated Claude session reads the failure
