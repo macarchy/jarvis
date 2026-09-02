@@ -187,7 +187,12 @@ t "sentences: le markdown ne se prononce pas"
 out="$SB/reply"
 "$TESTS_DIR/../bin/jarvis-sentences" "$out.txt" <"$FIX/bold.jsonl" >"$SB/spoken"
 assert "phrases sans astérisque ni tilde" \
-	test "$(paste -sd'|' "$SB/spoken")" = "Trois sessions : 1.|work-cd en attente.|Celle-ci, c'est jarvis, pas work."
+	test "$(paste -sd'|' "$SB/spoken")" = "Trois sessions : 1. work-cd en attente.|Celle-ci, c'est jarvis, pas work."
+# Le même échange coupait après « 1. » : « un. », une pause, « work-cd ».
+printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"Deux choses : 1. le disque est plein. 2. Le Wi-Fi est coupé. Il est 10 h. Ça va ?"}]}}' '{"type":"result","subtype":"success","is_error":false}' |
+	"$TESTS_DIR/../bin/jarvis-sentences" "$out.txt" >"$SB/spoken"
+assert "un numéro de liste n'est pas une fin de phrase" \
+	test "$(paste -sd'|' "$SB/spoken")" = "Deux choses : 1. le disque est plein.|2. Le Wi-Fi est coupé.|Il est 10 h.|Ça va ?"
 printf 'idle' >"$JARVIS_RUN/state"
 "$JARVIS" say "C'est **gras**, non ?"
 assert "say : la voix reçoit le texte nu" grep -q $'\tC\'est gras, non ?$' "$FAKE_PIPER_LOG"
