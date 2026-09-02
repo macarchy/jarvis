@@ -13,7 +13,22 @@ would read as a brain that answered nothing.
 
 Usage: jarvis-sentences [--quiet] <reply-file>
   --quiet   no sentence output (dreams, heartbeats, missions: the caller
-            only wants the full text and the trace).
+            only wants the final text and the trace). The file then holds
+            the LAST text block only — the report, not the narration. Every
+            round used to come back as « Je fais ma ronde. Un instant. RAS »,
+            and a report that is not exactly « RAS » is a finding: eight
+            rounds on 2026-09-01 were journaled, notified and worried about
+            for having said, in effect, nothing.
+
+Two sidecars beside the reply file say what the session itself reported:
+  <reply-file>.error    the CLI reporting on itself (a usage limit, a lost
+                        session, a connection error) — never a reply
+  <reply-file>.status   `ok` or `error`, from the result event, so the FSM
+                        can trust a successful answer whatever words it
+                        contains instead of reading « rate limit » in a
+                        digested article as an outage of its own brain
+Both are removed on start: a stale verdict from yesterday's failure must not
+be read as today's.
 
 The black box: every tool call the brain makes (and its outcome) is
 appended to memory/trace/YYYY-MM-DD.log — one compact line per event.
@@ -61,8 +76,17 @@ LIMIT = re.compile(r"(hit|reached) your .*limit|usage limit|rate limit", re.I)
 
 buf = ""
 full = ""
+turn = ""                       # the current (hence, at the end, the last) text block
 got_delta = False
+status = None                   # ok | error, once the result event has said
+errored = False                 # the first report on the session wins
 tool_names = {}                 # tool_use_id -> "Bash: omarchy ..."
+
+for stale in (".error", ".status"):
+    try:
+        os.remove(out_path + stale)
+    except OSError:
+        pass
 
 
 def trace(line):
@@ -73,8 +97,16 @@ def trace(line):
 
 def error(text):
     """A session error is not a reply: it goes to <reply-file>.error for
-    the FSM to classify (quota, lost session…) and never to the voice."""
+    the FSM to classify (quota, lost session…) and never to the voice.
+    The first report wins: the CLI says a usage limit twice, once as a
+    synthetic assistant message and once as the result, and the second
+    can be a bare subtype that says less."""
+    global errored, status
     trace(f"✗ session: {squash(text)}")
+    status = "error"
+    if errored:
+        return
+    errored = True
     with open(out_path + ".error", "w") as f:
         f.write(" ".join(str(text).split()))
 
@@ -127,7 +159,7 @@ def drain(force=False):
 
 
 def consume():
-    global buf, full, got_delta
+    global buf, full, turn, got_delta, status
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -144,11 +176,21 @@ def consume():
                 # ended without trailing whitespace, keep the words apart.
                 if event.get("content_block", {}).get("type") == "text":
                     separate()
+                    turn = ""
+            elif event.get("type") == "content_block_stop":
+                # The block is complete, so its last sentence is too — and
+                # a sentence needs no trailing space to be one. Without this
+                # « Un instant. » said before a tool call sat in the buffer
+                # until the NEXT text block opened, i.e. after the tool had
+                # run: the narration meant to cover the wait arrived once the
+                # wait was over.
+                drain(force=True)
             delta = event.get("delta", {})
             if delta.get("type") == "text_delta":
                 got_delta = True
                 buf += delta.get("text", "")
                 full += delta.get("text", "")
+                turn += delta.get("text", "")
                 drain()
         elif kind == "assistant":
             for block in ev.get("message", {}).get("content", []):
@@ -163,6 +205,7 @@ def consume():
                     separate()
                     buf += block["text"]
                     full += block["text"]
+                    turn = block["text"]
                 elif btype == "tool_use":
                     desc = describe_tool(block)
                     tool_names[block.get("id")] = desc
@@ -184,13 +227,17 @@ def consume():
                     trace(f"{mark} [{desc.split(':')[0]}] {squash(body)}")
         elif kind == "result":
             failed = ev.get("is_error") or ev.get("subtype", "") != "success"
-            if failed and not full:
+            if failed:
+                # Whatever text came before it: a session that ends in error
+                # has reported on itself, and the FSM must hear that even
+                # when a partial answer was already spoken.
                 error(ev.get("result") or ev.get("subtype") or "erreur de session")
-            elif failed:
-                trace(f"✗ session: {squash(ev.get('result') or ev.get('subtype'))}")
-            elif not full:
-                buf = ev.get("result") or ""
-                full = buf
+            else:
+                status = "ok"
+                if not full:
+                    buf = ev.get("result") or ""
+                    full = buf
+                    turn = buf
     drain(force=True)
 
 
@@ -207,8 +254,14 @@ except (BrokenPipeError, KeyboardInterrupt):
     interrupted = True
 finally:
     try:
+        # The voice spoke everything, so the journal gets everything. A
+        # quiet caller wants the report: the last block, or all of it when
+        # the last block is empty (a session that ended on a tool call).
         with open(out_path, "w") as f:
-            f.write(" ".join(full.split()))
+            f.write(" ".join(((turn or full) if quiet else full).split()))
+        if status:
+            with open(out_path + ".status", "w") as f:
+                f.write(status)
         if interrupted:
             with open(out_path + ".interrupted", "w") as f:
                 f.write("1")
