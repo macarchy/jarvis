@@ -24,6 +24,9 @@ if [[ -e $dest ]]; then
 fi
 mv "$staging" "$dest"
 rm -rf "$dest.previous"
+# The daemon only re-discovers plugins on reload; without this an update
+# installed while it is running keeps serving the previous touchbar.py.
+macarchy-dfr reload >/dev/null 2>&1 || true
 
 # The units ship with the repository path baked in; install them against the
 # symlink instead, so a moved checkout only needs this script re-run. Only

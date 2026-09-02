@@ -53,18 +53,26 @@ def serve():
                 pass
 
 
+def wait_for(n):
+    """Attend que le serveur ait reçu et ajouté au moins n lignes, sans dormir
+    plus que nécessaire (une seconde de marge en cas de panne)."""
+    deadline = time.monotonic() + 1
+    while len(seen) < n and time.monotonic() < deadline:
+        time.sleep(0.005)
+
+
 thread = threading.Thread(target=serve, daemon=True)
 thread.start()
 clock = [0.0]
 s = wl.LevelSender(path=path, now=lambda: clock[0])
 check("premier envoi", s.send(0.5), True)
-time.sleep(0.01)  # let server receive and append to seen
+wait_for(1)
 check("la ligne du protocole", seen[-1], "macarchy.jarvis level 0.50")
 clock[0] = 0.05
 check("10 Hz : le second est retenu", s.send(0.6), False)
 clock[0] = 0.11
 check("après 100 ms il passe", s.send(0.6), True)
-time.sleep(0.01)  # let server receive and append to seen
+wait_for(2)
 check("deux lignes reçues", len(seen), 2)
 srv.shutdown(socket.SHUT_RDWR)      # wakes the blocked accept() with an error
 srv.close()

@@ -276,7 +276,7 @@ class Module:
         else:
             w["text"] = Label(api, text=self.writer.advance(0), stretch=1, align="left", _role="text")
         if st in ("transcribing", "thinking"):
-            w["dots"] = Label(api, text="·", width=70, color=theme.FG_DIM, _role="dots")
+            w["dots"] = Label(api, text="·", width=70, size=34, color=theme.FG_DIM, _role="dots")
         if st == "listening":
             close = Button(api, icon="close", on_tap=lambda: api.run_detached("omarchy-jarvis cancel"))
         elif st in SCENE_STATES:
