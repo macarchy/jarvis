@@ -203,7 +203,7 @@ class Module:
 
     def on_abort(self, *_):
         self.cancel_until = self.api.now() + CANCEL_SECONDS
-        self.api.hide_scene("jarvis")
+        self._dismiss()
         self._sync_buttons()
 
     def on_heard(self, *words):
@@ -244,6 +244,9 @@ class Module:
             self.scene_widgets = {}
 
     def _dismiss(self):
+        if self._linger:
+            self._linger.cancel()
+        self._linger = None
         self.scene_widgets = {}
         self.api.hide_scene("jarvis")
 

@@ -346,3 +346,34 @@ def test_idle_from_sleeping_shows_nothing(sprites):
     rig.ipc("state", "sleeping")
     rig.ipc("state", "idle")
     assert rig.last_show() is None
+
+
+def test_abort_after_idle_forgets_the_scene_and_cancels_the_linger(sprites):
+    rig = Rig()
+    rig.ipc("state", "listening"); rig.ipc("state", "speaking"); rig.ipc("reply", "Voilà.")
+    rig.ipc("state", "idle")
+    assert rig.mod.scene_widgets and rig.mod._linger is not None
+    rig.ipc("abort")
+    assert rig.mod.scene_widgets == {}
+    assert rig.mod._linger is None
+    assert ("hide", "jarvis") in rig.hooks.calls
+
+
+def test_the_linger_timer_forgets_the_scene_when_it_fires(sprites):
+    rig = Rig()
+    rig.ipc("state", "listening"); rig.ipc("state", "speaking"); rig.ipc("reply", "Voilà.")
+    rig.ipc("state", "idle")
+    assert rig.mod._linger is not None
+    rig.advance(4.1)
+    rig.loop.step(0)                                          # runs the due timer on the fake clock
+    assert rig.mod.scene_widgets == {}
+    assert rig.mod._linger is None
+
+
+def test_tap_dismiss_cancels_the_linger(sprites):
+    rig = Rig()
+    rig.ipc("state", "listening"); rig.ipc("state", "speaking"); rig.ipc("reply", "Voilà.")
+    rig.ipc("state", "idle")
+    lay = rig.scene()
+    _text(lay).on_tap(0, 0)
+    assert rig.mod._linger is None
