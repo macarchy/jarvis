@@ -40,6 +40,7 @@ BIN_DIR = os.path.dirname(os.path.realpath(__file__))
 JARVIS_DIR = os.path.dirname(BIN_DIR)
 sys.path.insert(0, BIN_DIR)
 import jarvis_wake_fsm as fsm  # noqa: E402 — the path above is what finds it
+from jarvis_wake_level import LevelSender, level_of  # noqa: E402
 
 # The French-accent verifier (wake/train-verifier) and its shim.
 sys.path.insert(0, os.path.join(JARVIS_DIR, "wake"))
@@ -139,6 +140,7 @@ def main():
 
     st = fsm.new_state(WAKE_THRESHOLD)
     floor = 60.0                # RMS in int16 units, adapts continuously
+    meter = LevelSender()
 
     while True:
         try:
@@ -171,6 +173,8 @@ def main():
                 action = ""
                 for i, frame in enumerate(frames):
                     rms = float(np.sqrt(np.mean(frame.astype(np.float32) ** 2)))
+                    if mode in PRECISE_STATES:
+                        meter.send(level_of(rms, floor))       # the bar's meter; never raises
                     at = now - (len(frames) - 1 - i) * FRAME_S
                     last = i == len(frames) - 1
                     action, floor = fsm.decide(mode, rms, floor,

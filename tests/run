@@ -971,6 +971,7 @@ assert "plus rien en anglais" bash -c \
 
 t "les oreilles : la table de décision du daemon de réveil"
 assert "aucun cas raté" python3 "$TESTS_DIR/test_wake_fsm.py"
+assert "aucun cas raté sur le niveau" python3 "$TESTS_DIR/test_wake_level.py"
 
 # ---- la Touch Bar
 t "touch bar: le module, chargé par le moteur de macarchy-dfr"
