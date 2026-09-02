@@ -129,6 +129,7 @@ Item {
   property int failures: 0
   property int lessons: 0
   property int suggestionCount: 0
+  property int routines: 0
   // [{ n, date, text }] — the dream's proposals awaiting a decision.
   property var suggestions: []
 
@@ -182,8 +183,23 @@ Item {
   }
 
   function autoSummary() {
-    if (!rondes && !reves) return "Tout est coupé"
-    return silence === "non" ? "Sans silence" : "Silence " + silenceText()
+    var s = (!rondes && !reves) ? "Tout est coupé"
+      : silence === "non" ? "Sans silence" : "Silence " + silenceText()
+    if (routines > 0) s += " · " + routines + " routine" + (routines > 1 ? "s" : "")
+    return s
+  }
+
+  // The Journal window lives with the mascot (Service.qml): the same paper
+  // as his bubble, under the bar, top right.
+  function openJournal(tab) {
+    Quickshell.execDetached(["omarchy-shell", "macarchy.jarvis", "journalTab", tab])
+  }
+
+  // Forget the last exchange. `undo` says no on its own when he is busy or
+  // there is nothing left; the 900 ms recheck shows the outcome either way.
+  function undo() {
+    Quickshell.execDetached(["omarchy-jarvis", "undo", "--quiet"])
+    recheck.restart()
   }
 
   // ------------------------------------------------------------- actions
@@ -384,6 +400,7 @@ Item {
         mod.failures = num("failures")
         mod.lessons = num("lessons")
         mod.suggestionCount = num("suggestions")
+        mod.routines = num("routines")
         // A `var` assignment always signals, and the Repeater would rebuild
         // every card on each poll — only swap when the inbox actually changed.
         if (JSON.stringify(inbox) !== JSON.stringify(mod.suggestions))
@@ -466,6 +483,35 @@ Item {
             wrapMode: Text.WordWrap
             maximumLineCount: 4
             elide: Text.ElideRight
+          }
+
+          // Under the last exchange: read the whole conversation, or take
+          // this one back.
+          RowLayout {
+            Layout.fillWidth: true
+            Layout.topMargin: Style.space(4)
+            visible: mod.lastAsk.length > 0
+            spacing: Style.space(6)
+
+            Button {
+              text: "Journal"
+              bordered: true
+              fontSize: Style.font.caption
+              foreground: Color.popups.text
+              tooltipText: "La conversation, et ce qui s'est passé dans sa tête"
+              onClicked: mod.openJournal("today")
+            }
+
+            Button {
+              text: "Oublier"
+              bordered: true
+              fontSize: Style.font.caption
+              foreground: Color.popups.text
+              tooltipText: "Effacer le dernier échange de sa mémoire"
+              onClicked: mod.undo()
+            }
+
+            Item { Layout.fillWidth: true }
           }
 
           // The panel is WlrKeyboardFocus.OnDemand while open, so a click in
@@ -707,6 +753,54 @@ Item {
           checked: mod.silence !== "non"
           foreground: Color.popups.text
           onClicked: mod.toggleSilence()
+        }
+
+        // The routines are edited in the Journal, on his paper: this row
+        // only says how many are armed and takes you there.
+        Rectangle {
+          Layout.fillWidth: true
+          implicitHeight: Style.space(38)
+          radius: Math.min(Style.cornerRadius, Style.space(10))
+          color: routinesHover.hovered ? Style.hoverFill : Style.normalFill
+
+          HoverHandler { id: routinesHover }
+
+          MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: mod.openJournal("routines")
+          }
+
+          RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: Style.space(10)
+            anchors.rightMargin: Style.space(10)
+            spacing: Style.space(8)
+
+            Text {
+              text: "Routines"
+              color: Color.popups.text
+              font.family: Style.font.family
+              font.pixelSize: Style.font.bodySmall
+              font.bold: true
+            }
+
+            Item { Layout.fillWidth: true }
+
+            Text {
+              text: mod.routines === 0 ? "aucune" : mod.routines + " active" + (mod.routines > 1 ? "s" : "")
+              color: Util.alpha(Color.popups.text, 0.55)
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+            }
+
+            Text {
+              text: "󰅂"
+              color: Util.alpha(Color.popups.text, 0.55)
+              font.family: Style.font.family
+              font.pixelSize: Style.font.iconSmall
+            }
+          }
         }
       }
 

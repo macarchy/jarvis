@@ -438,6 +438,16 @@ Item {
       service.promptOpen = !service.promptOpen
     }
 
+    // The Journal: what he remembers, on paper (today's exchanges with what
+    // went on in his head, past conversations, routines). `journal`
+    // toggles, `journalTab conversations|routines|today` opens on a tab.
+    function journal(): void { service.journalOpen = !service.journalOpen }
+    function journalClose(): void { service.journalOpen = false }
+    function journalTab(name: string): void {
+      journalPage.setTab(String(name))
+      service.journalOpen = true
+    }
+
     // Re-read the sprite sheets after `omarchy-jarvis look` regenerated them.
     function reload(): void {
       service.spriteBust = true
@@ -512,6 +522,54 @@ Item {
     }
 
     onVisibleChanged: if (visible) Qt.callLater(function() { promptField.forceActiveFocus() })
+  }
+
+  // ------------------------------------------------------ the journal
+  //
+  // A sheet of his paper under the bar, top right: today's conversation
+  // with what went on in his head, the past ones, and his routines. It
+  // takes the keyboard only when clicked into (OnDemand), so an open
+  // journal never steals a keystroke from the window you are working in;
+  // Escape, once it has the keyboard, puts it away.
+  property bool journalOpen: false
+
+  PanelWindow {
+    id: journalWin
+    visible: service.journalOpen
+    screen: Quickshell.screens.length > 0 ? Quickshell.screens[0] : null
+    color: "transparent"
+
+    WlrLayershell.namespace: "macarchy-jarvis-journal"
+    WlrLayershell.layer: WlrLayer.Top
+    WlrLayershell.keyboardFocus: service.journalOpen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    // Respect the bar's reserved edge (so "top" means under it), reserve
+    // nothing ourselves.
+    exclusionMode: ExclusionMode.Normal
+    exclusiveZone: 0
+
+    anchors { top: true; right: true }
+    margins { top: Style.space(8); right: Style.space(8) }
+    implicitWidth: Style.space(520)
+    implicitHeight: Math.min(Style.space(700), (screen ? screen.height : 900) - Style.space(60))
+
+    Rectangle {
+      anchors.fill: parent
+      color: service.bubblePaper
+      border.width: 4
+      border.color: service.bubbleInk
+
+      Journal {
+        id: journalPage
+        anchors.fill: parent
+        anchors.margins: 4
+        ink: service.bubbleInk
+        paper: service.bubblePaper
+        open: service.journalOpen
+        onCloseRequested: service.journalOpen = false
+      }
+    }
+
+    onVisibleChanged: if (visible) Qt.callLater(function() { journalPage.forceActiveFocus() })
   }
 
   PanelWindow {
