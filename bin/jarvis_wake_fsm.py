@@ -30,6 +30,7 @@ FOLLOWUP_WINDOW = 6.0           # s to start a rejoinder after a reply
 SPEECH_FACTOR = 5.0             # speech = noise floor × this
 QUIET_FACTOR = 2.5              # silence = below noise floor × this
 WAKE_COOLDOWN = 3.0             # s between wake triggers
+PRESS_RETRY = 0.5               # s before a press that changed nothing is retried
 FLOOR_DECAY = 0.995             # how slowly the room's noise floor moves
 
 # Where a wake word summons him.
@@ -55,7 +56,8 @@ def new_state(threshold):
         "speech_heard": False,
         "quiet_since": None,
         "followup_since": None,
-        "followup_done": False,
+        "followup_pressed": None,   # when this window's press was fired
+        "followup_settled": False,
         "last_wake": 0.0,
     }
 
@@ -70,7 +72,6 @@ def decide(mode, rms, floor, score, now, st):
     """One frame. Returns (action, floor)."""
     if mode == "listening":
         st["followup_since"] = None
-        st["followup_done"] = False
         if st["listen_since"] is None:
             st["listen_since"] = now
             st["speech_heard"] = False
@@ -102,24 +103,30 @@ def decide(mode, rms, floor, score, now, st):
         # wake word. A speech onset presses (the endpointing above takes
         # over); silence settles him.
         #
-        # A window is consumed once, and `followup_done` is what says so. The
-        # state word takes a fork and a shell start-up to change — eighty
-        # milliseconds, a whole frame — and without the flag every frame of
-        # the sentence being spoken fired another press into that gap. The
-        # dead time on `press` swallowed them, so it never showed; it was
-        # still a handful of processes per rejoinder, and before that dead
-        # time existed it was a second press against an 80 ms recording.
-        if st["followup_done"]:
-            return "", floor
+        # A press is fired once, not once per frame: the state word takes a
+        # fork and a shell start-up to change — eighty milliseconds, a whole
+        # frame — and every frame of the sentence being spoken used to fire
+        # another press into that gap. But a press can also change NOTHING:
+        # the machine refuses one that lands inside its own dead time, and a
+        # window this one fired into and then stopped watching stayed open
+        # — no retry, no settle, a fish perked up and deaf until the
+        # watchdog's next minute. So the window keeps its clock through the
+        # press: still `followup` half a second later means the press was
+        # lost, and it is fired again; still `followup` at the six-second
+        # mark means the window closes as any unused one does.
         if st["followup_since"] is None:
             st["followup_since"] = now
-        if rms > floor * SPEECH_FACTOR:
-            st["followup_since"] = None
-            st["followup_done"] = True
+            st["followup_pressed"] = None
+            st["followup_settled"] = False
+        if st["followup_settled"]:
+            return "", floor
+        if rms > floor * SPEECH_FACTOR and (
+                st["followup_pressed"] is None
+                or now - st["followup_pressed"] >= PRESS_RETRY):
+            st["followup_pressed"] = now
             return "press", floor
         if now - st["followup_since"] >= FOLLOWUP_WINDOW:
-            st["followup_since"] = None
-            st["followup_done"] = True
+            st["followup_settled"] = True
             return "settle", floor
         return "", floor
 
@@ -127,7 +134,6 @@ def decide(mode, rms, floor, score, now, st):
     # for the wake word wherever it means something.
     st["listen_since"] = None
     st["followup_since"] = None
-    st["followup_done"] = False
     floor = FLOOR_DECAY * floor + (1.0 - FLOOR_DECAY) * max(rms, 1.0)
     if score is None:
         return "", floor
