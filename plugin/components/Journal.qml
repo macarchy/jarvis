@@ -228,6 +228,17 @@ FocusScope {
     if (m[1] + "-" + m[2] + "-" + m[3] === todayStamp()) return m[4]
     return m[3] + "/" + m[2] + " " + m[4]
   }
+  // The gutter is five characters wide: the hour today, the day otherwise.
+  function stampText(s) {
+    var m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}:\d{2})$/.exec(String(s || ""))
+    if (!m) return String(s || "")
+    if (m[1] + "-" + m[2] + "-" + m[3] === todayStamp()) return m[4]
+    return m[3] + "/" + m[2]
+  }
+  function timeOf(s) {
+    var m = /(\d{2}:\d{2})$/.exec(String(s || ""))
+    return m ? m[1] : ""
+  }
 
   function nextText(epoch) {
     var n = Number(epoch)
@@ -246,6 +257,16 @@ FocusScope {
   })
 
   // ---------------------------------------------------------------- pieces
+  //
+  // The page is a comic strip. You are the narrator, off-panel, so what you
+  // said sits in a caption box — the square yellow récitatif of the bande
+  // dessinée. He answers in his own philactère, tail toward the bottom right
+  // where he lives, and what went on in his head is a thought bubble, dashed.
+  readonly property color caption: "#F3DE8A"
+  readonly property int unit: 4
+  readonly property int inset: 12          // border cell + two units of air
+  readonly property int gutter: Style.space(46)
+
   component PaperButton: Rectangle {
     id: btn
     property string text: ""
@@ -255,7 +276,7 @@ FocusScope {
 
     implicitWidth: btnLabel.implicitWidth + Style.space(btn.small ? 12 : 16)
     implicitHeight: btnLabel.implicitHeight + Style.space(btn.small ? 6 : 8)
-    color: btn.active ? root.ink : (btnHover.hovered ? root.wash : "transparent")
+    color: btn.active ? root.ink : "transparent"
     border.width: 2
     border.color: root.ink
 
@@ -268,8 +289,6 @@ FocusScope {
       font.pixelSize: btn.small ? Style.font.caption : Style.font.bodySmall
       font.bold: btn.active
     }
-
-    HoverHandler { id: btnHover }
 
     MouseArea {
       anchors.fill: parent
@@ -308,18 +327,36 @@ FocusScope {
     Column {
       id: sheetColumn
       width: sheet.width
-      spacing: Style.space(10)
+      spacing: Style.space(14)
     }
   }
 
+  // An empty page invites; it does not sulk.
   component Empty: Text {
-    width: parent ? parent.width : implicitWidth
-    topPadding: Style.space(40)
-    horizontalAlignment: Text.AlignHCenter
+    width: parent ? parent.width - root.gutter : implicitWidth
+    x: root.gutter
+    topPadding: Style.space(36)
     color: root.dim
     font.family: Style.font.family
     font.pixelSize: Style.font.bodySmall
+    lineHeight: 1.25
     wrapMode: Text.WordWrap
+  }
+
+  // The gutter: a time at the left of every panel, in pencil.
+  component Stamp: Text {
+    width: root.gutter
+    color: root.dim
+    font.family: Style.font.family
+    font.pixelSize: Style.font.caption
+    topPadding: Style.space(8)
+  }
+
+  // A hairline between panels, in pencil.
+  component Rule: Rectangle {
+    width: parent ? parent.width : 0
+    height: 2
+    color: root.faint
   }
 
   // One conversation, exchange by exchange. `canUndo` puts « Oublier » on the
@@ -329,10 +366,11 @@ FocusScope {
     property var exchanges: []
     property bool loaded: false
     property bool canUndo: false
+    property string emptyText: "Aucune conversation."
 
     Empty {
       visible: view.loaded && view.exchanges.length === 0
-      text: "Aucune conversation"
+      text: view.emptyText
     }
 
     Repeater {
@@ -346,73 +384,99 @@ FocusScope {
         readonly property var tools: card.modelData.tools || []
         readonly property int inside: card.thoughts.length + card.tools.length
         readonly property bool last: card.index === view.exchanges.length - 1
+        readonly property string reply: String(card.modelData.reply || "")
         property bool unfolded: false
 
         width: view.width
-        spacing: Style.space(4)
+        spacing: Style.space(8)
 
-        Rectangle {
-          visible: card.index > 0
-          width: parent.width
-          height: 2
-          color: root.faint
-        }
+        Rule { visible: card.index > 0 }
 
+        // The caption: your words, off-panel.
         Row {
           width: parent.width
-          spacing: Style.space(8)
+          spacing: 0
 
-          Text {
-            id: at
-            text: String(card.modelData.at || "")
-            color: root.dim
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            font.bold: true
-            topPadding: Style.space(2)
+          Stamp { text: String(card.modelData.at || "") }
+
+          Rectangle {
+            width: parent.width - root.gutter
+            height: askText.implicitHeight + Style.space(14)
+            color: root.caption
+            border.width: 2
+            border.color: root.ink
+
+            Text {
+              id: askText
+              x: Style.space(9)
+              y: Style.space(7)
+              width: parent.width - Style.space(18)
+              text: String(card.modelData.ask || "")
+              color: root.ink
+              font.family: Style.font.family
+              font.pixelSize: Style.font.bodySmall
+              lineHeight: 1.2
+              wrapMode: Text.WordWrap
+              maximumLineCount: 6
+              elide: Text.ElideRight
+            }
+          }
+        }
+
+        // His philactère. Arming « Oublier » severs its tail — the shape he
+        // already takes when a sentence of his is cut short.
+        Item {
+          x: root.gutter
+          width: parent.width - root.gutter
+          visible: card.reply.length > 0
+          height: replyText.implicitHeight + 2 * root.inset + bubble.tailPx
+
+          PixelBubble {
+            id: bubble
+            anchors.fill: parent
+            px: root.unit
+            paper: root.paper
+            ink: root.ink
+            tailUnits: 4
+            tailX: Math.max(4, Math.round(width / root.unit) - 8)
+            kind: view.canUndo && card.last && root.undoArmed ? "cut" : "speech"
           }
 
           Text {
-            width: parent.width - at.width - parent.spacing
-            text: "« " + String(card.modelData.ask || "") + " »"
+            id: replyText
+            x: root.inset
+            y: root.inset
+            width: parent.width - 2 * root.inset
+            text: card.reply
+            // The brain writes markdown despite the soul (bold, lists): the
+            // voice strips it, the page renders it.
+            textFormat: Text.MarkdownText
             color: root.ink
             font.family: Style.font.family
             font.pixelSize: Style.font.bodySmall
-            font.italic: true
+            lineHeight: 1.2
             wrapMode: Text.WordWrap
-            maximumLineCount: 6
-            elide: Text.ElideRight
           }
         }
 
-        Text {
-          width: parent.width
-          visible: text.length > 0
-          text: String(card.modelData.reply || "")
-          // The brain writes markdown despite the soul (bold, lists): the
-          // voice strips it, the page renders it.
-          textFormat: Text.MarkdownText
-          color: root.ink
-          font.family: Style.font.family
-          font.pixelSize: Style.font.bodySmall
-          wrapMode: Text.WordWrap
-        }
-
         Row {
-          width: parent.width
+          x: root.gutter
+          width: parent.width - root.gutter
           spacing: Style.space(8)
 
           // The fold: what went on in his head, thoughts first, then the
           // tools in the order they ran.
           Text {
             visible: card.inside > 0
-            text: (card.unfolded ? "▾" : "▸") + " dans sa tête · " + card.inside
+            text: (card.unfolded ? "∘ ∘ ∘ " : "∘ ∘ ") + "dans sa tête, " + card.inside
             color: root.dim
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
+            topPadding: Style.space(4)
 
             MouseArea {
               anchors.fill: parent
+              anchors.margins: -Style.space(4)
               cursorShape: Qt.PointingHandCursor
               onClicked: card.unfolded = !card.unfolded
             }
@@ -429,68 +493,87 @@ FocusScope {
           }
         }
 
-        Column {
+        // The thought bubble, dashed like the one he dreams in.
+        Item {
+          x: root.gutter
+          width: parent.width - root.gutter
           visible: card.unfolded
-          width: parent.width
-          leftPadding: Style.space(12)
-          spacing: Style.space(3)
+          height: insideCol.implicitHeight + 2 * root.inset
 
-          Repeater {
-            model: card.unfolded ? card.thoughts : []
-            delegate: Text {
-              id: thought
-              required property var modelData
-              width: card.width - Style.space(12)
-              text: "✎ " + String(thought.modelData)
-              color: root.dim
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-              font.italic: true
-              wrapMode: Text.WordWrap
-            }
+          PixelBubble {
+            anchors.fill: parent
+            px: root.unit
+            paper: root.paper
+            ink: root.ink
+            tailUnits: 0
+            kind: "thought"
           }
 
-          Repeater {
-            model: card.unfolded ? card.tools : []
-            delegate: Column {
-              id: tool
-              required property var modelData
-              width: card.width - Style.space(12)
-              spacing: Style.space(1)
+          Column {
+            id: insideCol
+            x: root.inset
+            y: root.inset
+            width: parent.width - 2 * root.inset
+            spacing: Style.space(5)
 
-              Text {
-                width: parent.width
-                text: "→ " + String(tool.modelData.call || "")
-                color: root.ink
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-                wrapMode: Text.WrapAnywhere
-                maximumLineCount: 4
-                elide: Text.ElideRight
-              }
-
-              Text {
-                width: parent.width
-                visible: text.length > 2
-                text: "← " + String(tool.modelData.result || "")
+            Repeater {
+              model: card.unfolded ? card.thoughts : []
+              delegate: Text {
+                id: thought
+                required property var modelData
+                width: insideCol.width
+                text: String(thought.modelData)
                 color: root.dim
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
-                wrapMode: Text.WrapAnywhere
-                maximumLineCount: 3
-                elide: Text.ElideRight
+                font.italic: true
+                lineHeight: 1.2
+                wrapMode: Text.WordWrap
               }
+            }
 
-              Text {
-                width: parent.width
-                visible: text.length > 2
-                text: "✗ " + String(tool.modelData.error || "")
-                color: root.ink
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-                wrapMode: Text.WrapAnywhere
-                maximumLineCount: 3
-                elide: Text.ElideRight
+            Repeater {
+              model: card.unfolded ? card.tools : []
+              delegate: Column {
+                id: tool
+                required property var modelData
+                width: insideCol.width
+                spacing: Style.space(1)
+
+                Text {
+                  width: parent.width
+                  text: "→ " + String(tool.modelData.call || "")
+                  color: root.ink
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.caption
+                  wrapMode: Text.WrapAnywhere
+                  maximumLineCount: 4
+                  elide: Text.ElideRight
+                }
+
+                Text {
+                  width: parent.width
+                  visible: text.length > 2
+                  text: "← " + String(tool.modelData.result || "")
+                  color: root.dim
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.caption
+                  wrapMode: Text.WrapAnywhere
+                  maximumLineCount: 3
+                  elide: Text.ElideRight
+                }
+
+                Text {
+                  width: parent.width
+                  visible: text.length > 2
+                  text: "✗ " + String(tool.modelData.error || "")
+                  color: root.ink
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.caption
+                  wrapMode: Text.WrapAnywhere
+                  maximumLineCount: 3
+                  elide: Text.ElideRight
+                }
               }
             }
           }
@@ -506,32 +589,78 @@ FocusScope {
   ColumnLayout {
     anchors.fill: parent
     anchors.margins: root.pad
-    spacing: Style.space(10)
+    anchors.topMargin: Style.space(10)
+    spacing: Style.space(12)
 
-    RowLayout {
+    // Notebook tabs: the open one is part of the page, the others sit a
+    // step lower behind the rule.
+    Item {
       Layout.fillWidth: true
-      spacing: Style.space(6)
+      implicitHeight: Style.space(34)
 
-      Repeater {
-        model: root.tabs
-        delegate: PaperButton {
-          id: chip
-          required property var modelData
-          text: chip.modelData.label
-          active: root.tab === chip.modelData.value
-          onClicked: root.tab = chip.modelData.value
+      Rectangle {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: 2
+        color: root.ink
+      }
+
+      Row {
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        spacing: Style.space(4)
+
+        Repeater {
+          model: root.tabs
+          delegate: Rectangle {
+            id: tabItem
+            required property var modelData
+            readonly property bool active: root.tab === tabItem.modelData.value
+            width: tabLabel.implicitWidth + Style.space(20)
+            height: tabItem.active ? Style.space(34) : Style.space(30)
+            color: tabItem.active ? root.paper : root.wash
+            border.width: 2
+            border.color: tabItem.active ? root.ink : root.faint
+
+            // The open tab has no floor: it runs into the page.
+            Rectangle {
+              visible: tabItem.active
+              x: 2
+              y: parent.height - 2
+              width: parent.width - 4
+              height: 2
+              color: root.paper
+            }
+
+            Text {
+              id: tabLabel
+              anchors.centerIn: parent
+              anchors.verticalCenterOffset: tabItem.active ? 0 : 1
+              text: tabItem.modelData.label
+              color: tabItem.active ? root.ink : root.dim
+              font.family: Style.font.family
+              font.pixelSize: Style.font.bodySmall
+              font.bold: tabItem.active
+            }
+
+            MouseArea {
+              anchors.fill: parent
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.tab = tabItem.modelData.value
+            }
+          }
         }
       }
 
-      Item { Layout.fillWidth: true }
-
       Text {
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Style.space(6)
         text: "✕"
-        color: closeHover.hovered ? root.ink : root.dim
+        color: root.dim
         font.family: Style.font.family
         font.pixelSize: Style.font.title
-
-        HoverHandler { id: closeHover }
 
         MouseArea {
           anchors.fill: parent
@@ -544,6 +673,7 @@ FocusScope {
 
     Text {
       Layout.fillWidth: true
+      Layout.leftMargin: root.gutter
       visible: root.notice.length > 0
       text: root.notice
       color: root.ink
@@ -561,6 +691,7 @@ FocusScope {
       exchanges: root.today
       loaded: root.todayLoaded
       canUndo: true
+      emptyText: "Rien encore aujourd'hui. Dis-lui quelque chose, ou écris-lui depuis le Control Center."
     }
 
     // ------------------------------------------------------- Conversations
@@ -572,6 +703,7 @@ FocusScope {
 
       RowLayout {
         Layout.fillWidth: true
+        Layout.leftMargin: root.gutter
         spacing: Style.space(8)
 
         Text {
@@ -587,7 +719,7 @@ FocusScope {
         // they would bury the real ones.
         PaperButton {
           small: true
-          text: "voir aussi les tâches"
+          text: root.showTasks ? "masquer les tâches" : "voir aussi les tâches"
           active: root.showTasks
           onClicked: root.showTasks = !root.showTasks
         }
@@ -599,63 +731,84 @@ FocusScope {
 
         Empty {
           visible: root.convLoaded && root.shownConversations.length === 0
-          text: "Aucune conversation"
+          text: "Aucune conversation gardée."
         }
 
         Repeater {
           model: root.shownConversations
 
-          delegate: Rectangle {
+          delegate: Column {
             id: row
             required property var modelData
+            required property int index
+            readonly property bool current: row.modelData.current === true
             width: parent.width
-            implicitHeight: rowCol.implicitHeight + Style.space(12)
-            color: rowHover.hovered ? root.wash : "transparent"
-            border.width: 2
-            border.color: row.modelData.current ? root.ink : root.faint
+            spacing: Style.space(8)
 
-            HoverHandler { id: rowHover }
+            Rule { visible: row.index > 0 }
 
-            MouseArea {
-              anchors.fill: parent
-              cursorShape: Qt.PointingHandCursor
-              onClicked: {
-                root.sessionMeta = row.modelData
-                root.session = String(row.modelData.id)
-              }
-            }
+            Row {
+              width: parent.width
+              spacing: 0
 
-            Column {
-              id: rowCol
-              anchors.left: parent.left
-              anchors.right: parent.right
-              anchors.top: parent.top
-              anchors.margins: Style.space(6)
-              anchors.leftMargin: Style.space(8)
-              spacing: Style.space(2)
-
-              Text {
-                width: parent.width
-                text: (row.modelData.current ? "● " : "")
-                  + root.whenText(row.modelData.started)
-                  + " · " + root.plural(Number(row.modelData.exchanges || 0), "échange")
-                  + (row.modelData.kind === "tâche" ? " · tâche" : "")
-                color: root.dim
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-                font.bold: row.modelData.current === true
-                elide: Text.ElideRight
+              Stamp {
+                text: root.stampText(row.modelData.started)
+                color: row.current ? root.ink : root.dim
+                font.bold: row.current
               }
 
-              Text {
-                width: parent.width
-                text: String(row.modelData.first || "")
-                color: root.ink
-                font.family: Style.font.family
-                font.pixelSize: Style.font.bodySmall
-                wrapMode: Text.WordWrap
-                maximumLineCount: 2
-                elide: Text.ElideRight
+              Item {
+                width: parent.width - root.gutter
+                height: rowCol.implicitHeight + Style.space(8)
+
+                // The live conversation carries an ink margin, like a
+                // bookmark.
+                Rectangle {
+                  visible: row.current
+                  x: -Style.space(10)
+                  width: 4
+                  height: parent.height
+                  color: root.ink
+                }
+
+                Column {
+                  id: rowCol
+                  y: Style.space(4)
+                  width: parent.width
+                  spacing: Style.space(3)
+
+                  Text {
+                    width: parent.width
+                    text: String(row.modelData.first || "")
+                    color: root.ink
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.bodySmall
+                    lineHeight: 1.2
+                    wrapMode: Text.WordWrap
+                    maximumLineCount: 2
+                    elide: Text.ElideRight
+                  }
+
+                  Text {
+                    width: parent.width
+                    text: root.plural(Number(row.modelData.exchanges || 0), "échange")
+                      + (row.current ? ", en cours" : ", à " + root.timeOf(row.modelData.started))
+                      + (row.modelData.kind === "tâche" ? ", une tâche" : "")
+                    color: root.dim
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.caption
+                    elide: Text.ElideRight
+                  }
+                }
+
+                MouseArea {
+                  anchors.fill: parent
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: {
+                    root.sessionMeta = row.modelData
+                    root.session = String(row.modelData.id)
+                  }
+                }
               }
             }
           }
@@ -663,8 +816,8 @@ FocusScope {
       }
     }
 
-    // A past conversation, opened from the list: the same rendering, with
-    // the way back on top and no « Oublier ».
+    // A past conversation, opened from the list: the same strip, the way
+    // back on top and no « Oublier ».
     ColumnLayout {
       visible: root.tab === "conversations" && root.session.length > 0
       Layout.fillWidth: true
@@ -673,19 +826,19 @@ FocusScope {
 
       RowLayout {
         Layout.fillWidth: true
-        spacing: Style.space(8)
+        spacing: Style.space(10)
 
         PaperButton {
           small: true
-          text: "← Conversations"
+          text: "Retour"
           onClicked: root.session = ""
         }
 
         Text {
           Layout.fillWidth: true
           text: root.sessionMeta
-            ? root.whenText(root.sessionMeta.started) + " → " + root.whenText(root.sessionMeta.ended)
-              + " · " + root.plural(Number(root.sessionMeta.exchanges || 0), "échange")
+            ? "Du " + root.whenText(root.sessionMeta.started) + " au " + root.whenText(root.sessionMeta.ended)
+              + ", " + root.plural(Number(root.sessionMeta.exchanges || 0), "échange")
             : ""
           color: root.dim
           font.family: Style.font.family
@@ -700,6 +853,7 @@ FocusScope {
         exchanges: root.sessionExchanges
         loaded: root.sessionLoaded
         canUndo: false
+        emptyText: "Cette conversation est vide."
       }
     }
 
@@ -708,7 +862,7 @@ FocusScope {
       visible: root.tab === "routines"
       Layout.fillWidth: true
       Layout.fillHeight: true
-      spacing: Style.space(8)
+      spacing: Style.space(10)
 
       Sheet {
         Layout.fillWidth: true
@@ -716,111 +870,113 @@ FocusScope {
 
         Empty {
           visible: root.routinesLoaded && root.routines.length === 0
-          text: "Aucune routine"
+          text: "Aucune routine. Écris-en une ci-dessous, ou dis-lui « rappelle-moi à quinze heures de… »."
         }
 
         Repeater {
           model: root.routines
 
-          delegate: Rectangle {
+          delegate: Column {
             id: rt
             required property var modelData
+            required property int index
             readonly property bool on: rt.modelData.on === true
             width: parent.width
-            implicitHeight: rtRow.implicitHeight + Style.space(12)
-            color: "transparent"
-            border.width: 2
-            border.color: rt.on ? root.ink : root.faint
+            spacing: Style.space(8)
 
-            RowLayout {
-              id: rtRow
-              anchors.left: parent.left
-              anchors.right: parent.right
-              anchors.top: parent.top
-              anchors.margins: Style.space(6)
-              anchors.leftMargin: Style.space(8)
-              spacing: Style.space(10)
+            Rule { visible: rt.index > 0 }
 
-              // The switch, in ink: a frame with the knob on the right when on.
-              Rectangle {
-                Layout.preferredWidth: Style.space(30)
-                Layout.preferredHeight: Style.space(16)
-                Layout.alignment: Qt.AlignTop
-                Layout.topMargin: Style.space(2)
-                color: rt.on ? root.ink : "transparent"
-                border.width: 2
-                border.color: root.ink
+            Row {
+              width: parent.width
+              spacing: 0
 
-                Rectangle {
-                  width: Style.space(8)
-                  height: Style.space(8)
-                  anchors.verticalCenter: parent.verticalCenter
-                  x: rt.on ? parent.width - width - Style.space(4) : Style.space(4)
-                  color: rt.on ? root.paper : root.ink
-
-                  Behavior on x { NumberAnimation { duration: 120 } }
-                }
-
-                MouseArea {
-                  anchors.fill: parent
-                  anchors.margins: -Style.space(4)
-                  cursorShape: Qt.PointingHandCursor
-                  onClicked: root.setRoutine(rt.modelData.n, !rt.on)
-                }
+              // The hour in the gutter, in ink while the routine is armed.
+              Stamp {
+                text: String(rt.modelData.when || "").slice(-5)
+                color: rt.on ? root.ink : root.dim
+                font.bold: rt.on
+                font.pixelSize: Style.font.bodySmall
+                topPadding: Style.space(5)
               }
 
-              Column {
-                Layout.fillWidth: true
-                spacing: Style.space(2)
+              RowLayout {
+                width: parent.width - root.gutter
+                spacing: Style.space(10)
 
-                Text {
-                  width: parent.width
-                  text: String(rt.modelData.when || "")
-                    + (rt.modelData.once ? " · une fois" : " · " + (rt.modelData.days === "*" ? "tous les jours" : String(rt.modelData.days || "")))
-                    + " · " + String(rt.modelData.verb || "")
-                  color: rt.on ? root.ink : root.dim
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.caption
-                  font.bold: true
-                  elide: Text.ElideRight
+                Column {
+                  Layout.fillWidth: true
+                  Layout.topMargin: Style.space(4)
+                  spacing: Style.space(3)
+
+                  Text {
+                    width: parent.width
+                    text: String(rt.modelData.text || "")
+                    color: rt.on ? root.ink : root.dim
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.bodySmall
+                    lineHeight: 1.2
+                    wrapMode: Text.WordWrap
+                    maximumLineCount: 3
+                    elide: Text.ElideRight
+                  }
+
+                  Text {
+                    width: parent.width
+                    text: (rt.modelData.once ? "le " + String(rt.modelData.when || "").slice(8, 10) + "/" + String(rt.modelData.when || "").slice(5, 7) + ", une seule fois"
+                            : (rt.modelData.days === "*" ? "tous les jours" : String(rt.modelData.days || "")))
+                      + ", " + String(rt.modelData.verb || "")
+                      + (rt.on && root.nextText(rt.modelData.next).length > 0 ? ", " + root.nextText(rt.modelData.next) : "")
+                    color: root.dim
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.caption
+                    wrapMode: Text.WordWrap
+                    maximumLineCount: 2
+                    elide: Text.ElideRight
+                  }
+                }
+
+                // The switch, in ink: the knob crosses to the right when on.
+                Rectangle {
+                  Layout.preferredWidth: Style.space(30)
+                  Layout.preferredHeight: Style.space(16)
+                  Layout.alignment: Qt.AlignTop
+                  Layout.topMargin: Style.space(6)
+                  color: rt.on ? root.ink : "transparent"
+                  border.width: 2
+                  border.color: rt.on ? root.ink : root.dim
+
+                  Rectangle {
+                    width: Style.space(8)
+                    height: Style.space(8)
+                    anchors.verticalCenter: parent.verticalCenter
+                    x: rt.on ? parent.width - width - Style.space(4) : Style.space(4)
+                    color: rt.on ? root.paper : root.dim
+
+                    Behavior on x { NumberAnimation { duration: 120 } }
+                  }
+
+                  MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -Style.space(4)
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.setRoutine(rt.modelData.n, !rt.on)
+                  }
                 }
 
                 Text {
-                  width: parent.width
-                  text: String(rt.modelData.text || "")
-                  color: rt.on ? root.ink : root.dim
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.bodySmall
-                  wrapMode: Text.WordWrap
-                  maximumLineCount: 3
-                  elide: Text.ElideRight
-                }
-
-                Text {
-                  width: parent.width
-                  visible: rt.on && text.length > 0
-                  text: root.nextText(rt.modelData.next)
+                  Layout.alignment: Qt.AlignTop
+                  Layout.topMargin: Style.space(2)
+                  text: "󰆴"
                   color: root.dim
                   font.family: Style.font.family
-                  font.pixelSize: Style.font.caption
-                  elide: Text.ElideRight
-                }
-              }
+                  font.pixelSize: Style.font.title
 
-              Text {
-                Layout.alignment: Qt.AlignTop
-                text: "󰆴"
-                color: binHover.hovered ? root.ink : root.dim
-                font.family: Style.font.family
-                font.pixelSize: Style.font.title
-
-                HoverHandler { id: binHover }
-
-                MouseArea {
-                  anchors.fill: parent
-                  anchors.margins: -Style.space(4)
-                  cursorShape: Qt.PointingHandCursor
-                  onClicked: root.deleteRoutine(rt.modelData.n)
+                  MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -Style.space(4)
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.deleteRoutine(rt.modelData.n)
+                  }
                 }
               }
             }
@@ -831,16 +987,16 @@ FocusScope {
       // Adding one is writing its line, the way the file itself reads.
       Rectangle {
         Layout.fillWidth: true
-        implicitHeight: addField.implicitHeight + Style.space(8)
-        color: "transparent"
+        implicitHeight: addField.implicitHeight + Style.space(10)
+        color: root.paper
         border.width: 2
         border.color: root.ink
 
         Ui.TextField {
           id: addField
           anchors.fill: parent
-          anchors.margins: Style.space(4)
-          placeholderText: "Ajouter : 08:00 lun-ven ask --quiet Briefing du matin"
+          anchors.margins: Style.space(5)
+          placeholderText: "Nouvelle routine : 08:00 lun-ven ask --quiet Briefing du matin"
           foreground: root.ink
           font.pixelSize: Style.font.bodySmall
           onAccepted: {
@@ -852,10 +1008,11 @@ FocusScope {
 
       Text {
         Layout.fillWidth: true
-        text: "HH:MM jours verbe texte — jours : *, lun-ven, lun,mer · ou AAAA-MM-JJ HH:MM once · verbes : say, ask, ask --quiet, notify, dispatch"
+        text: "Une heure, les jours (*, lun-ven, lun,mer) ou une date suivie de once, puis say, ask, ask --quiet, notify ou dispatch, et le texte."
         color: root.dim
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
+        lineHeight: 1.2
         wrapMode: Text.WordWrap
       }
     }

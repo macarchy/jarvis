@@ -20,7 +20,7 @@ Item {
   // Tail apex, in units from the LEFT edge; the caller aims it at the
   // mouth and clamps it inside the card.
   property int tailX: 6
-  property string kind: "speech" // speech | thought | cut
+  property string kind: "speech" // speech | thought | cut | plain
 
   readonly property int tailPx: tailUnits * px
 
@@ -80,7 +80,7 @@ Item {
         cell(tx, Hp, root.ink); cell(tx + 1, Hp, root.ink)
         cell(tx, Hp + 1, root.ink)
         cell(tx - 2, Hp + 3, root.ink); cell(tx - 1, Hp + 3, root.ink)
-      } else {
+      } else if (root.kind === "thought") {
         // Thought beads drifting down toward the head: paper hearts so
         // they read as bubbles, not crumbs.
         cell(tx - 1, Hp, root.ink); cell(tx, Hp, root.ink); cell(tx + 1, Hp, root.ink)

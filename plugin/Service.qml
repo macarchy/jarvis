@@ -552,16 +552,23 @@ Item {
     implicitWidth: Style.space(520)
     implicitHeight: Math.min(Style.space(700), (screen ? screen.height : 900) - Style.space(60))
 
-    Rectangle {
+    // The page's frame is the bubble's own stepped border, without a tail.
+    PixelBubble {
       anchors.fill: parent
-      color: service.bubblePaper
-      border.width: 4
-      border.color: service.bubbleInk
+      px: 4
+      tailUnits: 0
+      kind: "plain"
+      paper: service.bubblePaper
+      ink: service.bubbleInk
+    }
+
+    Item {
+      anchors.fill: parent
 
       Journal {
         id: journalPage
         anchors.fill: parent
-        anchors.margins: 4
+        anchors.margins: 6
         ink: service.bubbleInk
         paper: service.bubblePaper
         open: service.journalOpen
