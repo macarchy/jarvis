@@ -4,7 +4,8 @@ jarvis-wake.py lit le micro par trames de 80 ms ; pendant que Jarvis écoute,
 le RMS de chaque trame devient un niveau 0–1 publié sur la prise de
 macarchy-dfr, dix fois par seconde au plus, et le vumètre de la barre bouge
 avec la voix. Pas de daemon, pas de prise, une réponse lente : rien, en
-silence — c'est de la décoration, et la décoration ne casse pas l'oreille.
+silence — c'est de la décoration, et une réponse retardée lui coûte plus
+qu'elle ne vaut.
 """
 import math
 import os
@@ -40,10 +41,10 @@ class LevelSender:
         self.last = t
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-                s.settimeout(0.05)
+                s.settimeout(0.02)
                 s.connect(self.path)
                 s.sendall(f"macarchy.jarvis level {level:.2f}\n".encode())
-                s.recv(64)
+                # the bar's answer is never awaited, a level is worth less than the frame it would delay
         except OSError:
             return False
         return True

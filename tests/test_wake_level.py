@@ -6,6 +6,7 @@ import socket
 import sys
 import tempfile
 import threading
+import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
     os.path.realpath(__file__))), "bin"))
@@ -46,7 +47,10 @@ def serve():
             return
         with c:
             seen.append(c.makefile().readline().strip())
-            c.sendall(b"ok\n")
+            try:
+                c.sendall(b"ok\n")
+            except OSError:
+                pass
 
 
 thread = threading.Thread(target=serve, daemon=True)
@@ -54,11 +58,13 @@ thread.start()
 clock = [0.0]
 s = wl.LevelSender(path=path, now=lambda: clock[0])
 check("premier envoi", s.send(0.5), True)
+time.sleep(0.01)  # let server receive and append to seen
 check("la ligne du protocole", seen[-1], "macarchy.jarvis level 0.50")
 clock[0] = 0.05
 check("10 Hz : le second est retenu", s.send(0.6), False)
 clock[0] = 0.11
 check("après 100 ms il passe", s.send(0.6), True)
+time.sleep(0.01)  # let server receive and append to seen
 check("deux lignes reçues", len(seen), 2)
 srv.shutdown(socket.SHUT_RDWR)      # wakes the blocked accept() with an error
 srv.close()
