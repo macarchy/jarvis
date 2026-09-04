@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Le poisson sur la Touch Bar, sans Touch Bar : le module plugin/touchbar.py
-chargé par le moteur de macarchy-dfr en mémoire, avec une horloge factice.
+chargé par le moteur de macarchy-touchbar en mémoire, avec une horloge factice.
 
 Le moteur n'est pas une dépendance de Jarvis : sans lui (pas de
-`macarchy-dfr` sur le PATH, pas de dépôt voisin), ces tests sont sautés."""
+`macarchy-touchbar` sur le PATH, pas de dépôt voisin), ces tests sont sautés."""
 import importlib.util
 import os
 import shutil
@@ -17,28 +17,28 @@ PLUGIN = os.path.join(os.path.dirname(HERE), "plugin", "touchbar.py")
 
 def _engine_root():
     """The first candidate that actually holds the engine: the real
-    `macarchy-dfr` on PATH (not a test's own fake, which has no
-    `macarchy_dfr/modules.py`), else the sibling checkout."""
-    exe = shutil.which("macarchy-dfr")
+    `macarchy-touchbar` on PATH (not a test's own fake, which has no
+    `macarchy_touchbar/modules.py`), else the sibling checkout."""
+    exe = shutil.which("macarchy-touchbar")
     candidates = []
     if exe:
         candidates.append(os.path.dirname(os.path.dirname(os.path.realpath(exe))))
-    candidates.append(os.path.join(os.path.dirname(os.path.dirname(HERE)), "macarchy-dfr"))
+    candidates.append(os.path.join(os.path.dirname(os.path.dirname(HERE)), "macarchy-touchbar"))
     for root in candidates:
-        if os.path.exists(os.path.join(root, "macarchy_dfr", "modules.py")):
+        if os.path.exists(os.path.join(root, "macarchy_touchbar", "modules.py")):
             return root
     return None
 
 
 ROOT = _engine_root()
 if ROOT is None:
-    pytest.skip("macarchy-dfr introuvable", allow_module_level=True)
+    pytest.skip("macarchy-touchbar introuvable", allow_module_level=True)
 sys.path.insert(0, ROOT)
 
 import cairo  # noqa: E402
-from macarchy_dfr.loop import EventLoop  # noqa: E402
-from macarchy_dfr.modules import ModuleHost, ModuleSpec, Registry  # noqa: E402
-from macarchy_dfr.widgets import Button, Label, Meter, Sprite  # noqa: E402
+from macarchy_touchbar.loop import EventLoop  # noqa: E402
+from macarchy_touchbar.modules import ModuleHost, ModuleSpec, Registry  # noqa: E402
+from macarchy_touchbar.widgets import Button, Label, Meter, Sprite  # noqa: E402
 
 SHEETS = {"idle": 6, "listening": 2, "thinking": 3, "speaking": 4, "cancel": 4, "sleeping": 4,
           "tired": 2, "dnd": 2, "worried": 2, "proud": 2, "curious": 2, "celebrate": 3}
@@ -313,7 +313,7 @@ def test_speaking_types_the_reply_and_shows_the_tail_when_it_overflows(sprites):
     rig.ipc("reply", "Il est dix heures.")
     lay = rig.scene()
     text = _text(lay)
-    from macarchy_dfr.geometry import Rect
+    from macarchy_touchbar.geometry import Rect
     text.rect = Rect(0, 0, 200, 60)                           # narrow on purpose (fake measure = 8 px/char)
     rig.advance(0.5)
     assert text.text == "Il est dix heures."

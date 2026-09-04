@@ -26,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # tests/test_touchbar.py skips itself when the macarchy-dfr engine is
+      # tests/test_touchbar.py skips itself when the macarchy-touchbar engine is
       # not around — which is always, here — but it is a pytest module and
       # needs pytest importable to reach its own skip. This is the only
       # dependency the suite installs, and it buys the skip, not a run.

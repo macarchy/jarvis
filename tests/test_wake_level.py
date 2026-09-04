@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Le niveau de l'oreille vers la Touch Bar : l'échelle et l'envoi, sans
-micro ni barre — une prise Unix éphémère joue macarchy-dfr."""
+micro ni barre — une prise Unix éphémère joue macarchy-touchbar."""
 import os
 import socket
 import sys
