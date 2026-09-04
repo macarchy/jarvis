@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/macarchy/jarvis/compare/v1.4.0...v1.5.0) (2026-09-04)
+
+
+### Features
+
+* **pkg:** publish an installable package on every release ([#5](https://github.com/macarchy/jarvis/issues/5)) ([dd96ec1](https://github.com/macarchy/jarvis/commit/dd96ec161368c69ffe5078dcaba1382a4dc0f027))
+
 ## [1.4.0](https://github.com/macarchy/jarvis/compare/v1.3.0...v1.4.0) (2026-09-04)
 
 
