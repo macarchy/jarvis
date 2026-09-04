@@ -9,6 +9,10 @@
 Claude comme cerveau, le shell comme mains,
 et un poisson de Babel en pixel art comme visage.
 
+Enregistrer → transcrire → réfléchir → parler tourne sur n'importe quelle
+machine Linux : PipeWire, Python 3, voxtype, Claude Code. Seuls ses mains et
+son visage ont besoin d'Omarchy.
+
 [**Documentation**](https://macarchy.github.io/jarvis/index.fr.html) · [**Pilote la machine à états**](https://macarchy.github.io/jarvis/machine.fr.html) · [English](README.md)
 
 </div>
