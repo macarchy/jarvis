@@ -72,7 +72,7 @@ you are getting.
 
 | Layer | What it gives you | What it needs |
 |---|---|---|
-| **The voice loop** | record → transcribe → think → speak, the whole conversation | Linux, PipeWire, [voxtype](https://voxtype.io), [Claude Code](https://claude.com/claude-code), Python 3 — **portable** |
+| **The voice loop** | record → transcribe → think → speak, the whole conversation | Linux, PipeWire, [voxtype](https://voxtype.io), [Claude Code](https://claude.com/claude-code), [Piper](https://github.com/rhasspy/piper), Python 3 — **portable** |
 | **The hands** | changing your theme, brightness, network, windows, launching apps | [Omarchy](https://omarchy.org) and Hyprland — its CLI *is* his hands |
 | **The body** | the fish in the corner, the speech bubble, the typed prompt bar | [Quickshell](https://quickshell.org) via `omarchy-shell` |
 
