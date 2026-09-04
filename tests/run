@@ -994,8 +994,13 @@ t "touch bar: le module, chargé par le moteur de macarchy-dfr"
 # contributor who has not installed pytest — has neither, and failing there
 # says nothing about their change.
 if python3 -c 'import pytest' 2>/dev/null; then
+	# Exit 5 is "no tests collected", which is exactly what test_touchbar.py's
+	# module-level skip produces when the engine is absent — a runner always,
+	# a laptop with a sibling macarchy-dfr never. Both 0 and 5 are the test
+	# doing its job; anything else is a real failure.
 	assert "les tests du module passent (ou sont sautés sans moteur)" \
-		python3 -m pytest -q "$TESTS_DIR/test_touchbar.py"
+		bash -c 'python3 -m pytest -q "$1"; rc=$?; ((rc == 0 || rc == 5))' \
+		_ "$TESTS_DIR/test_touchbar.py"
 else
 	skip "pytest absent — les tests du module ne sont pas exécutés"
 fi
