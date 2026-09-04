@@ -1,0 +1,31 @@
+post_install() {
+  cat <<'NOTE'
+
+  jarvis is installed, but it is only the program. The voices, the wake models and
+  the python venv are large and fetched, so they are NOT in the package:
+
+    jarvis setup          # Piper voices, wake models, the venv
+
+  The Control Center / Touch Bar plugin is a template — pacman may not write into
+  your $HOME:
+
+    cp -r /usr/share/jarvis/plugin ~/.config/omarchy/plugins/macarchy.jarvis
+
+  Then:
+    systemctl --user enable --now jarvis-tick.timer jarvis-inbox.path
+
+  If the mascot never appears on the Touch Bar, the module failed to load:
+    journalctl --user -u macarchy-touchbar -b | grep 'failed to load'
+
+NOTE
+}
+
+post_upgrade() {
+  # A rename in macarchy-touchbar breaks the INSTALLED copy of the touchbar
+  # module, and the daemon says so exactly once and then runs without it.
+  macarchy-touchbar reload >/dev/null 2>&1 || true
+}
+
+pre_remove() {
+  systemctl --user disable --now jarvis-tick.timer jarvis-inbox.path 2>/dev/null || true
+}

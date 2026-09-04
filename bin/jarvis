@@ -37,7 +37,21 @@
 
 set -uo pipefail
 
-JARVIS_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+# One directory above this script is the repo root in a checkout, and /usr once
+# packaged -- where none of jarvis's tree lives. $JARVIS_DIR overrides (tests
+# already rely on the sibling JARVIS_RUN/STATE/MEMORY doing the same), then the
+# checkout, then the packaged tree. macarchy-install#17.
+_self="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.."
+for _cand in "${JARVIS_DIR:-}" "$_self" /usr/share/jarvis; do
+  [[ -n $_cand && -x $_cand/bin/jarvis-fsm.sh ]] && { JARVIS_DIR="$(cd "$_cand" && pwd)"; break; }
+done
+if [[ -z ${JARVIS_DIR:-} || ! -x $JARVIS_DIR/bin/jarvis-fsm.sh ]]; then
+  # Say where it looked. Falling through leaves 41 uses of an empty path, each
+  # failing somewhere else with a message about the wrong thing.
+  echo "jarvis: cannot find the jarvis tree — looked in '$_self', '/usr/share/jarvis'" >&2
+  echo "Set JARVIS_DIR to the tree that holds bin/jarvis-fsm.sh." >&2
+  exit 1
+fi
 # JARVIS_RUN/STATE/MEMORY override the real locations — that is what
 # lets tests/run exercise the whole pipeline in a sandbox.
 RUN_DIR="${JARVIS_RUN:-${XDG_RUNTIME_DIR:-/tmp}/jarvis}"
