@@ -26,6 +26,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # tests/test_touchbar.py skips itself when the macarchy-dfr engine is
+      # not around — which is always, here — but it is a pytest module and
+      # needs pytest importable to reach its own skip. This is the only
+      # dependency the suite installs, and it buys the skip, not a run.
+      - name: pytest, so the Touch Bar module test can skip itself
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq python3-pytest
+
       # The suite writes and reads French, and asserts on accented strings.
       # A runner defaulting to the C locale would compare bytes it cannot
       # decode, so the language is pinned rather than inherited.

@@ -11,7 +11,7 @@ TESTS_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 JARVIS="$TESTS_DIR/../bin/jarvis"
 FIX="$TESTS_DIR/fixtures"
 export PATH="$TESTS_DIR/bin:$PATH"
-pass=0 fail=0 current=""
+pass=0 fail=0 skipped=0 current=""
 
 # Every sandbox is remembered so the run leaves nothing behind: neither the
 # mktemp trees (one per test, they used to pile up in /tmp) nor the real
@@ -61,6 +61,14 @@ t() { current="$1"; sandbox; }
 # A failing assertion says what it saw: the last lines the command printed
 # and the sandbox it printed them in, which survives long enough to look at
 # only if the run is interrupted — so print the path either way.
+# A test that cannot run here is neither a pass nor a failure, and saying so
+# out loud is the point: a suite that silently counts an unrun test as green
+# is worse than a red one, because nobody goes looking.
+skip() {
+	skipped=$((skipped + 1))
+	printf '⊘ %s — %s\n' "$current" "$1"
+}
+
 assert() {
 	local desc="$1" out rc
 	shift
@@ -981,7 +989,21 @@ assert "aucun cas raté sur le niveau" python3 "$TESTS_DIR/test_wake_level.py"
 
 # ---- la Touch Bar
 t "touch bar: le module, chargé par le moteur de macarchy-dfr"
-assert "les tests du module passent (ou sont sautés sans moteur)" python3 -m pytest -q "$TESTS_DIR/test_touchbar.py"
+# test_touchbar.py skips itself when the macarchy-dfr engine is absent, but it
+# needs pytest to be importable to reach that skip. A bare runner — or a
+# contributor who has not installed pytest — has neither, and failing there
+# says nothing about their change.
+if python3 -c 'import pytest' 2>/dev/null; then
+	# Exit 5 is "no tests collected", which is exactly what test_touchbar.py's
+	# module-level skip produces when the engine is absent — a runner always,
+	# a laptop with a sibling macarchy-dfr never. Both 0 and 5 are the test
+	# doing its job; anything else is a real failure.
+	assert "les tests du module passent (ou sont sautés sans moteur)" \
+		bash -c 'python3 -m pytest -q "$1"; rc=$?; ((rc == 0 || rc == 5))' \
+		_ "$TESTS_DIR/test_touchbar.py"
+else
+	skip "pytest absent — les tests du module ne sont pas exécutés"
+fi
 
 # ---- the watchdog: chantier 4
 t "chien de garde : une étape figée est libérée et le groupe tué"
@@ -1308,5 +1330,9 @@ printf 'idle' >"$JARVIS_RUN/state"
 assert "boîte échafaudée" test -d "$JARVIS_BOX/input/.work"
 assert "aucun appel cerveau" test ! -s "$FAKE_CLAUDE_LOG"
 
-printf '\n%d réussite(s), %d échec(s)\n' "$pass" "$fail"
+if ((skipped > 0)); then
+	printf '\n%d réussite(s), %d échec(s), %d sauté(s)\n' "$pass" "$fail" "$skipped"
+else
+	printf '\n%d réussite(s), %d échec(s)\n' "$pass" "$fail"
+fi
 exit "$((fail > 0))"
