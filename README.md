@@ -9,6 +9,9 @@
 Claude as its brain, the shell as its hands,
 and a pixel-art Babel fish as its face.
 
+Record → transcribe → think → speak runs on any Linux box: PipeWire, Python 3,
+voxtype, Claude Code, Piper. Only his hands and his face need Omarchy.
+
 [**Documentation**](https://macarchy.github.io/jarvis) · [**Drive the state machine**](https://macarchy.github.io/jarvis/machine.html) · [Français](README.fr.md)
 
 </div>
@@ -69,7 +72,7 @@ you are getting.
 
 | Layer | What it gives you | What it needs |
 |---|---|---|
-| **The voice loop** | record → transcribe → think → speak, the whole conversation | Linux, PipeWire, [voxtype](https://voxtype.io), [Claude Code](https://claude.com/claude-code), Python 3 — **portable** |
+| **The voice loop** | record → transcribe → think → speak, the whole conversation | Linux, PipeWire, [voxtype](https://voxtype.io), [Claude Code](https://claude.com/claude-code), [Piper](https://github.com/rhasspy/piper), Python 3 — **portable** |
 | **The hands** | changing your theme, brightness, network, windows, launching apps | [Omarchy](https://omarchy.org) and Hyprland — its CLI *is* his hands |
 | **The body** | the fish in the corner, the speech bubble, the typed prompt bar | [Quickshell](https://quickshell.org) via `omarchy-shell` |
 

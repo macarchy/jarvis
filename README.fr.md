@@ -9,6 +9,10 @@
 Claude comme cerveau, le shell comme mains,
 et un poisson de Babel en pixel art comme visage.
 
+Enregistrer → transcrire → réfléchir → parler tourne sur n'importe quelle
+machine Linux : PipeWire, Python 3, voxtype, Claude Code, Piper. Seuls ses
+mains et son visage ont besoin d'Omarchy.
+
 [**Documentation**](https://macarchy.github.io/jarvis/index.fr.html) · [**Pilote la machine à états**](https://macarchy.github.io/jarvis/machine.fr.html) · [English](README.md)
 
 </div>
@@ -73,7 +77,7 @@ autant savoir laquelle tu récupères.
 
 | Couche | Ce qu'elle apporte | Ce qu'elle exige |
 |---|---|---|
-| **La boucle vocale** | enregistrer → transcrire → réfléchir → parler : toute la conversation | Linux, PipeWire, [voxtype](https://voxtype.io), [Claude Code](https://claude.com/claude-code), Python 3 — **portable** |
+| **La boucle vocale** | enregistrer → transcrire → réfléchir → parler : toute la conversation | Linux, PipeWire, [voxtype](https://voxtype.io), [Claude Code](https://claude.com/claude-code), [Piper](https://github.com/rhasspy/piper), Python 3 — **portable** |
 | **Les mains** | changer le thème, la luminosité, le réseau, les fenêtres, lancer des applications | [Omarchy](https://omarchy.org) et Hyprland — leur CLI *est* ses mains |
 | **Le corps** | le poisson dans le coin, la bulle, la barre d'écriture | [Quickshell](https://quickshell.org) via `omarchy-shell` |
 
