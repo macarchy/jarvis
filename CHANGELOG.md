@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1](https://github.com/macarchy/jarvis/compare/v1.6.0...v1.6.1) (2026-09-05)
+
+
+### Bug Fixes
+
+* **cerveau:** rendre l'installation de llama-server autonome ([#9](https://github.com/macarchy/jarvis/issues/9)) ([666e4c8](https://github.com/macarchy/jarvis/commit/666e4c8c675125fbcac7ad7a6315e3205cf06813))
+
 ## [1.6.0](https://github.com/macarchy/jarvis/compare/v1.5.0...v1.6.0) (2026-09-05)
 
 
