@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/macarchy/jarvis/compare/v1.5.0...v1.6.0) (2026-09-05)
+
+
+### Features
+
+* **cerveau:** un cerveau local configurable, une table de réflexes, et le journal en fenêtre ([9ab867c](https://github.com/macarchy/jarvis/commit/9ab867c90f4493b5ca966eaed978112cf5744808))
+
 ## [1.5.0](https://github.com/macarchy/jarvis/compare/v1.4.0...v1.5.0) (2026-09-04)
 
 
