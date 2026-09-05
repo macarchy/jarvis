@@ -15,6 +15,7 @@ animates with this same code.
 Canvas 72x56 at 1x; the shell scales nearest-neighbor (pixelScale 2).
 """
 
+import argparse
 import os
 import struct
 import sys
@@ -362,21 +363,15 @@ def build(cfg, out):
 
 
 def parse(argv):
-    cfg = dict(parts.DEFAULT, pal=parts.DEFAULT_PALETTE)
-    out = OUT
-    it = iter(argv)
-    for a in it:
-        if a == "--out":
-            out = next(it)
-        elif a.startswith("--") and a[2:] in cfg:
-            v = next(it)
-            lib = parts.AXES.get(a[2:]) or (parts.PALETTES if a[2:] == "pal" else None)
-            if lib is None or v not in lib:
-                sys.exit(f"unknown {a[2:]}: {v} (choose from {', '.join(lib or [])})")
-            cfg[a[2:]] = v
-        else:
-            sys.exit(__doc__)
-    return cfg, out
+    # argparse tient la validation ET le message d'erreur que cette fonction
+    # écrivait à la main, et rend `--help` en prime.
+    ap = argparse.ArgumentParser(description=__doc__)
+    for axis, lib in parts.AXES.items():
+        ap.add_argument(f"--{axis}", choices=lib, default=parts.DEFAULT[axis])
+    ap.add_argument("--pal", choices=parts.PALETTES, default=parts.DEFAULT_PALETTE)
+    ap.add_argument("--out", default=OUT)
+    a = vars(ap.parse_args(argv))
+    return {k: v for k, v in a.items() if k != "out"}, a["out"]
 
 
 def main(argv):

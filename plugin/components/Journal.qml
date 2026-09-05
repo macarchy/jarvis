@@ -52,18 +52,13 @@ FocusScope {
   }
 
   // ---------------------------------------------------------------- data
-  property var today: []             // [{at, ask, reply, thoughts, tools}]
-  property bool todayLoaded: false
-  property var conversations: []     // [{id, kind, current, started, ended, exchanges, first}]
-  property bool convLoaded: false
+  // today: [{at, ask, reply, thoughts, tools}] — alias, plus bas.
+  // conversations: [{id, kind, current, started, ended, exchanges, first}]
   property bool showTasks: false
   // A past conversation opened from the list: its row, and its exchanges.
   property string session: ""
   property var sessionMeta: null
-  property var sessionExchanges: []
-  property bool sessionLoaded: false
-  property var routines: []          // [{n, on, when, days, once, verb, text, next, line}]
-  property bool routinesLoaded: false
+  // routines: [{n, on, when, days, once, verb, text, next, line}]
 
   // One line of feedback under the tabs (« Rien à oublier »), gone after 4 s.
   property string notice: ""
@@ -115,56 +110,44 @@ FocusScope {
     onTriggered: root.refresh()
   }
 
-  Process {
-    id: todayProbe
-    command: ["omarchy-jarvis", "transcript", "--json", "30"]
+  // Quatre sondes, un seul corps : même StdioCollector, même parseList,
+  // même garde `same()` qui évite de réassigner une liste identique. Seule
+  // la commande change, et celle de la session est posée à la volée
+  // (refresh(), plus haut) — d'où son `command` absent ici.
+  //
+  // `owner` est passé explicitement : un `component` en ligne a sa propre
+  // portée et ne voit pas l'`id: root` du fichier.
+  component ListProbe: Process {
+    id: probe
+    required property var owner
+    property var rows: []
+    property bool loaded: false
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        var list = root.parseList(text) || []
-        if (!root.same(list, root.today)) root.today = list
-        root.todayLoaded = true
+        var list = probe.owner.parseList(text) || []
+        if (!probe.owner.same(list, probe.rows)) probe.rows = list
+        probe.loaded = true
       }
     }
   }
 
-  Process {
-    id: sessionProbe
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        var list = root.parseList(text) || []
-        if (!root.same(list, root.sessionExchanges)) root.sessionExchanges = list
-        root.sessionLoaded = true
-      }
-    }
-  }
+  ListProbe { id: todayProbe; owner: root; command: ["omarchy-jarvis", "transcript", "--json", "30"] }
+  ListProbe { id: sessionProbe; owner: root }
+  ListProbe { id: convProbe; owner: root; command: ["omarchy-jarvis", "conversations", "--json"] }
+  ListProbe { id: routinesProbe; owner: root; command: ["omarchy-jarvis", "routines", "--json"] }
 
-  Process {
-    id: convProbe
-    command: ["omarchy-jarvis", "conversations", "--json"]
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        var list = root.parseList(text) || []
-        if (!root.same(list, root.conversations)) root.conversations = list
-        root.convLoaded = true
-      }
-    }
-  }
-
-  Process {
-    id: routinesProbe
-    command: ["omarchy-jarvis", "routines", "--json"]
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        var list = root.parseList(text) || []
-        if (!root.same(list, root.routines)) root.routines = list
-        root.routinesLoaded = true
-      }
-    }
-  }
+  // Les huit noms publics sont des alias sur ces quatre sondes : tous les
+  // lecteurs de la page n'ont pas bougé, et sessionExchanges reste
+  // écrivable (onSessionChanged le remet à []).
+  property alias today: todayProbe.rows
+  property alias todayLoaded: todayProbe.loaded
+  property alias sessionExchanges: sessionProbe.rows
+  property alias sessionLoaded: sessionProbe.loaded
+  property alias conversations: convProbe.rows
+  property alias convLoaded: convProbe.loaded
+  property alias routines: routinesProbe.rows
+  property alias routinesLoaded: routinesProbe.loaded
 
   // ---------------------------------------------------------------- actions
   //
@@ -228,17 +211,12 @@ FocusScope {
     if (m[1] + "-" + m[2] + "-" + m[3] === todayStamp()) return m[4]
     return m[3] + "/" + m[2] + " " + m[4]
   }
-  // The gutter is five characters wide: the hour today, the day otherwise.
-  function stampText(s) {
-    var m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}:\d{2})$/.exec(String(s || ""))
-    if (!m) return String(s || "")
-    if (m[1] + "-" + m[2] + "-" + m[3] === todayStamp()) return m[4]
-    return m[3] + "/" + m[2]
-  }
-  function timeOf(s) {
-    var m = /(\d{2}:\d{2})$/.exec(String(s || ""))
-    return m ? m[1] : ""
-  }
+  // La gouttière fait cinq caractères de large : l'heure aujourd'hui, le
+  // jour sinon — soit exactement les cinq premiers de whenText dans les deux
+  // cas ("HH:MM" et "JJ/MM HH:MM"). Une entrée malformée est tronquée à
+  // cinq plutôt que rendue entière : c'est la largeur disponible de toute
+  // façon.
+  function stampText(s) { return whenText(s).slice(0, 5) }
 
   function nextText(epoch) {
     var n = Number(epoch)
@@ -792,7 +770,7 @@ FocusScope {
                   Text {
                     width: parent.width
                     text: root.plural(Number(row.modelData.exchanges || 0), "échange")
-                      + (row.current ? ", en cours" : ", à " + root.timeOf(row.modelData.started))
+                      + (row.current ? ", en cours" : ", à " + String(row.modelData.started || "").slice(-5))
                       + (row.modelData.kind === "tâche" ? ", une tâche" : "")
                     color: root.dim
                     font.family: Style.font.family
