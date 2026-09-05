@@ -45,7 +45,12 @@ SHEETS = {"idle": 6, "listening": 2, "thinking": 3, "speaking": 4, "cancel": 4, 
 
 
 class Hooks:
-    context = None
+    # Le double du Bar, réduit à ce que plugin/touchbar.py emprunte vraiment.
+    # Le moteur expose aussi context/on_context/keys/open_group/close_group/
+    # is_group_open/slide_into ; aucun n'était atteint par ce module, et les
+    # garder ici revenait à entretenir sept no-op. Si le module s'en sert un
+    # jour, le test tombera en AttributeError — bruyamment, ce qui est le
+    # comportement voulu.
     painter = None
 
     def __init__(self):
@@ -58,13 +63,6 @@ class Hooks:
         self.calls.append(("show", name, k))
         self.layouts[name] = factory(self.host.apis[module_id])
     def hide_scene(self, n): self.calls.append(("hide", n)); self.layouts.pop(n, None)
-    def on_context(self, fn): pass
-    def off_context(self, fn): pass
-    def keys(self, names): self.calls.append(("keys", names))
-    def open_group(self, n): pass
-    def close_group(self): pass
-    def is_group_open(self, n): return False
-    def slide_into(self, n, x, y): pass
     def wake(self): self.calls.append(("wake",))
 
 

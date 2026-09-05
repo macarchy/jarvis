@@ -9,7 +9,6 @@
 # running it twice is a no-op — it only fetches what is missing.
 #
 #   ./bootstrap.sh                 the two voices Jarvis actually speaks
-#   ./bootstrap.sh --all-voices    plus the two French alternates
 #   ./bootstrap.sh --skip-wake     no « Hey Jarvis » (skips a 200 MB venv)
 #   ./bootstrap.sh --skip-whisper  you already have a Whisper model
 #
@@ -21,14 +20,13 @@ PIPER_VERSION="v1.2.0"
 WHISPER_MODEL="ggml-small.bin"          # matches `model = "small"` in voxtype.toml
 WHISPER_DIR="$HOME/.local/share/voxtype/models"
 
-all_voices=0 skip_wake=0 skip_whisper=0
+skip_wake=0 skip_whisper=0
 for arg in "$@"; do
 	case "$arg" in
-	--all-voices) all_voices=1 ;;
 	--skip-wake) skip_wake=1 ;;
 	--skip-whisper) skip_whisper=1 ;;
 	-h | --help)
-		sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
+		sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
 		exit 0
 		;;
 	*)
@@ -111,11 +109,6 @@ voices=(
 	"${FR_PATH[$fr]}"
 	"en/en_GB/alan/medium/en_GB-alan-medium"
 )
-if ((all_voices)); then
-	for k in siwis tom upmc; do
-		[[ $k == "$fr" ]] || voices+=("${FR_PATH[$k]}")
-	done
-fi
 for path in "${voices[@]}"; do
 	name=$(basename "$path")
 	if [[ -s models/$name.onnx && -s models/$name.onnx.json ]]; then

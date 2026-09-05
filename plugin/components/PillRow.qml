@@ -18,16 +18,14 @@ import qs.Ui
 Row {
   id: root
 
-  // Either a plain string[] (label == value) or [{ value, label }].
+  // [{ value, label }], et rien d'autre : le format « tableau de chaînes »
+  // qu'acceptait optionValue()/optionLabel() n'a jamais eu d'appelant.
   property var options: []
   property string value: ""
   property color foreground: Color.popups.text
   property real fontSize: Style.font.caption
 
   signal changed(string value)
-
-  function optionValue(o) { return typeof o === "string" ? o : String(o.value) }
-  function optionLabel(o) { return typeof o === "string" ? o : String(o.label) }
 
   spacing: Style.space(4)
 
@@ -38,12 +36,12 @@ Row {
       id: chip
       required property var modelData
 
-      text: root.optionLabel(chip.modelData)
-      active: root.optionValue(chip.modelData) === root.value
+      text: chip.modelData.label
+      active: chip.modelData.value === root.value
       bordered: true
       foreground: root.foreground
       fontSize: root.fontSize
-      onClicked: root.changed(root.optionValue(chip.modelData))
+      onClicked: root.changed(chip.modelData.value)
     }
   }
 }

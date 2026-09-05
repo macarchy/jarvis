@@ -104,6 +104,15 @@ VOXTYPE="${JARVIS_VOXTYPE:-voxtype}"
 VOICE_EN="$JARVIS_DIR/models/en_GB-alan-medium.onnx"
 STT_CONFIG="$JARVIS_DIR/voxtype.toml"
 REPLY_TXT="$RUN_DIR/reply.txt"
+# Le fil du cerveau local. `claude` garde le sien sous ~/.claude/projects ;
+# celui-ci n'a pas ce luxe, alors il vit ici et `reset` l'efface comme il
+# efface $CONV_FLAG. Un seul fichier : les deux cerveaux ne partagent pas
+# d'historique, et c'est voulu — un fil local repris par le nuage ferait
+# répondre Claude à des tours qu'il n'a pas tenus.
+# ponytail: pas de transcript détaillé pour un fil local — `transcript`,
+# `conversations` et `undo` lisent le JSONL de claude et ne voient pas
+# celui-ci. À reprendre le jour où on parle vraiment au poisson hors ligne.
+LOCAL_HIST="$STATE_DIR/local-history.json"
 # The internal microphone, via asahi-audio's effect chain. The system
 # default source has been seen wandering off to the FaceTime camera, so
 # recording always targets this node when it exists.
@@ -153,13 +162,13 @@ mkdir -p "$RUN_DIR" "$STATE_DIR" "$HOME/.cache/jarvis"
 #                         abort was serving
 deadline_for() {
 	case "$1" in
-	listening) echo "${JARVIS_DEADLINE_LISTENING:-90}" ;;
-	transcribing) echo "${JARVIS_DEADLINE_TRANSCRIBING:-60}" ;;
-	thinking) echo "${JARVIS_DEADLINE_THINKING:-180}" ;;
-	speaking) echo "${JARVIS_DEADLINE_SPEAKING:-300}" ;;
-	followup) echo "${JARVIS_DEADLINE_FOLLOWUP:-8}" ;;
-	sleeping) echo "${JARVIS_DEADLINE_SLEEPING:-600}" ;;
-	cancelling) echo "${JARVIS_DEADLINE_CANCELLING:-5}" ;;
+	listening) echo 90 ;;
+	transcribing) echo 60 ;;
+	thinking) echo 180 ;;
+	speaking) echo 300 ;;
+	followup) echo 8 ;;
+	sleeping) echo 600 ;;
+	cancelling) echo 5 ;;
 	*) echo 0 ;;
 	esac
 }
@@ -221,19 +230,16 @@ touchbar() {
 # mid-reply wiped the text being typed out and made the typewriter restart
 # from the first character. So an aside waits its turn: parked in
 # $STATE_DIR while he is busy, played by the way back to rest.
-mascot_emote() {
+# Un seul corps pour les deux : le verbe EST le nom du fichier d'attente,
+# ce qui supprime du même coup la table kind→verbe que mascot_flush tenait
+# en double. (Le fichier parké s'appelait `aside-pending` ; un reliquat
+# d'une ancienne version est simplement ignoré, la chasse aux vieux
+# fichiers de mascot_flush s'en charge.)
+mascot_park() {
 	if [[ $(state) == idle ]]; then
-		mascot emote "$1"
+		mascot "$1" "$2"
 	else
-		printf '%s' "$1" >"$STATE_DIR/emote-pending"
-	fi
-}
-
-mascot_aside() {
-	if [[ $(state) == idle ]]; then
-		mascot reply "$1"
-	else
-		printf '%s' "$1" >"$STATE_DIR/aside-pending"
+		printf '%s' "$2" >"$STATE_DIR/$1-pending"
 	fi
 }
 
@@ -242,15 +248,12 @@ mascot_aside() {
 # half an hour ago says nothing true.
 mascot_flush() {
 	local kind file text
-	for kind in emote aside; do
+	for kind in emote reply; do
 		file="$STATE_DIR/$kind-pending"
 		[[ -e $file ]] || continue
 		text=$(cat "$file" 2>/dev/null)
 		if [[ -n $text && -n $(find "$file" -mmin -5 2>/dev/null) ]]; then
-			case "$kind" in
-			emote) mascot emote "$text" ;;
-			aside) mascot reply "$text" ;;
-			esac
+			mascot "$kind" "$text"
 		fi
 		rm -f "$file"
 	done
@@ -269,7 +272,6 @@ trace() {
 # (allowlisted) when he cannot satisfy a request; the pipeline calls it for
 # mechanical failures (empty transcript, unreachable brain, barge-in).
 note_failure() {
-	mkdir -p "$MEMORY_DIR"
 	printf -- '- [%s] %s\n' "$(date +%FT%H:%M)" "$1" >>"$FAILURES"
 	log "note: $1"
 	trace "✗ échec noté : $1"
@@ -308,7 +310,6 @@ note_abort() {
 	[[ $ms =~ ^[0-9]+$ ]] || ms=0
 	((ms >= 2000)) || return 0
 	secs=$((ms / 1000))
-	mkdir -p "$MEMORY_DIR"
 	[[ -e $ABORTS ]] || printf '# ABORTS.md — journal des annulations\n\n' >"$ABORTS"
 	printf -- '- [%s] annulé pendant %s après %s s (%s)\n' \
 		"$(date +%FT%H:%M)" "$(stage_fr "$stage")" "$secs" "$trigger" >>"$ABORTS"
@@ -351,7 +352,12 @@ look_signature() {
 set_setting() {
 	local soul="$SOUL_FILE"
 	if grep -q "^- $1:" "$soul"; then
-		sed -i "s/^- $1: .*/- $1: $2/" "$soul"
+		# Le séparateur est `|` et pas `/` : `cerveau-url` vaut
+		# http://127.0.0.1:8099, dont les barres obliques terminaient
+		# l'expression sed et corrompaient l'âme. Aucun réglage ne contient
+		# de `|` — et si un jour l'un d'eux en contient, c'est ici que ça se
+		# verra.
+		sed -i "s|^- $1: .*|- $1: $2|" "$soul"
 	else
 		sed -i "/^- langue:/a - $1: $2" "$soul"
 	fi
@@ -379,6 +385,14 @@ brain_status() { cat "$BRAIN_STATUS" 2>/dev/null || echo ok; }
 # in the journal and a notification, never through the voice.
 brain_set() {
 	local prev now="$1" msg=""
+	# $BRAIN_STATUS décrit LE NUAGE, et lui seul. Un tour local qui réussit
+	# écrirait `ok` par-dessus un `quota <epoch>` encore valide : le quota
+	# serait « levé » à chaque phrase prononcée hors ligne, la ronde
+	# repartirait dans le mur, et le poisson célébrerait un retour qui n'a
+	# pas eu lieu. Le garde est ici plutôt que chez les six appelants —
+	# brain_check, brain_verdict et les rondes passent tous par cette
+	# porte, et une seule porte se surveille mieux que six.
+	[[ $(brain_route) == local ]] && return 0
 	prev=$(brain_status)
 	printf '%s' "$now" >"$BRAIN_STATUS"
 	[[ ${prev%% *} == "${now%% *}" ]] && return 0
@@ -392,9 +406,9 @@ brain_set() {
 	trace "$([[ $now == ok ]] && echo ✓ || echo ✗) $msg"
 	journal "$msg"
 	if [[ $now == ok ]]; then
-		mascot_emote celebrate
+		mascot_park emote celebrate
 	else
-		mascot_emote worried
+		mascot_park emote worried
 		notify "Jarvis" "$msg"
 	fi
 }
@@ -552,12 +566,7 @@ wake_alive() {
 
 # Which brain answers: a plain command goes to haiku, an open question —
 # long, interrogative, or explicitly reflective — escalates to sonnet.
-# JARVIS_MODEL overrides both.
 pick_model() {
-	if [[ -n ${JARVIS_MODEL:-} ]]; then
-		echo "$JARVIS_MODEL"
-		return
-	fi
 	local text=${1,,} words
 	local re='pourquoi|comment|explique|analyse|compare|résume|raconte|propose|conseille|réfléchis|penses|why|how|explain|analy[sz]e|summari[sz]e|suggest|think'
 	words=$(wc -w <<<"$text")
@@ -744,13 +753,89 @@ conv_args() {
 	fi
 }
 
+# ------------------------------------------------- which brain answers
+#
+# Trois réglages dans l'âme, et rien d'autre — pas de config.toml, pas de
+# ~/.config/jarvis. Un seul fournisseur « compatible OpenAI » suffit :
+# llama-server, LM Studio, Ollama, LocalAI, vLLM et les API hébergées
+# parlent tous /v1/chat/completions. Vingt formulaires pour un protocole
+# serait vingt fois la même chose.
+#
+#   - cerveau: auto | nuage | local
+#   - cerveau-url: http://127.0.0.1:8099
+#   - cerveau-modele: local
+#
+# `auto` suit BRAIN_STATUS plutôt que de sonder le réseau : le FSM sait
+# déjà si le nuage répond (ok / quota / down), une sonde TCP coûterait un
+# timeout à chaque tour et se ferait berner par un portail captif.
+brain_route() {
+	local mode st now stamp
+	mode="${JARVIS_BRAIN:-$(setting cerveau auto)}"
+	case "$mode" in
+	nuage)
+		echo nuage
+		return
+		;;
+	local)
+		echo local
+		return
+		;;
+	esac
+	st=$(brain_status)
+	now=$(date +%s)
+	case "$st" in
+	ok) echo nuage ;;
+	quota\ *)
+		# Le quota porte son heure de fin : une fois passée, on redonne sa
+		# chance au nuage. Avant, ce serait payer un appel pour rien.
+		if [[ $st =~ ^quota\ ([0-9]+) ]] && ((now >= BASH_REMATCH[1])); then
+			echo nuage
+		else
+			echo local
+		fi
+		;;
+	*)
+		# `down` / `blocked` n'ont pas d'heure de fin, et sans ce délai le
+		# poisson resterait local À VIE : la route locale interdit d'écrire
+		# $BRAIN_STATUS (voir brain_set), donc rien ne le repasserait jamais
+		# à `ok` et un réseau revenu ne serait jamais remarqué. On retente
+		# le nuage à intervalle, en se calant sur la DATE du fichier d'état.
+		stamp=$(stat -c %Y "$BRAIN_STATUS" 2>/dev/null || echo 0)
+		if ((now - stamp >= ${JARVIS_BRAIN_RETRY:-600})); then
+			echo nuage
+		else
+			echo local
+		fi
+		;;
+	esac
+}
+
+brain_url() { printf '%s' "${JARVIS_BRAIN_URL:-$(setting cerveau-url http://127.0.0.1:8099)}"; }
+brain_model() { printf '%s' "${JARVIS_BRAIN_MODEL:-$(setting cerveau-modele local)}"; }
+
+# L'appel au cerveau local, prêt à passer à group_run. La persona est
+# SOUL.md + memory/OFFLINE_PROMPT.md : l'âme dit qui il est, OFFLINE dit ce
+# qu'il ne peut pas faire. CLAUDE.md est délibérément absent — décrire des
+# mains qu'il n'a pas est la meilleure façon de le faire mentir.
+brain_local_cmd() {
+	printf '%s\n' "$JARVIS_DIR/bin/jarvis-local" \
+		--url "$(brain_url)" --model "$(brain_model)" \
+		--system "$SOUL_FILE,$MEMORY_DIR/OFFLINE_PROMPT.md" \
+		--history "$LOCAL_HIST"
+}
+
 # One question to the brain, non-streaming (the fallback path). Its
 # stdout is checked by the caller: a usage-limit notice comes back as
 # plain text here.
 brain() {
 	local text="$1" model="${2:-haiku}" reply
-	local -a args
+	local -a args cmd
 	cd "$JARVIS_DIR" || return 1
+	if [[ $(brain_route) == local ]]; then
+		mapfile -t cmd < <(brain_local_cmd)
+		printf '%s' "$("${cmd[@]}" --plain -- "$text" 2>>"$LOG")"
+		return 0
+	fi
 	mapfile -t args < <(conv_args)
 	reply=$(claude -p "${args[@]}" --model "$model" -- "$text" 2>>"$LOG")
 	if [[ -z ${reply:-} && ${args[0]} == --resume ]]; then
@@ -768,10 +853,26 @@ brain() {
 # error (usage limit, lost session) lands in $REPLY_TXT.error instead and
 # never reaches the voice.
 stream_brain() {
-	local text="$1" model="$2"
-	local -a args
+	local text="$1" model="$2" route
+	local -a args cmd
 	cd "$JARVIS_DIR" || return 1
 	rm -f "$REPLY_TXT" "$REPLY_TXT.error" "$REPLY_TXT.interrupted"
+	# La route se décide ICI, dans le parent. Un `ROUTE=` posé dans une
+	# substitution de processus ne remonte jamais, et conv_args plus bas
+	# comparerait alors contre une chaîne vide à chaque tour.
+	route=$(brain_route)
+	if [[ $route == local ]]; then
+		mine || return 0
+		mapfile -t cmd < <(brain_local_cmd)
+		group_run brain "${cmd[@]}" -- "$text" 2>>"$LOG" |
+			"$JARVIS_DIR/bin/jarvis-sentences" "$REPLY_TXT" |
+			speak_sentences
+		if [[ -e $REPLY_TXT.interrupted ]]; then
+			log "brain: stream interrupted (local)"
+			trace "✗ flux interrompu"
+		fi
+		return 0
+	fi
 	mapfile -t args < <(conv_args)
 	# The last look before the money is spent. Everything between taking the
 	# machine and this line — a bubble sent to the fish, a model chosen, a
@@ -802,7 +903,7 @@ stream_brain() {
 # `mine`, because each one of them is seconds long and the user may have said
 # stop in the middle of any of them.
 run_exchange() {
-	local text="$1" reply model err shape
+	local text="$1" reply model err shape reflex
 	mine || return 0
 	log "ask: $text"
 	printf '%s' "$text" >"$LAST_ASK"
@@ -815,6 +916,21 @@ run_exchange() {
 	# Every ask shows in the philactère — spoken, typed from the Control
 	# Center, or piped through the CLI alike.
 	mascot heard "$text"
+	# Le réflexe passe AVANT le cerveau : ce qui se lit avec `date` n'a
+	# jamais eu besoin d'un modèle, et hors ligne c'est la seule façon
+	# d'avoir la vraie valeur plutôt qu'une valeur inventée. Le crochet est
+	# ici et pas dans handle_transcript : une question tapée depuis le
+	# Control Center ou lancée par une routine mérite le même réflexe que
+	# celle qu'on prononce.
+	if reflex=$(reflex_match "$text") && reply=$(reflex_do "$reflex" "$text"); then
+		log "réflexe: $reply"
+		trace "⚡ réflexe « $text » → « $reply »"
+		printf '%s' "$reply" >"$LAST_REPLY"
+		journal "réflexe : « $text » → « $reply »"
+		mascot reply "$reply"
+		do_speak "$reply" followup
+		return 0
+	fi
 	model=$(pick_model "$text")
 	log "model: $model"
 	trace "ask($model) « $text »"
@@ -991,6 +1107,107 @@ is_noise() {
 	grep -qiE -f <(printf '%s\n' "$pats") <<<"$1"
 }
 
+# --------------------------------------------------------- les réflexes
+#
+# Certaines demandes n'ont jamais eu besoin d'un modèle. « Quelle heure
+# est-il » se répond avec `date`, en deux cents millisecondes, exactement.
+# Le cerveau, lui, met deux secondes et — mesuré le 2026-09-05 sur le modèle
+# local — répond « Il est 14h37 » à 23 h passées, avec aplomb, dans le
+# format parlé exact de Jarvis. La table n'est donc pas une optimisation :
+# c'est ce qui empêche le poisson de mentir sur ce qu'il ne peut pas lire.
+#
+# Une rangée : motif <TAB> commande <TAB> slot <TAB> phrase-fr | phrase-en.
+# Le motif est ancré ICI en ^(motif)$ et jamais dans le fichier — c'est la
+# même mécanique que is_noise(), et c'est ce qui garde « pourquoi le son
+# est-il si fort ? » loin de la commande de volume.
+
+# Les rangées utilisables, commentaires et lignes vides ôtés. Le filtre de
+# sécurité est ici, au chargement, et pas à l'exécution : ce chemin ne passe
+# PAS par .claude/settings.json — le cerveau y a sa liste d'autorisations,
+# la table n'a que cette porte-ci. Une rangée refusée le dit dans le log
+# plutôt que de disparaître en silence.
+reflex_rows() {
+	local file="$MEMORY_DIR/REFLEXES.md" line cmd
+	[[ -e $file ]] || return 0
+	sed '/<!--/,/-->/d' "$file" 2>/dev/null |
+		grep -v '^[[:space:]]*$' | grep -v '^[[:space:]]*#' |
+		while IFS= read -r line; do
+			[[ $line == *$'\t'* ]] || continue
+			cmd=${line#*$'\t'}
+			cmd=${cmd%%$'\t'*}
+			if grep -qE '(^|[;&|`$([:space:]])(rm|sudo|pkexec|shutdown|reboot|systemctl|kill|pkill|dd|mkfs|chmod|chown)([[:space:]]|$)|omarchy[[:space:]]+(system|update|reinstall)' <<<"$cmd"; then
+				log "réflexe refusé (commande interdite) : $cmd"
+				continue
+			fi
+			printf '%s\n' "$line"
+		done
+}
+
+# La première rangée dont le motif couvre TOUT le transcript, ou rien. La
+# table est lue dans l'ordre : le plus spécifique doit donc être écrit en
+# premier, et memory/REFLEXES.md le dit à qui l'édite.
+reflex_match() {
+	local text="$1" line pat
+	# La couture des tests, comme JARVIS_BRAIN ou JARVIS_WAKE : la table est
+	# de la POLITIQUE, elle grandira, et un test du chemin vocal qui casse
+	# parce qu'on a ajouté une rangée finit par être désactivé. Les tests du
+	# cerveau tournent donc réflexes coupés, et ceux des réflexes les
+	# rallument explicitement. En vrai usage la table est toujours active :
+	# un réglage « réflexes: non » serait de la configuration pour une
+	# valeur qui ne change jamais.
+	[[ ${JARVIS_REFLEX:-1} == 0 ]] && return 1
+	while IFS= read -r line; do
+		pat=${line%%$'\t'*}
+		[[ -n $pat ]] || continue
+		if grep -qiE "^($pat)\$" <<<"$text" 2>/dev/null; then
+			printf '%s\n' "$line"
+			return 0
+		fi
+	done < <(reflex_rows)
+	return 1
+}
+
+# Exécuter une rangée et rendre la phrase à prononcer. `{n}` est le slot
+# numérique, `{}` la sortie de la commande.
+#
+# Le slot est BORNÉ 0–100 avant toute substitution, et il ne peut être qu'un
+# entier : c'est ce qui autorise le `eval` en dessous. Le seul texte qui
+# entre dans la commande vient de la table, que l'utilisateur écrit lui-même
+# — jamais du transcript, dont un `; rm -rf` mal entendu ferait sinon une
+# journée mémorable. Il n'y a volontairement pas de slot `texte`.
+reflex_do() {
+	local line="$1" text="$2" cmd slot say n="" out fr en
+	IFS=$'\t' read -r _ cmd slot say <<<"$line"
+	if [[ $slot == num ]]; then
+		[[ $text =~ ([0-9]{1,3}) ]] || return 1
+		n=${BASH_REMATCH[1]}
+		n=$((10#$n))
+		((n > 100)) && n=100
+	fi
+	cmd=${cmd//\{n\}/$n}
+	# Une commande qui échoue n'a pas de réponse honnête à donner : on rend
+	# la main au cerveau plutôt que de prononcer une phrase toute faite
+	# au-dessus d'un échec. Le test est dans le `if` et non sur $? plus bas :
+	# la première ligne qu'on glisserait entre les deux emporterait le code
+	# de sortie sans rien dire.
+	if ! out=$(eval "$cmd" 2>>"$LOG"); then
+		log "réflexe : la commande a échoué — $cmd"
+		return 1
+	fi
+	# Une sortie multi-lignes rendrait une phrase illisible : on garde la
+	# première ligne, débarrassée de ses blancs.
+	out=$(head -1 <<<"$out" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+	fr=${say%%|*}
+	en=${say#*|}
+	[[ $en == "$say" ]] && en=$fr
+	fr=$(sed 's/^[[:space:]]*//; s/[[:space:]]*$//' <<<"$fr")
+	en=$(sed 's/^[[:space:]]*//; s/[[:space:]]*$//' <<<"$en")
+	say=$(fixed "$fr" "$en")
+	say=${say//\{\}/$out}
+	say=${say//\{n\}/$n}
+	printf '%s' "$say"
+}
+
 # « Oublie ce que je viens de dire » is not a question for the brain: the
 # brain is what would be asked to forget, from inside the very turn to be
 # forgotten. The machine answers it itself, before any exchange opens.
@@ -1004,35 +1221,62 @@ is_undo() {
 # forgotten ask on stdout. Returns 1, with the reason on stderr, when there
 # is nothing to forget.
 forget_last() {
-	local id out ask day file
+	local id out ask file
+	mkdir -p "$STATE_DIR/undo"
+	# Le cerveau local ne tient pas de session claude : son fil est un JSON
+	# de tours dans $LOCAL_HIST, et oublier le dernier échange, c'est en
+	# retirer la dernière paire. Sans cette branche « Oublier » échouait sur
+	# toute la route locale — silencieusement, puisque le panneau appelle
+	# `undo --quiet`.
+	if [[ $(brain_route) == local ]]; then
+		cp -f "$LOCAL_HIST" "$STATE_DIR/undo/local-$(date +%s).json" 2>/dev/null
+		ask=$(python3 -c '
+import json, sys
+try:
+    h = json.load(open(sys.argv[1]))
+except (OSError, ValueError):
+    sys.exit(1)
+while h and h[-1].get("role") != "user":
+    h.pop()
+if not h:
+    sys.exit(1)
+q = h.pop()["content"]
+json.dump(h, open(sys.argv[1], "w"), ensure_ascii=False)
+print(q)
+' "$LOCAL_HIST" 2>>"$LOG") || {
+			echo "aucune conversation en cours" >&2
+			return 1
+		}
+		forget_tail "$ask"
+		return 0
+	fi
 	id=$(cat "$CONV_FLAG" 2>/dev/null)
 	if [[ -z $id ]]; then
 		echo "aucune conversation en cours" >&2
 		return 1
 	fi
-	mkdir -p "$STATE_DIR/undo"
 	cp -f "$CLAUDE_PROJECTS/$(realpath "$JARVIS_DIR" | tr / -)/$id.jsonl" "$STATE_DIR/undo/$id-$(date +%s).jsonl" 2>/dev/null
 	out=$("$JARVIS_DIR/bin/jarvis-transcript" undo --projects "$CLAUDE_PROJECTS" --dir "$JARVIS_DIR" --session "$id" 2>>"$LOG") || {
 		echo "rien à oublier" >&2
 		return 1
 	}
 	ask=$(printf '%s' "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin)["forgotten"]["ask"])')
+	forget_tail "$ask"
+}
+
+# Ce que les deux routes font pareil une fois la question connue : la ligne
+# de journal, la carte du panneau, les traces.
+forget_tail() {
+	local ask="$1" file
 	# The journal line of that exchange, and only the last one that matches:
 	# the same question asked twice in a day loses one line, not two.
-	day=$(date +%F)
-	file="$MEMORY_DIR/journal/$day.md"
-	if [[ -e $file ]]; then
-		python3 - "$file" "$ask" <<-'PY'
-			import sys
-			path, ask = sys.argv[1], sys.argv[2]
-			lines = open(path, encoding="utf-8").read().split("\n")
-			for i in range(len(lines) - 1, -1, -1):
-			    if "échange : « " + ask + " »" in lines[i]:
-			        del lines[i]
-			        break
-			open(path, "w", encoding="utf-8").write("\n".join(lines))
-		PY
-	fi
+	# À l'envers, on supprime la PREMIÈRE correspondance, puis on remet à
+	# l'endroit : c'est la dernière du fichier. ENVIRON plutôt que `-v`,
+	# qui interpréterait une contre-oblique tombée dans la question.
+	file="$MEMORY_DIR/journal/$(date +%F).md"
+	[[ -e $file ]] && ASK="échange : « $ask »" tac "$file" |
+		awk '!d && index($0, ENVIRON["ASK"]) { d = 1; next } 1' | tac >"$file.tmp" &&
+		mv "$file.tmp" "$file"
 	# The panel shows nothing after an undo. It used to step back to the
 	# previous exchange, and that read as « nothing happened, the last
 	# message is still there » (2026-09-02 14:05): a forgotten exchange
@@ -1152,7 +1396,7 @@ do_finish() {
 	if is_noise "$text"; then
 		log "noise: $text"
 		transition rest
-		mascot_emote curious
+		mascot_park emote curious
 		return 0
 	fi
 	if is_undo "$text"; then
@@ -1303,7 +1547,16 @@ cancel)
 	do_cancel "$@"
 	;;
 reset)
-	rm -f "$CONV_FLAG"
+	# Les deux fils, pas un seul : oublier le nuage en gardant l'historique
+	# local ferait resurgir, au prochain vol, une conversation que
+	# l'utilisateur croit close.
+	#
+	# Et la carte du panneau AVEC : elle continuait d'afficher la dernière
+	# question et sa réponse après « Nouvelle conversation », ce qui se lit
+	# exactement comme « il ne s'est rien passé ». Le fil est clos, la carte
+	# aussi — c'est déjà ce que fait forget_tail après un oubli.
+	rm -f "$CONV_FLAG" "$LOCAL_HIST" "$LAST_ASK" "$LAST_REPLY"
+	mascot heard ""
 	notify "Jarvis" "Nouvelle conversation — l'âme a été relue."
 	;;
 settle)
@@ -1382,7 +1635,7 @@ watchdog)
 	# mind — so it belongs in the journal a dream reads for root causes.
 	note_failure "chien de garde : figé pendant $(stage_fr "$stuck") depuis $age s ($why), retour au repos"
 	transition rest
-	mascot_emote worried
+	mascot_park emote worried
 	notify "Jarvis" "Jarvis s'était figé pendant $(stage_fr "$stuck") ; il est revenu au repos."
 	;;
 dispatch)
@@ -1425,13 +1678,13 @@ dispatch)
 		if [[ -z ${summary// /} ]]; then
 			summary="La mission a échoué — voyez le journal des missions."
 			note_failure "mission échouée dans $dir : « $task » ($mission)"
-			mascot_emote worried
+			mascot_park emote worried
 		else
-			mascot_emote celebrate
+			mascot_park emote celebrate
 		fi
 		journal "mission terminée : $summary"
 		trace "mission terminée : $summary"
-		mascot_aside "$summary"
+		mascot_park reply "$summary"
 		notify "Jarvis — mission terminée" "$summary"
 		[[ $(state) == idle ]] && ! quiet_now && "$JARVIS_BIN" say "$summary"
 	) >/dev/null 2>&1 &
@@ -1469,10 +1722,53 @@ note)
 # n'a dit ça ». It is how the whole of memory/NOISE.md — the credits it must
 # catch AND the real requests it must never eat — is held by tests/run in
 # milliseconds, with no audio, no model and no real time.
+# Le préchauffage du cerveau local, lancé par jarvis-brain.service juste
+# après le serveur. Il envoie EXACTEMENT la persona que l'échange enverra —
+# c'est tout l'intérêt : un préfixe différent d'un octet ne réchauffe rien.
+# La première mesure l'a prouvé, un préchauffage à « bonjour » sans prompt
+# système laissait quand même 23 s au premier « raconte-moi une blague ».
+# L'historique est délibérément vide : réchauffer ne doit pas ouvrir un fil.
+warmup)
+	url=$(brain_url)
+	for _ in $(seq 60); do
+		curl -sf -m 2 "$url/health" >/dev/null 2>&1 && break
+		sleep 2
+	done
+	mapfile -t cmd < <(brain_local_cmd)
+	# --history vidé par l'expansion de tableau : réchauffer ne doit pas
+	# ouvrir un fil.
+	"${cmd[@]//"$LOCAL_HIST"/}" --plain -- "bonjour" >/dev/null 2>&1
+	log "cerveau local préchauffé"
+	;;
 noise\?)
 	shift
 	is_noise "$*"
 	exit $?
+	;;
+# La table des réflexes, assertable sans micro et sans rien exécuter : elle
+# imprime le NOM de la rangée qui attrape le transcript, et sort 1 si aucune
+# ne l'attrape. C'est ce qui permet aux tests de tenir les motifs — ceux qui
+# doivent mordre ET, surtout, les vraies questions qu'ils ne doivent jamais
+# manger — sans jouer une seule commande. `--run` exécute pour de bon et
+# imprime la phrase, pour vérifier une rangée à la main.
+reflexe\?)
+	shift
+	run=0
+	if [[ ${1:-} == --run ]]; then
+		run=1
+		shift
+	fi
+	row=$(reflex_match "$*") || exit 1
+	if ((run)); then
+		reflex_do "$row" "$*" || exit 1
+		echo
+	else
+		# Le motif seul : c'est lui l'identité de la rangée, et une commande
+		# imprimée ici finirait recopiée dans un test qui casserait au
+		# premier changement de commande.
+		printf '%s\n' "${row%%$'\t'*}"
+	fi
+	exit 0
 	;;
 undo\?)
 	shift
@@ -1494,7 +1790,16 @@ undo)
 		;;
 	esac
 	if ! ask=$(forget_last); then
-		((quiet)) || { claim; stage_guard; do_speak "$(fixed "Il n'y a rien à oublier." "There is nothing to forget.")"; }
+		# Le panneau appelle `undo --quiet` : sans voix, un échec ne laissait
+		# AUCUNE trace, et le bouton avait l'air cassé. La notification est
+		# son seul canal de retour.
+		if ((quiet)); then
+			notify "Jarvis" "Rien à oublier."
+		else
+			claim
+			stage_guard
+			do_speak "$(fixed "Il n'y a rien à oublier." "There is nothing to forget.")"
+		fi
 		exit 1
 	fi
 	notify "Jarvis" "Oublié : « $ask »"
@@ -1507,7 +1812,6 @@ routines)
 routine)
 	# routine <n> on|off|delete — routine add "<line>"
 	shift
-	memory_init
 	if [[ ${1:-} == add ]]; then
 		shift
 		"$JARVIS_DIR/bin/jarvis-routines" --file "$ROUTINES" add "$*"
@@ -1519,7 +1823,11 @@ transcript)
 	# The conversation as it was lived: the last N exchanges with what he
 	# thought and did between the question and the answer.
 	shift
-	exec "$JARVIS_DIR/bin/jarvis-transcript" show --projects "$CLAUDE_PROJECTS" --dir "$JARVIS_DIR" --current "$(cat "$CONV_FLAG" 2>/dev/null)" "$@"
+	# --journal est le repli quand il n'y a pas de session claude à lire,
+	# c'est-à-dire toute la route locale : le journal du jour porte l'heure
+	# et la paire question/réponse, et il est écrit par les deux cerveaux.
+	exec "$JARVIS_DIR/bin/jarvis-transcript" show --projects "$CLAUDE_PROJECTS" --dir "$JARVIS_DIR" \
+		--current "$(cat "$CONV_FLAG" 2>/dev/null)" --journal "$MEMORY_DIR/journal/$(date +%F).md" "$@"
 	;;
 conversations)
 	shift
@@ -1566,7 +1874,7 @@ dream)
 	[[ -n ${summary:-} ]] && journal "rêve : $summary"
 	notify "Jarvis" "${summary:-Le rêve a tourné court. Voyez le journal.}"
 	if [[ -n ${summary:-} ]]; then
-		mascot_aside "$summary"
+		mascot_park reply "$summary"
 		(( quiet )) || do_speak "$summary"
 	fi
 	if mine; then
@@ -1592,8 +1900,8 @@ heartbeat)
 	brain_verdict "$RUN_DIR/heartbeat.txt" ronde || exit 1
 	if [[ -n ${report:-} && $report != "RAS" && ${report:0:4} != "RAS." ]]; then
 		journal "ronde : $report"
-		mascot_emote worried
-		mascot_aside "$report"
+		mascot_park emote worried
+		mascot_park reply "$report"
 		notify "Jarvis — ronde" "$report"
 	fi
 	;;
@@ -1685,11 +1993,8 @@ digest)
 			-- "$(cat "$MEMORY_DIR/DIGEST_PROMPT.md")"$'\n\n'"Fichier : $f"$'\n'"Fiche : $fiche" 2>>"$LOG" |
 			"$JARVIS_DIR/bin/jarvis-sentences" --quiet "$RUN_DIR/digest.txt"
 		summary=$(cat "$RUN_DIR/digest.txt" 2>/dev/null)
-		if brain_verdict "$RUN_DIR/digest.txt"; then
-			brain_ok=1
-		else
-			brain_ok=0
-		fi
+		brain_verdict "$RUN_DIR/digest.txt" && brain_ok=1 || brain_ok=0
+
 		if ((brain_ok)) && [[ -s $fiche ]]; then
 			dest="$inbox/.archive/$base"
 			[[ -e $dest ]] && dest="$inbox/.archive/$(date +%s)-$base"
@@ -1698,7 +2003,7 @@ digest)
 			journal "digestion : $base → knowledge/inbox/$(basename "$fiche")"
 			trace "✓ digéré : $base → $(basename "$fiche")"
 			digested=1
-			mascot_emote curious
+			mascot_park emote curious
 			notify "Jarvis — document digéré" "${summary:-$base}"
 			[[ $(state) == idle ]] && ! quiet_now && "$JARVIS_BIN" say "$summary"
 		elif ((brain_ok)); then
@@ -1785,7 +2090,7 @@ save)
 		fi
 	fi
 	log "save: $what"
-	mascot_emote curious
+	mascot_park emote curious
 	notify "Jarvis" "Je digère $what."
 	;;
 greet)
@@ -1809,7 +2114,7 @@ greet)
 	' "$MEMORY_DIR/journal/$(date +%F).md" 2>/dev/null | tail -4)
 	[[ -n $lines ]] || exit 0
 	summary=$(printf '%s' "$lines" | sed 's/^[a-zé ]* : //' | awk '{ printf "%s%s", (NR > 1 ? " " : ""), $0 }' | cut -c1-240)
-	mascot_aside "Pendant ton absence : $summary"
+	mascot_park reply "Pendant ton absence : $summary"
 	log "greet: $summary"
 	;;
 look)
@@ -1928,13 +2233,13 @@ tick)
 	stamp="$STATE_DIR/emote-disk"
 	if (($(df --output=pcent / 2>/dev/null | tail -1 | tr -dc 0-9) >= 90)) && [[ ! -e $stamp || -z $(find "$stamp" -mmin -1440 2>/dev/null) ]]; then
 		touch "$stamp"
-		mascot_emote worried
+		mascot_park emote worried
 		notify "Jarvis" "Le disque est presque plein."
 	fi
 	stamp="$STATE_DIR/emote-updates"
 	if [[ ! -e $stamp || -z $(find "$stamp" -mmin -360 2>/dev/null) ]]; then
 		touch "$stamp"
-		(exec 7>&-; omarchy-update-available >/dev/null 2>&1 && mascot_emote curious) &
+		(exec 7>&-; omarchy-update-available >/dev/null 2>&1 && mascot_park emote curious) &
 	fi
 	# Documents parked in the inbox while the brain was out: retry now.
 	if [[ -n $(find "$BOX_DIR/input/.pending" -maxdepth 1 -type f ! -name '.*' -print -quit 2>/dev/null) ]]; then
@@ -2054,6 +2359,36 @@ doctor)
 	# arguments or through the enclosing scope, never interpolated into a
 	# quoted string: a space in $HOME is not supposed to become a bug in a
 	# diagnostic tool.
+
+	# Une table mal formée ne casse rien : les rangées sans tabulation sont
+	# simplement ignorées, et le poisson repart vers le cerveau comme avant.
+	# Ce silence EST le problème — une rangée qu'on croit écrite et qui ne
+	# mord jamais est invisible. Le docteur la rend visible.
+	check_reflexes() {
+		local line pat bad=0 n=0
+		[[ -e $MEMORY_DIR/REFLEXES.md ]] || return 0
+		while IFS= read -r line; do
+			n=$((n + 1))
+			pat=${line%%$'\t'*}
+			# grep sort 1 quand rien ne matche et 2 quand le MOTIF est
+			# invalide. Sur /dev/null tout motif correct sort 1 : tester
+			# « échec » ici déclarait donc toute la table cassée.
+			grep -qE "^($pat)$" </dev/null 2>/dev/null
+			if (($? > 1)); then
+				printf 'motif invalide : %s\n' "$pat" >&2
+				bad=1
+			fi
+		done < <(reflex_rows)
+		# Le vrai piège : un fichier bien présent dont AUCUNE ligne n'est
+		# lisible, parce qu'il a été écrit avec des espaces au lieu de
+		# tabulations. Sans ce test, personne ne l'apprendrait jamais.
+		if ((n == 0)); then
+			printf 'aucune rangée lisible (des tabulations, pas des espaces ?)\n' >&2
+			return 1
+		fi
+		return $bad
+	}
+
 	check_piper() {
 		local out rc size
 		out=$(mktemp) || return 1
@@ -2145,6 +2480,7 @@ doctor)
 	chk "boîte $BOX_DIR" test -d "$BOX_DIR/input/.work"
 	chk "symlink memory" test "$(readlink -f "$BOX_DIR/memory" 2>/dev/null)" = "$(readlink -f "$MEMORY_DIR")"
 	chk "settings.json valide" python3 -c "import json;json.load(open('$JARVIS_DIR/.claude/settings.json'))"
+	chk "table des réflexes bien formée" check_reflexes
 	chk "prompts (ronde, rêve, digestion)" bash -c "test -f '$MEMORY_DIR/HEARTBEAT_PROMPT.md' -a -f '$MEMORY_DIR/DREAM_PROMPT.md' -a -f '$MEMORY_DIR/DIGEST_PROMPT.md'"
 	chk "connaissance à jour (omarchy)" test "$(omarchy version 2>/dev/null)" = "$(cat "$MEMORY_DIR/knowledge/VERSION" 2>/dev/null)"
 	# The one line with a sentence instead of a label, because the answer is
@@ -2181,6 +2517,24 @@ status)
 	((next_hb < now)) && next_hb=$now
 	printf 'state=%s\n' "$(state)"
 	printf 'brain=%s\n' "$(brain_status)"
+	# `cerveau` est le réglage, `route` ce qu'il donne maintenant : en
+	# `auto` les deux diffèrent dès que le nuage tombe, et le panneau doit
+	# pouvoir dire « auto — local en ce moment » plutôt que juste « auto ».
+	route=$(brain_route)
+	# La joignabilité n'est sondée QUE si la route est locale : le panneau
+	# rafraîchit toutes les trois secondes, et un curl inutile toutes les
+	# trois secondes est un curl de trop. En route nuage, `brain=` dit déjà
+	# tout ce qu'il y a à dire.
+	joignable=-
+	if [[ $route == local ]]; then
+		if curl -sf -m 1 "$(brain_url)/health" >/dev/null 2>&1; then
+			joignable=oui
+		else
+			joignable=non
+		fi
+	fi
+	printf 'cerveau=%s\nroute=%s\ncerveau_url=%s\ncerveau_modele=%s\ncerveau_joignable=%s\n' \
+		"$(setting cerveau auto)" "$route" "$(brain_url)" "$(brain_model)" "$joignable"
 	printf 'quiet=%s\n' "$(quiet_now && echo oui || echo non)"
 	printf 'rondes=%s\nreves=%s\nsilence=%s\n' "$(setting rondes oui)" "$(setting reves oui)" "$(setting silence 23-7)"
 	# The key carries a hyphen in the soul and an underscore here: these
@@ -2189,17 +2543,16 @@ status)
 	# is already an identifier and consistency is worth more than the hyphen.
 	printf 'micro_coupe=%s\n' "$(setting micro-coupe ecrire)"
 	printf 'corps=%s\noeil=%s\ncriniere=%s\nqueue=%s\ncouleur=%s\n' "$(setting corps B1)" "$(setting oeil E1)" "$(setting criniere M1)" "$(setting queue T1)" "$(setting couleur or)"
-	printf 'now=%s\nlast_ask_at=%s\nlast_heartbeat=%s\nnext_heartbeat=%s\nlast_dream=%s\n' \
-		"$now" "$last_ask" "$last_hb" "$next_hb" "$(stat -c %Y "$STATE_DIR/last-dream" 2>/dev/null || echo 0)"
+	printf 'last_heartbeat=%s\nnext_heartbeat=%s\n' "$last_hb" "$next_hb"
 	printf 'last_ask=%s\n' "$(tr '\n' ' ' 2>/dev/null <"$LAST_ASK")"
 	printf 'last_reply=%s\n' "$(tr '\n' ' ' 2>/dev/null <"$LAST_REPLY")"
 	printf 'failures=%s\n' "$(grep '^- \[' "$FAILURES" 2>/dev/null | wc -l)"
 	printf 'lessons=%s\n' "$(grep '^- ' "$MEMORY_DIR/LEARNED.md" 2>/dev/null | wc -l)"
 	printf 'suggestions=%s\n' "$(grep '^- \[' "$SUGGESTIONS" 2>/dev/null | wc -l)"
-	# Active routines, and the soonest of them.
+	# Combien de routines actives. La PROCHAINE était calculée ici aussi,
+	# et le panneau ne l'a jamais lue.
 	"$JARVIS_DIR/bin/jarvis-routines" --file "$ROUTINES" list 2>/dev/null |
-		awk -F'\t' '$2 == "on" { n++; if ($7 > 0 && (soon == 0 || $7 < soon)) soon = $7 }
-		             END { printf "routines=%d\nnext_routine=%d\n", n, soon }'
+		awk -F'\t' '$2 == "on" { n++ } END { print "routines=" n + 0 }'
 	;;
 suggestions)
 	# The dream's proposals, one per line: `<n>\t<date>\t<text>` with the
@@ -2236,7 +2589,7 @@ suggestion)
 	fi
 	;;
 *)
-	echo "usage: jarvis [press|cancel [--say] [--from <mot>]|reset|settle|watchdog|ask [--quiet] <text>|say <text>|state|status|dispatch [--dir <dir>] <task>|dream [--quiet]|maybe-dream|heartbeat|tick|digest|doctor [--quiet] [--mic]|rotate|look [random]|lastcmd|missed [min]|save|greet|index|note <text>|noise? <text>|suggestions|suggestion <n> accept|reject]" >&2
+	echo "usage: jarvis [press|cancel [--say] [--from <mot>]|reset|settle|watchdog|ask [--quiet] <text>|say <text>|state|status|dispatch [--dir <dir>] <task>|dream [--quiet]|maybe-dream|heartbeat|tick|digest|doctor [--quiet] [--mic]|rotate|look [random]|lastcmd|missed [min]|save|greet|index|note <text>|noise? <text>|reflexe? [--run] <text>|warmup|suggestions|suggestion <n> accept|reject]" >&2
 	exit 1
 	;;
 esac

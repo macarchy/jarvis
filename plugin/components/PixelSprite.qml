@@ -22,7 +22,6 @@ Item {
   property int frameWidth: 36
   property int frameHeight: 28
   property int pixelScale: 4
-  property bool playing: true
 
   property int frame: 0
 
@@ -43,7 +42,6 @@ Item {
 
   // Rows of the frame eaten off the bottom, always whole ones.
   property int squash: 0
-  property int squashRows: 6
 
   width: frameWidth * pixelScale
   height: frameHeight * pixelScale
@@ -91,7 +89,7 @@ Item {
 
   SequentialAnimation {
     id: cutAnim
-    NumberAnimation { target: root; property: "squash"; to: root.squashRows; duration: 70; easing.type: Easing.InQuad }
+    NumberAnimation { target: root; property: "squash"; to: 6; duration: 70; easing.type: Easing.InQuad }
     ScriptAction {
       script: {
         var todo = root.cutActions
@@ -142,7 +140,7 @@ Item {
 
   Timer {
     interval: Math.max(40, Math.round(1000 / Math.max(0.1, root.shownFps)))
-    running: root.playing && root.visible && root.shownFrames > 1
+    running: root.visible && root.shownFrames > 1
     repeat: true
     onTriggered: root.frame = (root.frame + 1) % root.shownFrames
   }

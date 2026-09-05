@@ -17,8 +17,15 @@ pass=0 fail=0 skipped=0 current=""
 # mktemp trees (one per test, they used to pile up in /tmp) nor the real
 # recorders and players a press leaves running on purpose.
 sandboxes=()
+# Les faux llama-server vivent hors des sandbox (ce sont des processus, pas
+# des répertoires) : sans cette liste, un test interrompu laisserait un
+# serveur accroché à son port jusqu'au prochain redémarrage.
+llama_pids=()
 cleanup() {
-	local sb pidfile pgid
+	local sb pidfile pgid pid
+	for pid in ${llama_pids+"${llama_pids[@]}"}; do
+		kill "$pid" 2>/dev/null
+	done
 	for sb in ${sandboxes+"${sandboxes[@]}"}; do
 		# Whole groups, the way bin/jarvis kills them: a bare pid would leave
 		# the recorder holding the microphone behind its little session shell.
@@ -48,6 +55,18 @@ sandbox() {
 	# has not asked for one of its own must never inherit the doctored copy
 	# left exported by the previous test.
 	unset JARVIS_SOUL
+	# Le cerveau est épinglé sur le nuage, c'est-à-dire sur le faux `claude`.
+	# Sans ça, tout test qui met BRAIN_STATUS à `quota` ou `down` bascule en
+	# route locale et va frapper un vrai llama-server sur 127.0.0.1 : la
+	# suite cesserait d'être hermétique et passerait ou échouerait selon ce
+	# qui tourne sur la machine du développeur. L'URL pointe dans le vide
+	# pour que même une erreur de route ne puisse joindre personne.
+	export JARVIS_BRAIN=nuage JARVIS_BRAIN_URL="http://127.0.0.1:9"
+	# Réflexes coupés par défaut, pour la même raison : les tests du chemin
+	# vocal parlent au cerveau, et « quelle heure est-il » est justement
+	# l'énoncé d'exemple de cinq d'entre eux. Les tests des réflexes
+	# rallument la table eux-mêmes.
+	export JARVIS_REFLEX=0
 	mkdir -p "$JARVIS_RUN" "$JARVIS_STATE" "$JARVIS_MEMORY/knowledge"
 	cp "$TESTS_DIR"/../memory/*_PROMPT.md "$JARVIS_MEMORY/"
 	echo test >"$JARVIS_MEMORY/knowledge/VERSION"
@@ -862,13 +881,13 @@ t "aparté : une ronde attend son tour et arrive quand même"
 # mid-answer used to wipe the bubble the user was reading.
 FAKE_CLAUDE_STREAM="$FIX/report.jsonl" "$JARVIS" heartbeat
 assert "rien n'est passé au poisson" bash -c "! grep -q 'macarchy.jarvis reply' '$FAKE_SHELL_LOG' 2>/dev/null"
-assert "l'aparté est garé" grep -q 'disque' "$JARVIS_STATE/aside-pending"
+assert "la réponse est garée" grep -q 'disque' "$JARVIS_STATE/reply-pending"
 assert "l'émotion est garée" test "$(cat "$JARVIS_STATE/emote-pending")" = worried
 "$JARVIS" cancel
 assert "l'aparté est arrivé" grep -q 'macarchy.jarvis reply.*disque' "$FAKE_SHELL_LOG"
 assert "l'aparté est sur la Touch Bar" grep -q 'macarchy.jarvis reply.*disque' "$FAKE_DFR_LOG"
 assert "l'émotion aussi" grep -q 'macarchy.jarvis emote worried' "$FAKE_SHELL_LOG"
-assert "plus rien en attente" test ! -e "$JARVIS_STATE/aside-pending"
+assert "plus rien en attente" test ! -e "$JARVIS_STATE/reply-pending"
 
 t "un échec passager n'efface pas la conversation"
 printf 'idle' >"$JARVIS_RUN/state"
@@ -1149,7 +1168,10 @@ assert "toutes les planches attendues" bash -c '
 	for sheet in idle listening thinking speaking cancel sleeping tired dnd worried proud curious celebrate; do
 		[[ -e "$1/$sheet.png" ]] || { echo "planche manquante : $sheet"; exit 1; }
 	done' _ "$JARVIS_SPRITES"
-assert "canevas 72 de large" bash -c "python3 '$TESTS_DIR/../sprites/preview.py' --no-ascii --scale 1 --out /dev/null '$JARVIS_SPRITES/tired.png' | grep -q '144x56'"
+# La largeur se lit dans l'IHDR du PNG, seize octets après l'en-tête : c'est
+# tout ce que ce test demandait à sprites/preview.py, qui rendait « 144x56 »
+# (le canevas 72 doublé) au prix d'un décodeur PNG maison de 125 lignes.
+assert "canevas 144 de large (72 doublé)" bash -c "python3 -c \"import struct,sys;print(struct.unpack('>II', open(sys.argv[1],'rb').read()[16:24])[0])\" '$JARVIS_SPRITES/tired.png' | grep -qx '144'"
 assert "le poisson a rechargé ses planches" grep -q 'macarchy.jarvis reload' "$FAKE_SHELL_LOG"
 
 # ---- every shape configuration, every part-wise move, attached
@@ -1329,6 +1351,197 @@ printf 'idle' >"$JARVIS_RUN/state"
 "$JARVIS" tick
 assert "boîte échafaudée" test -d "$JARVIS_BOX/input/.work"
 assert "aucun appel cerveau" test ! -s "$FAKE_CLAUDE_LOG"
+
+# ---- le cerveau local
+#
+# Ce que ces tests protègent tient en une phrase : le chemin de la voix ne
+# doit pas savoir quel cerveau lui parle. jarvis-local traduit du SSE OpenAI
+# vers les événements de `claude -p --output-format stream-json`, et si cette
+# traduction dérive, le poisson devient muet sans que rien ne le dise.
+
+# Le faux serveur se pilote par FICHIERS sous $LLAMA_DIR, jamais par
+# l'environnement : il est forke une fois par test, et une variable posee
+# ensuite sur la ligne de commande de jarvis ne l'atteindrait pas.
+llama_say()  { printf '%s' "$1" >"$LLAMA_DIR/reply"; }
+llama_think(){ printf '%s' "$1" >"$LLAMA_DIR/think"; }
+llama_log()  { printf '%s' "$LLAMA_DIR/log"; }
+
+llama_up() {
+	LLAMA_PORT=$((18000 + RANDOM % 1000))
+	LLAMA_DIR="$SB/llama"
+	mkdir -p "$LLAMA_DIR"
+	"$TESTS_DIR/bin/fake-llama" "$LLAMA_PORT" "$LLAMA_DIR" &
+	LLAMA_PID=$!
+	llama_pids+=("$LLAMA_PID")
+	export JARVIS_BRAIN=local JARVIS_BRAIN_URL="http://127.0.0.1:$LLAMA_PORT"
+	local i=0
+	until curl -sf "http://127.0.0.1:$LLAMA_PORT/health" >/dev/null 2>&1; do
+		i=$((i + 1)); ((i > 100)) && return 1; sleep 0.05
+	done
+}
+
+t "local: la voix parle, et le nuage n'est jamais appelé"
+llama_up || skip "faux serveur non démarré"
+llama_say "Il fait beau. Profites-en."
+"$JARVIS" ask "raconte-moi"
+assert "réponse prononcée" grep -q "Il fait beau" "$FAKE_PIPER_LOG"
+assert "deuxième phrase aussi" grep -q "Profites-en" "$FAKE_PIPER_LOG"
+assert "aucun appel au nuage" test ! -s "$FAKE_CLAUDE_LOG"
+
+t "local: la réflexion d'un modèle thinking n'est jamais prononcée"
+llama_up || skip "faux serveur non démarré"
+llama_think "Okay so the user is asking about the weather"
+llama_say "Je ne peux pas lire la météo hors ligne."
+"$JARVIS" ask "la météo ?"
+assert "la réponse est dite" grep -q "hors ligne" "$FAKE_PIPER_LOG"
+assert "la réflexion ne l'est pas" bash -c "! grep -qi 'Okay so the user' '$FAKE_PIPER_LOG'"
+
+t "local: l'âme et OFFLINE.md partent bien dans le prompt système"
+llama_up || skip "faux serveur non démarré"
+"$JARVIS" ask --quiet "qui es-tu"
+assert "prompt système envoyé" grep -q '"role": *"system"' "$(llama_log)"
+assert "la règle d'or y est" grep -q "N.INVENTE JAMAIS" "$(llama_log)"
+assert "CLAUDE.md n'y est PAS" bash -c "! grep -q 'omarchy theme set' '$(llama_log)'"
+
+t "local: un serveur éteint est un cerveau injoignable, pas un silence"
+JARVIS_BRAIN=local JARVIS_BRAIN_URL="http://127.0.0.1:9" \
+	"$JARVIS" ask "tu es là ?"
+assert "excuse dite à voix haute" grep -q "cerveau" "$FAKE_PIPER_LOG"
+
+t "local: le fil se souvient, et reset l'oublie"
+llama_up || skip "faux serveur non démarré"
+"$JARVIS" ask --quiet "je m'appelle Philippe"
+assert "historique écrit" test -s "$JARVIS_STATE/local-history.json"
+"$JARVIS" ask --quiet "comment je m'appelle ?"
+assert "le tour précédent est renvoyé" grep -q "Philippe" "$(llama_log)"
+"$JARVIS" reset
+assert "historique effacé" test ! -e "$JARVIS_STATE/local-history.json"
+
+t "local: un tour local n'efface JAMAIS un quota du nuage"
+llama_up || skip "faux serveur non démarré"
+until_epoch=$(( $(date +%s) + 3600 ))
+printf 'quota %s' "$until_epoch" >"$JARVIS_STATE/brain"
+"$JARVIS" ask --quiet "dis-moi quelque chose"
+assert "le quota tient toujours" grep -q "quota $until_epoch" "$JARVIS_STATE/brain"
+
+t "auto: un nuage tombé depuis longtemps est retenté, pas condamné"
+printf 'down' >"$JARVIS_STATE/brain"
+touch -d "1 hour ago" "$JARVIS_STATE/brain"
+route=$(JARVIS_BRAIN=auto "$JARVIS" status | sed -n 's/^route=//p')
+assert "retour au nuage après le délai" test "$route" = nuage
+touch "$JARVIS_STATE/brain"
+route=$(JARVIS_BRAIN=auto "$JARVIS" status | sed -n 's/^route=//p')
+assert "mais pas tout de suite" test "$route" = local
+
+# ---- les réflexes
+#
+# Le mécanisme se tient sur une table-fixture, pas sur celle qui est livrée :
+# memory/REFLEXES.md est un fichier de POLITIQUE, il bougera, et un test du
+# mécanisme qui casse à chaque rangée ajoutée finit par être désactivé. Ce
+# que la vraie table doit garantir est tenu séparément, tout en bas.
+
+reflexes_fixture() {
+	cp "$FIX/reflexes.md" "$JARVIS_MEMORY/REFLEXES.md"
+	export JARVIS_REFLEX=1
+}
+
+t "réflexe : répond sans jamais appeler le cerveau"
+reflexes_fixture
+printf 'idle' >"$JARVIS_RUN/state"
+"$JARVIS" ask "quelle heure est-il"
+assert "phrase prononcée" grep -q "Il est 14:00" "$FAKE_PIPER_LOG"
+assert "aucun appel cerveau" test ! -s "$FAKE_CLAUDE_LOG"
+assert "retour à idle" state_is idle
+assert "porté au journal" journal_has "réflexe"
+
+t "réflexe : le slot num est substitué, et borné à 100"
+reflexes_fixture
+assert "42 passe" bash -c "\"$JARVIS\" 'reflexe?' --run 'mets le son à 42' | grep -q 'Son à 42 pour cent'"
+# Un « mets le son à 500 » mal entendu ne doit pas pouvoir sortir de la
+# plage : le bornage est dans reflex_do, avant toute substitution.
+assert "500 est ramené à 100" bash -c "\"$JARVIS\" 'reflexe?' --run 'mets le son à 500' | grep -q 'Son à 100 pour cent'"
+
+t "réflexe : une commande interdite est refusée au chargement"
+reflexes_fixture
+assert "la rangée ne mord pas" bash -c "! \"$JARVIS\" 'reflexe?' 'formate le disque'"
+assert "et le log le dit" grep -q "réflexe refusé" "$JARVIS_STATE/jarvis.log"
+
+t "réflexe : une commande qui échoue rend la main au cerveau"
+reflexes_fixture
+printf 'idle' >"$JARVIS_RUN/state"
+FAKE_CLAUDE_STREAM="$FIX/digest-ok.jsonl" "$JARVIS" ask "teste un échec"
+assert "la phrase du réflexe n'est PAS dite" bash -c "! grep -q 'jamais dit' '$FAKE_PIPER_LOG'"
+assert "le cerveau a bien été appelé" test -s "$FAKE_CLAUDE_LOG"
+
+# L'ancrage, exactement comme pour NOISE.md : le motif décrit le transcript
+# ENTIER. Sans lui, « pourquoi le son est-il si fort ? » réglerait le volume,
+# et une table qui mange les vraies questions est pire que pas de table.
+t "réflexe : l'ancrage protège les vraies questions"
+reflexes_fixture
+for phrase in \
+	"pourquoi quelle heure est-il" \
+	"quelle heure est-il à Tokyo ?" \
+	"peux-tu me dire si mets le son à 42 est une commande valide" \
+	"explique-moi comment régler le son"; do
+	assert "« $phrase » atteint le cerveau" bash -c "! \"$JARVIS\" 'reflexe?' \"\$1\"" _ "$phrase"
+done
+
+# ---- la table livrée
+#
+# Ici on ne teste plus le mécanisme mais la POLITIQUE : ce que les rangées
+# réellement livrées doivent, et surtout ne doivent pas, attraper.
+
+# `skip` compte et raconte, mais n'interrompt pas : le corps du test doit
+# donc être derrière la garde, pas après elle.
+# La graine livrée, pas la copie de travail : memory/REFLEXES.md est
+# gitignoré et appartient à l'utilisateur, exactement comme NOISE.md. Ce
+# qu'on tient ici est ce que le dépôt promet, pas ce que la machine a.
+SHIPPED="$TESTS_DIR/../memory/scaffold/REFLEXES.md"
+
+t "table livrée : bien formée, et lisible par le docteur"
+if [[ -e $SHIPPED ]]; then
+	cp "$SHIPPED" "$JARVIS_MEMORY/REFLEXES.md"
+	export JARVIS_REFLEX=1
+	assert "le docteur ne la refuse pas" bash -c "! \"$JARVIS\" doctor --quiet 2>&1 | grep -q 'table des réflexes'"
+else
+	skip "pas encore de table livrée"
+fi
+
+t "table livrée : chaque cas tombe où il doit"
+if [[ -e $SHIPPED ]]; then
+	cp "$SHIPPED" "$JARVIS_MEMORY/REFLEXES.md"
+	export JARVIS_REFLEX=1
+	# Un seul fichier de cas, positifs ET négatifs. Les négatifs sont le
+	# cœur : ce sont de vraies demandes qui doivent atteindre le cerveau,
+	# et c'est cette liste qui grandit le jour où une rangée se révèle trop
+	# gourmande. Aucune commande n'est exécutée ici — `reflexe?` sans
+	# --run répond en code de sortie, donc le volume ne bouge pas et
+	# l'écran ne se verrouille pas pendant la suite.
+	cases_ko=0
+	while IFS=$'\t' read -r phrase attendu; do
+		[[ -z ${phrase:-} || -z ${attendu:-} || $phrase == \#* ]] && continue
+		if "$JARVIS" 'reflexe?' "$phrase" >/dev/null 2>&1; then got=rangee; else got=AUCUNE; fi
+		[[ $attendu == AUCUNE ]] && want=AUCUNE || want=rangee
+		if [[ $got != "$want" ]]; then
+			cases_ko=$((cases_ko + 1))
+			printf '    · « %s » : attendu %s (%s), obtenu %s\n' "$phrase" "$want" "$attendu" "$got"
+		fi
+	done <"$FIX/reflexes-cases.txt"
+	assert "les $(grep -cvE '^[[:space:]]*(#|$)' "$FIX/reflexes-cases.txt") cas passent" test "$cases_ko" -eq 0
+else
+	skip "pas encore de table livrée"
+fi
+
+t "transcript : sans session claude, le journal prend le relais"
+# Le cerveau local ne tient pas de session : l'onglet « Aujourd'hui » du
+# journal restait vide alors que les échanges avaient bien eu lieu.
+mkdir -p "$JARVIS_MEMORY/journal"
+printf '# Journal\n\n- 09:12 échange : « quelle heure » → « Il est neuf heures. »\n' \
+	>"$JARVIS_MEMORY/journal/$(date +%F).md"
+out=$("$JARVIS" transcript --json 30 2>&1)
+assert "la question ressort" grep -q 'quelle heure' <<<"$out"
+assert "la réponse aussi" grep -q 'neuf heures' <<<"$out"
+assert "et la forme est celle du panneau" grep -q '"thoughts"' <<<"$out"
 
 if ((skipped > 0)); then
 	printf '\n%d réussite(s), %d échec(s), %d sauté(s)\n' "$pass" "$fail" "$skipped"

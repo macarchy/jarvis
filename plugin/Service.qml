@@ -420,7 +420,6 @@ Item {
 
     function show(): void { service.shown = true }
     function hide(): void { service.shown = false }
-    function toggle(): void { service.shown = !service.shown }
     function isShown(): string { return service.shown ? "on" : "off" }
 
     // Punctual emotion over the idle body (celebrate, worried, tired, dnd).
@@ -440,9 +439,8 @@ Item {
 
     // The Journal: what he remembers, on paper (today's exchanges with what
     // went on in his head, past conversations, routines). `journal`
-    // toggles, `journalTab conversations|routines|today` opens on a tab.
+    // bascule, `journalTab conversations|routines|today` ouvre sur un onglet.
     function journal(): void { service.journalOpen = !service.journalOpen }
-    function journalClose(): void { service.journalOpen = false }
     function journalTab(name: string): void {
       journalPage.setTab(String(name))
       service.journalOpen = true
@@ -458,7 +456,6 @@ Item {
     function swim(): void {
       if (service.mood === "idle" && !excursion.running) excursion.start()
     }
-    function ping(): string { return "ok" }
   }
 
   // ------------------------------------------------------ the prompt bar
@@ -533,24 +530,24 @@ Item {
   // Escape, once it has the keyboard, puts it away.
   property bool journalOpen: false
 
-  PanelWindow {
+  // Une vraie fenêtre, pas une surface de couche : Hyprland la tuile avec
+  // les autres et l'écran se partage, au lieu de la faire flotter par-dessus
+  // le travail en cours. La couche donnait un panneau qu'il fallait fermer
+  // pour lire ce qu'il cachait ; une fenêtre se range, se déplace et se
+  // redimensionne avec les raccourcis que l'utilisateur connaît déjà.
+  //
+  // Le clavier vient du compositeur, comme pour n'importe quelle
+  // application : toute la danse WlrKeyboardFocus disparaît avec la couche.
+  // C'est l'idiome du greffon dev-gallery du shell.
+  FloatingWindow {
     id: journalWin
     visible: service.journalOpen
-    screen: Quickshell.screens.length > 0 ? Quickshell.screens[0] : null
+    title: "Jarvis — journal"
     color: "transparent"
-
-    WlrLayershell.namespace: "macarchy-jarvis-journal"
-    WlrLayershell.layer: WlrLayer.Top
-    WlrLayershell.keyboardFocus: service.journalOpen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
-    // Respect the bar's reserved edge (so "top" means under it), reserve
-    // nothing ourselves.
-    exclusionMode: ExclusionMode.Normal
-    exclusiveZone: 0
-
-    anchors { top: true; right: true }
-    margins { top: Style.space(8); right: Style.space(8) }
     implicitWidth: Style.space(520)
-    implicitHeight: Math.min(Style.space(700), (screen ? screen.height : 900) - Style.space(60))
+    implicitHeight: Style.space(700)
+    minimumSize: Qt.size(Style.space(360), Style.space(280))
+
 
     // The page's frame is the bubble's own stepped border, without a tail.
     PixelBubble {
@@ -576,7 +573,15 @@ Item {
       }
     }
 
-    onVisibleChanged: if (visible) Qt.callLater(function() { journalPage.forceActiveFocus() })
+    // Deux choses au même endroit, parce que QML ne garde qu'un gestionnaire
+    // par signal : le focus à l'ouverture, et l'état à la fermeture. Fermée
+    // par le gestionnaire de fenêtres (croix, raccourci), `journalOpen`
+    // doit suivre — sinon le prochain appui sur `journal` ne fait rien,
+    // le service la croyant déjà ouverte.
+    onVisibleChanged: {
+      if (visible) Qt.callLater(function() { journalPage.forceActiveFocus() })
+      else service.journalOpen = false
+    }
   }
 
   PanelWindow {
@@ -724,7 +729,6 @@ Item {
           Behavior on xScale { NumberAnimation { duration: 90 } }
         },
         Translate {
-          id: swim
           x: service.swimX
           y: 0
         }

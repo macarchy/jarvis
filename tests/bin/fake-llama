@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+"""Un llama-server de poche : /v1/chat/completions en SSE, et rien d'autre.
+
+Il existe pour que la suite prouve LE CONTRAT — que jarvis-local traduit
+bien du SSE OpenAI vers les événements que jarvis-sentences attend — sans
+2,7 Go de modèle ni GPU. Ce que le vrai serveur fait de plus (penser, être
+lent, tomber en panne) se simule par variables d'environnement :
+
+  <dir>/reply    le texte rendu, découpé en morceaux
+  <dir>/think    du reasoning_content émis AVANT (doit être ignoré)
+  <dir>/log      le corps reçu, pour les assertions
+
+Les réglages vivent dans des FICHIERS, pas dans l'environnement, et sont
+relus à chaque requête : un serveur démarré une fois par test ne peut pas
+hériter d'une variable posée plus tard sur la ligne de commande de jarvis.
+Le piège a coûté deux tours de suite ici.
+"""
+import json
+import os
+import sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+
+DIR = None
+
+
+def knob(name, default=""):
+    try:
+        with open(os.path.join(DIR, name)) as f:
+            return f.read().strip()
+    except OSError:
+        return default
+
+
+class H(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b'{"status":"ok"}')
+
+    def do_POST(self):
+        body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        with open(os.path.join(DIR, "log"), "ab") as f:
+            f.write(body + b"\n")
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+
+        def chunk(field, text):
+            payload = {"choices": [{"delta": {field: text}, "index": 0}]}
+            self.wfile.write(b"data: " + json.dumps(payload).encode() + b"\n\n")
+            self.wfile.flush()
+
+        for word in knob("think").split():
+            chunk("reasoning_content", word + " ")
+        reply = knob("reply", "Bonjour. Ça va bien.")
+        # Mot à mot : un vrai serveur ne rend jamais la phrase d'un bloc, et
+        # c'est justement le découpage qui met jarvis-sentences à l'épreuve.
+        for word in reply.split(" "):
+            chunk("content", word + " ")
+        self.wfile.write(b"data: [DONE]\n\n")
+        self.wfile.flush()
+
+
+if __name__ == "__main__":
+    DIR = sys.argv[2]
+    os.makedirs(DIR, exist_ok=True)
+    HTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()

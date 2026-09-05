@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """parts — the fish as pieces: a body with fixed anchors, and swappable
 eyes, crests and tails drawn on their own small grids. compose() stacks
-them (tail, body, crest, eye) into the 52x28 body box used by
-variants.py, so every combination lands on the same animation hooks:
+them (tail, body, crest, eye) into the 52x28 body box, so every
+combination lands on the same animation hooks:
 the eye socket (blink, look up), the mouth column (speak), the tail
 attachment (sway), the crest base (flutter).
 
@@ -15,10 +15,33 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import generate  # noqa: E402
-import variants  # noqa: E402
 
-BW, BH = variants.BW, variants.BH
+# La géométrie et les deux aides venaient de variants.py, dont les huit
+# poissons d'exploration ont fait leur travail : les quatre retenus sont
+# redessinés dans BODIES ci-dessous, et le fichier est parti avec eux.
+CW, CH = 72, 56          # canevas
+BW, BH = 52, 28          # boîte du corps
 OUT = os.path.join(os.path.dirname(os.path.realpath(__file__)), "parts_out")
+
+
+def pad(rows):
+    rows = [r.ljust(BW, ".") for r in rows]
+    assert all(len(r) == BW for r in rows), [len(r) for r in rows if len(r) != BW]
+    while len(rows) < BH:
+        rows.append("." * BW)
+    assert len(rows) == BH, len(rows)
+    return rows
+
+
+def compose(rows):
+    img = generate.Frame(CW, CH)
+    ox, oy = (CW - BW) // 2, CH - BH - 6
+    for y, row in enumerate(rows):
+        for x, c in enumerate(row):
+            color = generate.PALETTE.get(c)
+            if color:
+                img.set(ox + x, oy + y, color)
+    return img
 
 # ---------------------------------------------------------------- bodies
 #
@@ -32,7 +55,7 @@ OUT = os.path.join(os.path.dirname(os.path.realpath(__file__)), "parts_out")
 #   head  (x, y, w): the crown line the headphones band sits above
 
 BODIES = {
-    "B1": ("Babel", variants.pad([
+    "B1": ("Babel", pad([
         "", "", "", "", "",
         "........KYYYYYYYYYYYYYYK",
         ".......KKYYYYYYYYYYYYYYYYKK",
@@ -56,7 +79,7 @@ BODIES = {
         "...........KKKKKKKKKKKKKK",
     ]), {"eye": (4, 9), "crest": (7, 0), "tail": (35, 9), "mouth": (0, 14), "head": (8, 5, 16)}),
 
-    "B2": ("Rond", variants.pad([
+    "B2": ("Rond", pad([
         "", "", "", "", "",
         "...........KKKKKKKK",
         "........KKKYYYHHHHKKK",
@@ -81,7 +104,7 @@ BODIES = {
         ".........KKKKKKKK",
     ]), {"eye": (4, 9), "crest": (8, 0), "tail": (26, 9), "mouth": (0, 14), "head": (11, 5, 8)}),
 
-    "B3": ("Élancé", variants.pad([
+    "B3": ("Élancé", pad([
         "", "", "", "", "",
         ".............KKKKKKKKKKKKKKKKK",
         ".........KKKKDDDDDDDDDDDDDDDDDKKKK",
@@ -99,7 +122,7 @@ BODIES = {
         ".........KKKKKKKKKKKKKKKKKKKKK",
     ]), {"eye": (3, 8), "crest": (12, 0), "tail": (38, 7), "mouth": (0, 12), "head": (13, 5, 17)}),
 
-    "B4": ("Anguille", variants.pad([
+    "B4": ("Anguille", pad([
         "", "", "", "", "",
         "..........KKKKKKK",
         "........KKYYYYYYYKKKK",
@@ -352,8 +375,8 @@ def compose(config, only=None, crest=True, crest_dy=0):
 def main():
     os.makedirs(OUT, exist_ok=True)
     def save(name, rows):
-        img = variants.compose(rows)
-        generate.write_png(os.path.join(OUT, f"{name}.png"), variants.CW, variants.CH, img.get)
+        img = compose(rows)
+        generate.write_png(os.path.join(OUT, f"{name}.png"), CW, CH, img.get)
     for axis, lib in AXES.items():
         for key in lib:
             save(f"{axis}-{key}", compose(dict(DEFAULT, **{axis: key})))

@@ -1,0 +1,37 @@
+[Unit]
+Description=Jarvis — cerveau local (llama-server)
+Documentation=https://github.com/macarchy/jarvis
+After=graphical-session.target
+
+[Service]
+Type=exec
+# --reasoning off n'est pas une préférence : Qwen3.5 réfléchit par défaut,
+# et sa réflexion part dans reasoning_content, en anglais, jusqu'à épuiser
+# le budget de tokens. Mesuré : la réponse n'arrivait JAMAIS. Sans ce
+# drapeau le poisson est muet et rien ne dit pourquoi.
+#
+# -c 8192 suffit à un fil parlé (persona ~1 700 tokens + une vingtaine de
+# tours courts) et garde le cache KV petit. Monter le contexte coûte de la
+# RAM que la machine préfère donner au reste.
+ExecStart=%h/.local/bin/llama-server \
+    --model %h/.local/share/jarvis/models/Qwen3.5-4B-Q4_K_M.gguf \
+    --host 127.0.0.1 --port 8099 \
+    --n-gpu-layers 99 --ctx-size 8192 \
+    --reasoning off --no-webui
+# Le prefill de la persona coûte ~16 s la première fois. Le payer ici plutôt
+# qu'au premier « dis-moi » est toute la différence entre un poisson qui
+# répond en deux secondes et un poisson qui fait attendre.
+#
+# `omarchy-jarvis warmup` et pas un curl : il envoie EXACTEMENT la persona
+# que l'échange enverra (SOUL.md + memory/OFFLINE_PROMPT.md). Mesuré — un
+# préchauffage à « bonjour » sans prompt système réchauffe un préfixe que
+# personne n'utilise, et le premier échange coûtait encore 23 s.
+#
+# `-` : un préchauffage raté ne doit pas faire tomber le serveur.
+ExecStartPost=-%h/.local/bin/omarchy-jarvis warmup
+Restart=on-failure
+RestartSec=10
+Nice=5
+
+[Install]
+WantedBy=default.target

@@ -3,7 +3,6 @@
 #   FAKE_CLAUDE_STREAM=<file>  cat this stream-json fixture to stdout
 #   FAKE_CLAUDE_REPLY=<text>   print this plain reply
 #   FAKE_CLAUDE_FICHE=1        write the fiche named by the digest prompt
-#   FAKE_CLAUDE_EXIT=<code>    exit status (default 0)
 #   FAKE_CLAUDE_SLEEP=<s>      think for that long before answering — which is
 #                              what makes `thinking` a state a test can press
 #                              a key in, and what a killed group looks like
@@ -18,4 +17,4 @@ if [[ ${FAKE_CLAUDE_FICHE:-} == 1 && $# -gt 0 ]]; then
 fi
 [[ -n ${FAKE_CLAUDE_STREAM:-} ]] && cat "$FAKE_CLAUDE_STREAM"
 [[ -n ${FAKE_CLAUDE_REPLY:-} ]] && printf '%s' "$FAKE_CLAUDE_REPLY"
-exit "${FAKE_CLAUDE_EXIT:-0}"
+exit 0
