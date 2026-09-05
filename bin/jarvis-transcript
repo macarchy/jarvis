@@ -51,7 +51,12 @@ def parse_args(argv):
     ap.add_argument("--json", action="store_true")
     for opt in ("session", "projects", "dir", "current", "journal"):
         ap.add_argument(f"--{opt}")
-    return vars(ap.parse_args(argv))
+    # parse_intermixed_args et pas parse_args : le N positionnel arrive APRÈS
+    # les options (`show --projects … --json 30`), et parse_args regroupe les
+    # positionnels au premier cluster — il voit « show », remplit cmd, et
+    # déclare le 30 final « unrecognized ». Le comportement varie selon la
+    # version de Python : vert en local, rouge en CI.
+    return vars(ap.parse_intermixed_args(argv))
 
 
 def project_dir(opts):
