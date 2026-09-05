@@ -13,6 +13,11 @@ Type=exec
 # -c 8192 suffit à un fil parlé (persona ~1 700 tokens + une vingtaine de
 # tours courts) et garde le cache KV petit. Monter le contexte coûte de la
 # RAM que la machine préfère donner au reste.
+# Les bibliothèques sont dans ~/.local/lib, mais le binaire porte un RUNPATH
+# vers l'arbre de compilation où il est né. LD_LIBRARY_PATH est cherché AVANT
+# le RUNPATH, donc cette ligne suffit à rendre l'installation autonome — et
+# l'arbre de compilation supprimable, ce qu'il n'était pas.
+Environment=LD_LIBRARY_PATH=%h/.local/lib
 ExecStart=%h/.local/bin/llama-server \
     --model %h/.local/share/jarvis/models/Qwen3.5-4B-Q4_K_M.gguf \
     --host 127.0.0.1 --port 8099 \
