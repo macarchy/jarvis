@@ -54,14 +54,14 @@ Tout se pilote en ligne de commande :
   `omarchy-shell phmatray.notification-center open|close|toggle`,
   `omarchy-shell macarchy.control-center open|close|toggle`,
   `omarchy-shell notifications toggleDnd|dndState|clear`.
-- Daemons : `omarchy-battery-limit toggle|status` (plafond 80 %),
-  `omarchy-als toggle|status` (auto-luminosité ; status montre paused),
+- Daemons : `macarchy-battery-limit toggle|status` (plafond 80 %),
+  `macarchy-als toggle|status` (auto-luminosité ; status montre paused),
   `omarchy-aquarium-toggle [status]` (fond d'écran vivant).
 - Luminosité : `brightnessctl -d apple-panel-bl set N%` (écran),
   `brightnessctl -d kbd_backlight set N%` (clavier).
 - Volume : `wpctl set-volume @DEFAULT_AUDIO_SINK@ N%`,
   `wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle`.
-- Batterie : `omarchy-battery-limit status` — la ligne contient
+- Batterie : `macarchy-battery-limit status` — la ligne contient
   « battery now N% ». N'essaie ni upower, ni acpi, ni /sys — pas
   autorisés dans cette session.
 - Réseau : `nmcli` (Wi-Fi), `bluetoothctl` (Bluetooth).

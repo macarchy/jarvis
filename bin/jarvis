@@ -199,7 +199,7 @@ log() { printf '%s %s\n' "$(date +%FT%T)" "$*" >>"$LOG"; }
 notify() { notify-send -a "Jarvis" -t 5000 "$1" "${2-}" 2>/dev/null || true; }
 
 # Animate the Babel fish; harmless when the shell or plugin is not running.
-# The same words reach the Touch Bar (macarchy-dfr's macarchy.jarvis module).
+# The same words reach the Touch Bar (macarchy-touchbar's macarchy.jarvis module).
 mascot() {
 	omarchy-shell macarchy.jarvis "$@" >/dev/null 2>&1 || true
 	touchbar "$@"
@@ -208,7 +208,7 @@ mascot() {
 # The Touch Bar's share of the mascot channel. `setState` is the one verb
 # NOT forwarded here: on_state_change sends the bar the raw state, because
 # the bar tells followup from listening and transcribing from thinking where
-# the QML aliases them. Costs one macarchy-dfr client per call (~30 ms).
+# the QML aliases them. Costs one macarchy-touchbar client per call (~30 ms).
 touchbar() {
 	local verb=$1
 	shift
@@ -218,7 +218,7 @@ touchbar() {
 	esac
 	# A newline inside a reply breaks the one-line IPC: collapse it to a space.
 	set -- "${@//$'\n'/ }"
-	macarchy-dfr macarchy.jarvis "$verb" "$@" >/dev/null 2>&1 || true
+	macarchy-touchbar macarchy.jarvis "$verb" "$@" >/dev/null 2>&1 || true
 }
 
 # Everything the body says about the CURRENT exchange goes through mascot()
@@ -538,8 +538,8 @@ on_state_change() {
 	[[ $1 == cancelling ]] || mascot setState "$sprite"
 	# The Touch Bar wears the raw state (its module tells followup from
 	# listening). The suite's hundreds of transitions land in a fake
-	# macarchy-dfr on its PATH, never on the real bar.
-	macarchy-dfr macarchy.jarvis state "$1" >/dev/null 2>&1 || true
+	# macarchy-touchbar on its PATH, never on the real bar.
+	macarchy-touchbar macarchy.jarvis state "$1" >/dev/null 2>&1 || true
 	# One truth about the quiet hours, and it is this one: the mascot used to
 	# hardcode its own 23-7 night and curled up asleep whatever the soul said.
 	printf '%s' "$(quiet_now && echo 1 || echo 0)" >"$STATE_DIR/quiet"

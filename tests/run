@@ -48,7 +48,7 @@ sandbox() {
 		JARVIS_WAKE=0 \
 		FAKE_CLAUDE_LOG="$SB/claude.log" FAKE_PIPER_LOG="$SB/piper.log" \
 		FAKE_PLAY_LOG="$SB/play.log" FAKE_SHELL_LOG="$SB/shell.log" \
-		FAKE_DFR_LOG="$SB/dfr.log" \
+		FAKE_TOUCHBAR_LOG="$SB/touchbar.log" \
 		FAKE_VOXTYPE_LOG="$SB/voxtype.log" FAKE_NOTIFY_LOG="$SB/notify.log" \
 		FAKE_PACTL_LOG="$SB/pactl.log"
 	# The soul lives in the repository, not in the sandbox — so a test that
@@ -374,7 +374,7 @@ assert "groupe enregistré" waitfor test -s "$JARVIS_RUN/pids/record"
 rec=$(cat "$JARVIS_RUN/pids/record" 2>/dev/null)
 assert "enregistreur vivant" alive "$rec"
 assert "le poisson suit" grep -q 'macarchy.jarvis setState listening' "$FAKE_SHELL_LOG"
-assert "la Touch Bar suit" grep -q '^macarchy.jarvis state listening$' "$FAKE_DFR_LOG"
+assert "la Touch Bar suit" grep -q '^macarchy.jarvis state listening$' "$FAKE_TOUCHBAR_LOG"
 "$JARVIS" cancel
 assert "état idle" state_is idle
 assert "enregistreur arrêté" waitfor dead "$rec"
@@ -680,7 +680,7 @@ assert "la précédente reste" journal_has "Quelle heure est-il"
 assert "le panneau ne montre plus rien" test ! -e "$JARVIS_RUN/last-ask" -a ! -e "$JARVIS_RUN/last-reply"
 assert "tracé" grep -q 'oublié : « Et la météo ? »' "$JARVIS_MEMORY/trace/$(today).log"
 assert "la bulle est vidée" grep -q 'macarchy.jarvis heard $' "$FAKE_SHELL_LOG"
-assert "la Touch Bar aussi" grep -q '^macarchy.jarvis heard $' "$FAKE_DFR_LOG"
+assert "la Touch Bar aussi" grep -q '^macarchy.jarvis heard $' "$FAKE_TOUCHBAR_LOG"
 assert "sans voix en --quiet" test ! -s "$FAKE_PIPER_LOG"
 assert "oublié encore" "$JARVIS" undo --quiet
 assert "et plus rien à oublier" not "$JARVIS" undo --quiet
@@ -885,7 +885,7 @@ assert "la réponse est garée" grep -q 'disque' "$JARVIS_STATE/reply-pending"
 assert "l'émotion est garée" test "$(cat "$JARVIS_STATE/emote-pending")" = worried
 "$JARVIS" cancel
 assert "l'aparté est arrivé" grep -q 'macarchy.jarvis reply.*disque' "$FAKE_SHELL_LOG"
-assert "l'aparté est sur la Touch Bar" grep -q 'macarchy.jarvis reply.*disque' "$FAKE_DFR_LOG"
+assert "l'aparté est sur la Touch Bar" grep -q 'macarchy.jarvis reply.*disque' "$FAKE_TOUCHBAR_LOG"
 assert "l'émotion aussi" grep -q 'macarchy.jarvis emote worried' "$FAKE_SHELL_LOG"
 assert "plus rien en attente" test ! -e "$JARVIS_STATE/reply-pending"
 
@@ -903,7 +903,7 @@ t "un saut de ligne dans la réponse n'écrase pas l'IPC vers la Touch Bar"
 printf 'idle' >"$JARVIS_RUN/state"
 FAKE_CLAUDE_REPLY=$'Deux\nlignes' "$JARVIS" ask --quiet "et alors"
 assert "la Touch Bar reçoit une seule ligne aplatie" \
-	grep -q '^macarchy.jarvis reply Deux lignes$' "$FAKE_DFR_LOG"
+	grep -q '^macarchy.jarvis reply Deux lignes$' "$FAKE_TOUCHBAR_LOG"
 
 # ---- the gesture of aborting: chantier 3
 t "presser pendant la réflexion : trop tôt ne fait rien, à temps annule"
@@ -1007,15 +1007,15 @@ assert "aucun cas raté" python3 "$TESTS_DIR/test_wake_fsm.py"
 assert "aucun cas raté sur le niveau" python3 "$TESTS_DIR/test_wake_level.py"
 
 # ---- la Touch Bar
-t "touch bar: le module, chargé par le moteur de macarchy-dfr"
-# test_touchbar.py skips itself when the macarchy-dfr engine is absent, but it
+t "touch bar: le module, chargé par le moteur de macarchy-touchbar"
+# test_touchbar.py skips itself when the macarchy-touchbar engine is absent, but it
 # needs pytest to be importable to reach that skip. A bare runner — or a
 # contributor who has not installed pytest — has neither, and failing there
 # says nothing about their change.
 if python3 -c 'import pytest' 2>/dev/null; then
 	# Exit 5 is "no tests collected", which is exactly what test_touchbar.py's
 	# module-level skip produces when the engine is absent — a runner always,
-	# a laptop with a sibling macarchy-dfr never. Both 0 and 5 are the test
+	# a laptop with a sibling macarchy-touchbar never. Both 0 and 5 are the test
 	# doing its job; anything else is a real failure.
 	assert "les tests du module passent (ou sont sautés sans moteur)" \
 		bash -c 'python3 -m pytest -q "$1"; rc=$?; ((rc == 0 || rc == 5))' \

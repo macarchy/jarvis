@@ -13,7 +13,7 @@
 #
 # Eight, and the one-word name of the current one lives in $RUN_DIR/state.
 # That file is a PUBLIC CONTRACT — bin/jarvis-wake.py reads it, and so does
-# the out-of-repo macarchy-dfr Touch Bar daemon — so it stays exactly one
+# the out-of-repo macarchy-touchbar Touch Bar daemon — so it stays exactly one
 # lowercase word and nothing else, forever.
 #
 #     idle          at rest, and the only state anything autonomous may

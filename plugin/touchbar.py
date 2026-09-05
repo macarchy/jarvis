@@ -1,6 +1,6 @@
-"""Jarvis sur la Touch Bar. Chargé en mémoire par macarchy-dfr (kind
+"""Jarvis sur la Touch Bar. Chargé en mémoire par macarchy-touchbar (kind
 `touchbar-module`), nourri par bin/jarvis et le wake daemon à travers
-`macarchy-dfr macarchy.jarvis <verbe>`.
+`macarchy-touchbar macarchy.jarvis <verbe>`.
 
 Au repos, le poisson est un bouton (tap = press, appui long = sa page du
 Control Center) qui porte l'état et les émotions comme le service QML. Le
@@ -14,8 +14,8 @@ import math
 import os
 import weakref
 
-from macarchy_dfr.layout import Layout, Row
-from macarchy_dfr.widgets import Button, Label, Meter, Sprite
+from macarchy_touchbar.layout import Layout, Row
+from macarchy_touchbar.widgets import Button, Label, Meter, Sprite
 
 SPRITES_DIR = os.environ.get("JARVIS_SPRITES") or os.path.expanduser("~/.local/share/jarvis/sprites")
 RUN_DIR = os.environ.get("JARVIS_RUN") or os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "jarvis")
