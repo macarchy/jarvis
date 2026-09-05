@@ -25,11 +25,12 @@ alone does not do it.
 """
 
 import glob
+import argparse
 import json
 import os
+import re
 import sys
-import time
-from datetime import datetime, timezone
+from datetime import datetime
 
 THOUGHT = 300
 RESULT = 200
@@ -41,25 +42,16 @@ def die(msg, code=1):
 
 
 def parse_args(argv):
-    opts = {"json": False, "session": None, "projects": None, "dir": None,
-            "current": None, "n": None, "cmd": None}
-    it = iter(argv)
-    for a in it:
-        if a == "--json":
-            opts["json"] = True
-        elif a in ("--session", "--projects", "--dir", "--current"):
-            opts[a[2:]] = next(it, None)
-        elif a.startswith("--"):
-            die(f"unknown option {a}")
-        elif opts["cmd"] is None:
-            opts["cmd"] = a
-        elif a.isdigit():
-            opts["n"] = int(a)
-        else:
-            die(f"unexpected argument {a}")
-    if opts["cmd"] not in ("list", "show", "undo"):
-        die("usage: jarvis-transcript list|show|undo [options]", 2)
-    return opts
+    # argparse tient la validation de la commande, le N positionnel qui
+    # arrive APRÈS les options, et le message d'usage — le tout que cette
+    # fonction faisait à la main.
+    ap = argparse.ArgumentParser(prog="jarvis-transcript")
+    ap.add_argument("cmd", choices=("list", "show", "undo"))
+    ap.add_argument("n", nargs="?", type=int)
+    ap.add_argument("--json", action="store_true")
+    for opt in ("session", "projects", "dir", "current", "journal"):
+        ap.add_argument(f"--{opt}")
+    return vars(ap.parse_args(argv))
 
 
 def project_dir(opts):
@@ -68,20 +60,13 @@ def project_dir(opts):
     return os.path.join(projects, work.replace("/", "-"))
 
 
-def local_hhmm(ts):
+def local(ts, fmt):
+    """L'horodatage ISO du transcript, dans le fuseau d'ici."""
     try:
         d = datetime.fromisoformat(ts.replace("Z", "+00:00"))
     except (ValueError, AttributeError):
         return ""
-    return d.astimezone().strftime("%H:%M")
-
-
-def local_stamp(ts):
-    try:
-        d = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-    except (ValueError, AttributeError):
-        return ""
-    return d.astimezone().strftime("%Y-%m-%d %H:%M")
+    return d.astimezone().strftime(fmt)
 
 
 def squash(value, limit):
@@ -194,19 +179,45 @@ def session_path(opts, sid):
 
 
 def public(x):
-    return {"at": local_hhmm(x["at"]), "ask": x["ask"], "reply": x["reply"],
+    return {"at": local(x["at"], "%H:%M"), "ask": x["ask"], "reply": x["reply"],
             "thoughts": x["thoughts"], "tools": x["tools"]}
+
+
+def from_journal(path):
+    """Les échanges du jour lus dans memory/journal/<date>.md.
+
+    Le cerveau local ne tient pas de session claude : son fil vit dans un
+    JSON de tours sans horodatage, et l'onglet « Aujourd'hui » restait vide
+    alors que les échanges avaient bien eu lieu. Le journal, lui, porte
+    l'heure ET la paire, et il est écrit par les DEUX routes — c'est donc
+    la seule source qui les voit toutes. Ce qu'il n'a pas : les pensées et
+    les outils, que le modèle local n'a de toute façon pas.
+    """
+    line = re.compile(r"^- (\d{2}:\d{2}) échange : « (.*) » → « (.*) »\s*$")
+    out = []
+    try:
+        for raw in open(path, encoding="utf-8"):
+            m = line.match(raw.rstrip("\n"))
+            if m:
+                out.append({"at": m[1], "ask": m[2], "reply": m[3],
+                            "thoughts": [], "tools": []})
+    except OSError:
+        pass
+    return out
 
 
 def cmd_show(opts):
     sid = opts["session"] or opts["current"]
-    if not sid:
-        die("no session (--session or --current)", 3)
-    path = session_path(opts, sid)
-    if not os.path.exists(path):
-        die(f"no transcript for {sid}", 3)
     n = opts["n"] or 5
-    xs = [public(x) for x in exchanges(read_lines(path))][-n:]
+    path = session_path(opts, sid) if sid else ""
+    if sid and os.path.exists(path):
+        xs = [public(x) for x in exchanges(read_lines(path))][-n:]
+    elif opts["journal"]:
+        xs = from_journal(opts["journal"])[-n:]
+    elif not sid:
+        die("no session (--session or --current)", 3)
+    else:
+        die(f"no transcript for {sid}", 3)
     if opts["json"]:
         print(json.dumps(xs, ensure_ascii=False))
         return
@@ -238,7 +249,7 @@ def cmd_list(opts):
         # conversation starts with a sentence.
         kind = "conversation" if len(xs[0]["ask"]) < 300 else "tâche"
         rows.append({"id": sid, "kind": kind, "current": sid == opts["current"],
-                     "started": local_stamp(xs[0]["at"]), "ended": local_stamp(xs[-1]["at"]),
+                     "started": local(xs[0]["at"], "%Y-%m-%d %H:%M"), "ended": local(xs[-1]["at"], "%Y-%m-%d %H:%M"),
                      "exchanges": len(xs), "first": squash(xs[0]["ask"], 120),
                      "mtime": os.path.getmtime(path)})
     rows.sort(key=lambda r: r["mtime"], reverse=True)

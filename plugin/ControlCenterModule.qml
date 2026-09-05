@@ -23,9 +23,11 @@ import "components"
 Item {
   id: mod
 
-  // ------------------------------------------------------------- contract
-  property var bar: null
-  property var manifest: null
+  // ------------------------------------------------------------- contrat
+  //
+  // `bar` et `manifest` ne sont pas ici : l'hôte les écrit sous garde
+  // (BarWidget.qml `if ("bar" in item)`) et ce module ne les a jamais lus,
+  // donc les déclarer revenait à demander deux affectations pour rien.
   property bool panelOpen: false
   property bool pageShowing: false
   // Set false by the shell while the finger is still moving.
@@ -58,6 +60,16 @@ Item {
   property string lang: "fr"
   property bool wake: false
   property string muteMode: "ecrire"
+  // Quel cerveau répond. `cerveau` est le réglage, `route` ce qu'il donne
+  // en ce moment : en « Auto » les deux diffèrent dès que le nuage tombe,
+  // et une pastille qui dit « Auto » sans dire « local là, maintenant »
+  // laisse l'utilisateur croire qu'il parle à Claude.
+  property string cerveau: "auto"
+  property string route: "nuage"
+  property string cerveauUrl: ""
+  property string cerveauModele: ""
+  // `-` quand la question ne se pose pas (route nuage), `oui`/`non` sinon.
+  property string cerveauJoignable: "-"
 
   readonly property var tones: ["majordome", "complice", "laconique"]
   readonly property var toneOptions: [
@@ -73,6 +85,13 @@ Item {
   // other way in.
   readonly property var muteModes: [
     { value: "ecrire", label: "Clavier" }, { value: "prevenir", label: "Prévenir" }, { value: "reactiver", label: "Réactiver" }
+  ]
+  // Un seul « fournisseur » local, pas vingt : llama-server, LM Studio,
+  // Ollama, LocalAI et vLLM parlent tous /v1/chat/completions. Ce qui
+  // change d'un serveur à l'autre est l'URL, et une URL se saisit une fois
+  // dans l'âme — pas dans un panneau qu'on ouvre tous les jours.
+  readonly property var cerveaux: [
+    { value: "auto", label: "Auto" }, { value: "nuage", label: "Nuage" }, { value: "local", label: "Local" }
   ]
 
   // The fish's look: one soul setting per part (sprites/parts.py).
@@ -178,6 +197,15 @@ Item {
     return last + " · prochaine dans ~" + mins + " min"
   }
 
+  // Ce qu'on lit sans déplier. Un serveur injoignable doit se voir d'ici :
+  // c'est la panne qui rend Jarvis muet sans rien expliquer.
+  function brainSummary() {
+    if (cerveau === "nuage") return "Claude"
+    if (route === "local")
+      return cerveauJoignable === "non" ? "local — injoignable" : "local · " + cerveauModele
+    return cerveau === "auto" ? "auto · nuage" : "nuage"
+  }
+
   function soulSummary() {
     return tone.charAt(0).toUpperCase() + tone.slice(1) + " · " + lang
   }
@@ -256,12 +284,26 @@ Item {
     setSetting("micro-coupe", value)
   }
 
+  // Le `reset` n'est pas une politesse : un fil ouvert chez Claude et repris
+  // par le modèle local ferait répondre le second à des tours qu'il n'a pas
+  // tenus. On change de cerveau, on change de conversation.
+  function setCerveau(value) {
+    cerveau = value
+    Quickshell.execDetached(["bash", "-c",
+      'grep -q "^- cerveau:" "$2" && sed -i "s/^- cerveau: .*/- cerveau: $1/" "$2" || sed -i "/^- langue:/a - cerveau: $1" "$2"; omarchy-jarvis reset',
+      "--", value, soulPath])
+    recheck.restart()
+  }
+
   // The automations live in SOUL.md's « Réglages » like the tone does, but
   // they are read live by the FSM on every tick — no reset needed. An older
   // soul without the line gets it appended after `langue`.
   function setSetting(key, value) {
     Quickshell.execDetached(["bash", "-c",
-      'grep -q "^- $1:" "$3" && sed -i "s/^- $1: .*/- $1: $2/" "$3" || sed -i "/^- langue:/a - $1: $2" "$3"',
+      // Séparateur `|` et non `/` : cerveau-url vaut http://127.0.0.1:8099,
+      // dont les barres obliques terminaient l'expression sed et
+      // corrompaient l'âme. Même correctif que set_setting dans bin/jarvis.
+      'grep -q "^- $1:" "$3" && sed -i "s|^- $1: .*|- $1: $2|" "$3" || sed -i "/^- langue:/a - $1: $2" "$3"',
       "--", key, value, soulPath])
     recheck.restart()
   }
@@ -388,6 +430,11 @@ Item {
         mod.reves = kv.reves !== "non"
         mod.silence = kv.silence || "23-7"
         mod.muteMode = kv.micro_coupe || "ecrire"
+        mod.cerveau = kv.cerveau || "auto"
+        mod.route = kv.route || "nuage"
+        mod.cerveauUrl = kv.cerveau_url || ""
+        mod.cerveauModele = kv.cerveau_modele || ""
+        mod.cerveauJoignable = kv.cerveau_joignable || "-"
         mod.corps = kv.corps || "B1"
         mod.oeil = kv.oeil || "E1"
         mod.criniere = kv.criniere || "M1"
@@ -633,6 +680,105 @@ Item {
       }
 
       // ------------------------------------------------ what is set once
+      // Le cerveau n'est pas la personnalité : l'âme dit QUI il est, ceci dit
+      // AVEC QUOI il pense. Un point de terminaison compatible OpenAI couvre
+      // llama-server, LM Studio, Ollama, LocalAI et vLLM — c'est pourquoi il
+      // y a une URL et pas une liste de fournisseurs.
+      Disclosure {
+        Layout.fillWidth: true
+        title: "Cerveau"
+        summary: mod.brainSummary()
+
+        PillRow {
+          Layout.fillWidth: true
+          options: mod.cerveaux
+          value: mod.cerveau
+          foreground: Color.popups.text
+          fontSize: Style.font.caption
+          onChanged: function(v) { mod.setCerveau(v) }
+        }
+
+        // Ce que la pastille ne peut pas dire : où va la parole en ce moment.
+        // En « Auto » les deux diffèrent dès que le nuage tombe, et croire
+        // qu'on parle à Claude alors qu'un 4B répond est le pire malentendu
+        // que ce panneau puisse laisser s'installer.
+        Text {
+          Layout.fillWidth: true
+          visible: mod.cerveau !== "nuage"
+          text: mod.route === "local"
+                ? (mod.cerveauJoignable === "non"
+                   ? "Local — serveur injoignable sur " + mod.cerveauUrl
+                   : "Répond en local — " + mod.cerveauModele)
+                : "Répond par le nuage"
+          color: mod.cerveauJoignable === "non"
+                 ? Color.urgent : Util.alpha(Color.popups.text, 0.45)
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+          wrapMode: Text.WordWrap
+        }
+
+        // Les deux champs ne servent qu'au rang local : les montrer en
+        // « Nuage » serait offrir de régler une chose qui n'a aucun effet.
+        RowLayout {
+          Layout.fillWidth: true
+          visible: mod.cerveau !== "nuage"
+          spacing: Style.space(8)
+
+          Text {
+            Layout.preferredWidth: Style.space(74)
+            text: "Adresse"
+            color: Util.alpha(Color.popups.text, 0.55)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+          }
+
+          TextField {
+            Layout.fillWidth: true
+            text: mod.cerveauUrl
+            placeholderText: "http://127.0.0.1:8099"
+            foreground: Color.popups.text
+            font.pixelSize: Style.font.caption
+            // On n'écrit qu'à la validation, jamais à la frappe : sauver à
+            // chaque caractère réécrirait l'âme vingt fois et ferait pointer
+            // Jarvis sur « http:/ » en cours de route.
+            onAccepted: mod.setSetting("cerveau-url", text.trim())
+          }
+        }
+
+        RowLayout {
+          Layout.fillWidth: true
+          visible: mod.cerveau !== "nuage"
+          spacing: Style.space(8)
+
+          Text {
+            Layout.preferredWidth: Style.space(74)
+            text: "Modèle"
+            color: Util.alpha(Color.popups.text, 0.55)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+          }
+
+          TextField {
+            Layout.fillWidth: true
+            text: mod.cerveauModele
+            placeholderText: "Qwen3.5-4B"
+            foreground: Color.popups.text
+            font.pixelSize: Style.font.caption
+            onAccepted: mod.setSetting("cerveau-modele", text.trim())
+          }
+        }
+
+        Text {
+          Layout.fillWidth: true
+          visible: mod.cerveau !== "nuage"
+          text: "Le modèle est l'identifiant envoyé au serveur, et ce qu'il dit tout haut quand on lui demande avec quoi il pense. Entrée pour enregistrer."
+          color: Util.alpha(Color.popups.text, 0.4)
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+          wrapMode: Text.WordWrap
+        }
+      }
+
       Disclosure {
         Layout.fillWidth: true
         title: "Âme"

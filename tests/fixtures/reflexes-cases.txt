@@ -1,0 +1,129 @@
+# Cas de la table des réflexes : transcript <TAB> rangée attendue,
+# ou AUCUNE quand la demande doit atteindre le cerveau.
+#
+# Les négatifs sont le cœur du fichier. Une table qui mange les vraies
+# questions est pire que pas de table — cette liste est ce qui grandit
+# le jour où une rangée se révèle trop gourmande, comme pour NOISE.md.
+
+quelle heure est-il	heure
+Quelle heure est-il ?	heure
+Quel heure est-il ?	heure
+qu'elle oeuf est-il	heure
+quelle heure et il ?	heure
+il est quelle heure	heure
+quelle heure il est	heure
+t'as l'heure	heure
+donne-moi l'heure	heure
+dis-moi quelle heure il est	heure
+quel leur est-il	heure
+on est quel jour	date
+c'est quel jour aujourd'hui	date
+quelle est la date du jour	date
+donne-moi la date	date
+on est le combien	date
+Quel est le pourcentage de batterie ?	batterie
+Quel est le niveau de batterie ?	batterie
+niveau de batterie	batterie
+il me reste combien de batterie	batterie
+combien de batterie il me reste	batterie
+la batterie est à combien	batterie
+how much battery left	batterie
+Le mode ne pas déranger est-il actif ?	dnd
+le mode ne pas déranger et il actif	dnd
+est-ce que le ne pas déranger est activé	dnd
+mets le son à 30	son-n
+le son à 30	son-n
+règle le volume sur 45 %	son-n
+mets le son à 500	son-n
+monte le son	son-plus
+plus fort	son-plus
+un peu plus fort	son-plus
+est-ce que tu peux monter le son	son-plus
+baisse le son	son-moins
+moins fort	son-moins
+un peu moins fort	son-moins
+coupe le son	son-mute
+mets en sourdine	son-mute
+éteins la musique	son-mute
+remets le son	son-demute
+enlève la sourdine	son-demute
+coupe la sourdine	son-demute
+mets le thème clair	theme-clair
+mais le thème clair	theme-clair
+mode clair	theme-clair
+mode sombre	theme-sombre
+passe en mode sombre	theme-sombre
+lance l'aquarium	aquarium-on
+rallume l'aquarium	aquarium-on
+aquarium on	aquarium-on
+coupe l'aquarium	aquarium-off
+aquarium of	aquarium-off
+éteins l'aquarium	aquarium-off
+Verrouille mon ordinateur.	verrouille
+verrouille l'écran	verrouille
+verrouille la machine	verrouille
+est-ce que tu peux verrouiller mon ordi	verrouille
+quelle heure est-il à Tokyo	AUCUNE
+quelle est l'heure du japon	AUCUNE
+à quelle heure est mon rendez-vous	AUCUNE
+rappelle-moi l'heure du train	AUCUNE
+Règle le fuseau horaire sur Bruxelles	AUCUNE
+il est l'heure de partir	AUCUNE
+quelle est la date de sortie du film	AUCUNE
+quelle est la date limite	AUCUNE
+la date	AUCUNE
+quel jour	AUCUNE
+pourquoi la batterie se vide si vite	AUCUNE
+quel est le niveau de batterie de mon casque	AUCUNE
+batterie	AUCUNE
+Ne pas déranger	AUCUNE
+active le mode ne pas déranger	AUCUNE
+pourquoi le son est-il si fort ?	AUCUNE
+parle plus fort	AUCUNE
+est-ce que tu peux parler plus fort	AUCUNE
+mets ça sur 3	AUCUNE
+mets ça à 20	AUCUNE
+son 30	AUCUNE
+volume 3	AUCUNE
+mets le son à trente pour cent	AUCUNE
+remets la musique	AUCUNE
+éteins tout	AUCUNE
+coupe tout	AUCUNE
+coupe le wifi	AUCUNE
+mets l'écran sur 2	AUCUNE
+sois plus clair	AUCUNE
+mets ça plus clair	AUCUNE
+mais clair	AUCUNE
+c'est clair	AUCUNE
+j'aime bien le mode sombre des applis	AUCUNE
+quel thème est actif	AUCUNE
+est-ce que l'aquarium tourne	AUCUNE
+Verrouiller l'écran	AUCUNE
+verrouille	AUCUNE
+bloque mon ordinateur	AUCUNE
+Parfait, referme-le	AUCUNE
+ouvre le centre de notifications	AUCUNE
+qu'est-ce que j'ai raté ouvre les notifications	AUCUNE
+quelle est la meteo du jour?	AUCUNE
+Quel temps fera-t-il demain ?	AUCUNE
+Sous-titres réalisés par la communauté d'Amara.org	AUCUNE
+C'est un peu plus... C'est vraiment un peu plus...	AUCUNE
+Qui es-tu ? Réponds en une phrase.	AUCUNE
+regarde mon écran et dis-moi en une phrase ce qu'il y a dessus	AUCUNE
+baisse la luminosité	AUCUNE
+mets la luminosité à cinquante	AUCUNE
+
+# — ajoutés à la main : de vraies demandes du corpus
+quelle heure est-il à New York ?	AUCUNE
+explique-moi pourquoi ma batterie se vide si vite	AUCUNE
+que penses tu de macarchy?	AUCUNE
+comment on règle la luminosité sur cette machine ?	AUCUNE
+est-ce que tu peux baisser le son quand je regarde un film ?	AUCUNE
+raconte-moi une histoire sur une horloge	AUCUNE
+
+# — quel cerveau répond
+quel cerveau tu utilises ?	cerveau
+tu tournes sur quel modèle	cerveau
+which brain are you using	cerveau
+explique-moi comment marche ton cerveau	AUCUNE
+est-ce que tu peux changer de cerveau ?	AUCUNE

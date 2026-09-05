@@ -125,7 +125,9 @@ annexe. La version longue est dans [docs/privacy.fr.md](docs/privacy.fr.md).
 - **Ta parole est transcrite en local.** Whisper tourne sur ton processeur.
   L'audio ne sort jamais de la machine, et l'enregistrement est écrasé par le
   suivant.
-- **Ton transcript part chez Anthropic**, puisque le cerveau est Claude. Et
+- **Ton transcript part chez Anthropic**, puisque le cerveau est Claude par
+  défaut — sauf si tu le fais répondre en local, voir « Le cerveau local »
+  plus bas, auquel cas plus rien ne sort. Et
   avec lui tout ce que Claude lit pour te répondre — ce qui peut inclure une
   capture d'écran ou ton presse-papier, mais **uniquement quand tu le demandes
   dans l'échange en cours**, jamais de sa propre initiative, et chaque usage
@@ -141,6 +143,79 @@ Tu peux couper toute son autonomie depuis `SOUL.md` : `rondes: non` arrête
 l'inspection horaire, `reves: non` la consolidation de mémoire, et
 `silence: 23-7` lui donne des heures où il ne fait rien sans qu'on le lui
 demande.
+
+## Les réflexes
+
+Certaines demandes n'ont jamais eu besoin d'un modèle. « Quelle heure
+est-il » se répond avec `date`, en deux cents millisecondes, exactement.
+
+`memory/REFLEXES.md` est une table de quatre colonnes séparées par des
+tabulations — motif, commande, slot, phrase parlée — lue avant le cerveau.
+Le motif est une expression rationnelle ancrée sur le transcript entier,
+exactement comme `memory/NOISE.md` : c'est ce qui garde « pourquoi le son
+est-il si fort ? » loin de la commande de volume.
+
+Elle existe surtout pour une raison. Hors ligne, à « quelle heure est-il »,
+le modèle local a répondu « Il est 14h37 » à 23 h passées, avec aplomb,
+dans le format parlé exact de Jarvis. Une valeur plausible et fausse est
+pire qu'un refus. Ce que `date` ou `/sys` savent dire exactement, le
+cerveau n'a plus le droit de le deviner.
+
+```
+omarchy-jarvis reflexe? "quelle heure est-il"          # quelle rangée matche
+omarchy-jarvis reflexe? --run "quelle heure est-il"    # et ce qu'elle dirait
+```
+
+Le fichier est à toi : ajoute, retire, corrige. `omarchy-jarvis doctor`
+refuse une table mal formée, et une commande destructrice y est rejetée au
+chargement — la table ne passe pas par `.claude/settings.json`, c'est sa
+seule porte.
+
+## Le cerveau local
+
+Par défaut Jarvis pense avec Claude, ce qui demande le réseau. Il sait aussi
+parler à n'importe quel serveur compatible OpenAI — llama-server, LM Studio,
+Ollama, LocalAI, vLLM — et donc répondre dans un avion.
+
+Trois lignes dans `SOUL.md`, sous « Réglages » :
+
+```
+- cerveau: auto          # auto | nuage | local
+- cerveau-url: http://127.0.0.1:8099
+- cerveau-modele: Qwen3.5-4B
+```
+
+`cerveau-modele` a deux rôles : c'est l'identifiant envoyé au serveur —
+llama-server l'ignore, LM Studio et Ollama en ont besoin — et c'est aussi
+ce que Jarvis prononce quand on lui demande avec quel cerveau il pense.
+Mets-y le vrai nom de ton modèle.
+
+`auto` suit l'état du nuage : Claude tant qu'il répond, le modèle local dès
+qu'il ne répond plus, et une nouvelle tentative vers le nuage toutes les dix
+minutes (`JARVIS_BRAIN_RETRY`). Le Control Center a la même bascule dans
+« Âme », et dit vers où va la parole en ce moment.
+
+**Ce qu'il perd hors ligne.** Le cerveau local n'a aucun outil : pas de Bash,
+pas de lecture d'écran, pas de recherche web. Il ne peut donc ni agir sur la
+machine, ni lire l'heure, la batterie ou la météo — et
+`memory/OFFLINE_PROMPT.md` lui interdit explicitement de les inventer, parce
+que sans cette consigne un modèle de 4 milliards de paramètres répond « il
+est 14h37 » à 23 h, avec aplomb. Ce qu'il garde : parler, expliquer,
+traduire, raconter, se souvenir du fil en cours.
+
+**Monter le serveur.** Sur ce MacBook M2 sous Asahi, llama.cpp compilé avec
+le backend Vulkan (pilote Honeykrisp) va environ 1,7 fois plus vite que le
+CPU en prefill et 1,3 fois en génération. Avec un modèle 4B en Q4_K_M, la
+première phrase sort en une à trois secondes.
+
+```
+systemctl --user enable --now jarvis-brain.service
+```
+
+L'unité est installée par `install.sh` mais jamais activée toute seule.
+`--reasoning off` y est obligatoire : un modèle « thinking » envoie sa
+réflexion dans `reasoning_content`, épuise son budget de tokens et ne dit
+jamais un mot.
 
 ## Comment ça marche
 

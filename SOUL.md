@@ -15,6 +15,9 @@ Control Center, le reste t'appartient. Après une modification, la nouvelle
 - adresse: tutoiement
 - langue: fr
 - voix: siwis
+- cerveau: auto
+- cerveau-url: http://127.0.0.1:8099
+- cerveau-modele: Qwen3.5-4B
 - micro-coupe: ecrire
 - rondes: oui
 - reves: oui

@@ -1,0 +1,228 @@
+#!/usr/bin/env python3
+"""jarvis-local — le cerveau hors ligne, à la place de `claude -p`.
+
+Parle à n'importe quel serveur compatible OpenAI (`/v1/chat/completions`) :
+llama-server, LM Studio, Ollama, LocalAI, vLLM, ou une API hébergée. Un seul
+protocole les couvre tous ; c'est pourquoi il n'y a pas vingt fournisseurs
+ici, seulement une URL.
+
+Il n'écrit PAS sa propre sortie : il imite exactement les événements que
+`claude -p --output-format stream-json --include-partial-messages` produit,
+parce que `bin/jarvis-sentences` les lit déjà et découpe les phrases pour
+piper. Le chemin de la voix ne sait pas quel cerveau lui parle, et c'est ce
+qui rend l'échange possible en une dizaine de lignes dans bin/jarvis.
+
+Ce qu'il n'a pas, et n'aura jamais : les outils. Pas de Bash, pas de Read,
+pas de WebSearch. Un modèle local qui pilote un shell est un risque que ce
+fichier refuse de prendre ; ce qu'il sait faire, c'est parler. Ce qu'il ne
+peut pas lire — l'heure, la batterie, la météo — memory/OFFLINE.md lui
+interdit de l'inventer, et la table des réflexes intercepte ces demandes
+avant même qu'elles arrivent ici.
+
+  jarvis-local --url URL --model M --history F --system F1[,F2...] -- "texte"
+"""
+
+import argparse
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+# Une réponse parlée fait une ou deux phrases. Le plafond n'est pas un
+# réglage : c'est une ceinture contre un modèle qui part en digression et
+# fait parler le poisson pendant deux minutes.
+MAX_TOKENS = 300
+TIMEOUT = 120
+# Les tours gardés du fil : le contexte d'un modèle local est petit et une
+# conversation sans fin le fait déborder. Pas un réglage non plus — le seul
+# constructeur de la commande (brain_local_cmd) ne posait jamais --keep.
+KEEP = 20
+
+
+def emit(obj):
+    """Une ligne JSON sur stdout, poussée tout de suite — le tube en aval
+    découpe des phrases pour les faire parler, donc bufferiser reviendrait
+    à retenir la voix jusqu'à la fin de la réponse."""
+    sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
+    sys.stdout.flush()
+
+
+def block_start():
+    emit({"type": "stream_event", "event": {
+        "type": "content_block_start", "content_block": {"type": "text"}}})
+
+
+def block_delta(text):
+    emit({"type": "stream_event", "event": {
+        "type": "content_block_delta",
+        "delta": {"type": "text_delta", "text": text}}})
+
+
+def block_stop():
+    emit({"type": "stream_event", "event": {"type": "content_block_stop"}})
+
+
+def result_ok(full):
+    emit({"type": "result", "subtype": "success",
+          "is_error": False, "result": full})
+
+
+def result_error(msg):
+    """Le FSM lit ça dans <reply>.error et met BRAIN_STATUS à `down` : un
+    serveur local éteint doit ressembler à un cerveau injoignable, pas à une
+    réponse vide — sans quoi run_exchange repose la même question.
+
+    Toujours doublé sur stderr : en mode --plain les événements sont muets,
+    et une panne qui ne laisse aucune trace dans le log est une panne qu'on
+    cherche deux heures."""
+    print(f"jarvis-local: {msg}", file=sys.stderr)
+    emit({"type": "result", "subtype": "error",
+          "is_error": True, "result": msg})
+
+
+def read_system(paths):
+    parts = []
+    for p in paths.split(","):
+        p = p.strip()
+        if not p:
+            continue
+        try:
+            with open(os.path.expanduser(p)) as f:
+                parts.append(f.read().strip())
+        except OSError:
+            # Une âme illisible n'est pas une raison de se taire : le poisson
+            # répond sans elle plutôt que de ne pas répondre.
+            print(f"jarvis-local: {p} illisible", file=sys.stderr)
+    return "\n\n".join(parts)
+
+
+def load_history(path, keep):
+    try:
+        with open(path) as f:
+            msgs = json.load(f)
+        return msgs[-keep:] if keep else msgs
+    except (OSError, ValueError):
+        return []
+
+
+def save_history(path, msgs, keep):
+    if not path:
+        return
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(msgs[-keep:] if keep else msgs, f, ensure_ascii=False)
+    except OSError as e:
+        print(f"jarvis-local: historique non écrit ({e})", file=sys.stderr)
+
+
+def stream(url, model, messages):
+    """Envoie et rend le texte complet. Lève une exception si le serveur ne
+    répond pas — l'appelant la traduit en événement `result` en erreur."""
+    body = json.dumps({
+        "model": model,
+        "stream": True,
+        "max_tokens": MAX_TOKENS,
+        "messages": messages,
+    }).encode()
+    req = urllib.request.Request(
+        url.rstrip("/") + "/v1/chat/completions", body,
+        {"Content-Type": "application/json"})
+
+    full = ""
+    opened = False
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+        for raw in resp:
+            line = raw.decode("utf-8", "replace").strip()
+            if not line.startswith("data: "):
+                continue
+            payload = line[6:]
+            if payload == "[DONE]":
+                break
+            try:
+                delta = json.loads(payload)["choices"][0].get("delta", {})
+            except (ValueError, KeyError, IndexError):
+                continue
+            # `reasoning_content` est la réflexion d'un modèle « thinking ».
+            # Elle ne se prononce pas : mesurée sur Qwen3.5-4B, elle brûlait
+            # tout le budget en anglais et la réponse n'arrivait jamais.
+            # Le serveur doit tourner avec --reasoning off ; si le drapeau
+            # manque, on jette ici plutôt que de faire lire ça à voix haute.
+            chunk = delta.get("content") or ""
+            if not chunk:
+                continue
+            if not opened:
+                block_start()
+                opened = True
+            block_delta(chunk)
+            full += chunk
+    if opened:
+        block_stop()
+    return full
+
+
+def main():
+    ap = argparse.ArgumentParser(add_help=False)
+    ap.add_argument("--url", required=True)
+    ap.add_argument("--model", default="local")
+    ap.add_argument("--system", default="")
+    ap.add_argument("--history", default="")
+    # Le chemin non-streamé de bin/jarvis veut du texte, pas des événements.
+    # Un drapeau ici coûte quatre lignes ; extraire le texte du JSON en sed
+    # côté bash coûterait un bug d'échappement le jour où le poisson dirait
+    # un guillemet.
+    ap.add_argument("--plain", action="store_true")
+    ap.add_argument("text", nargs="+")
+    args = ap.parse_args()
+
+    global emit
+    if args.plain:
+        emit = lambda _obj: None
+
+    text = " ".join(args.text)
+    messages = []
+    system = read_system(args.system) if args.system else ""
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages += load_history(args.history, KEEP) if args.history else []
+    messages.append({"role": "user", "content": text})
+
+    try:
+        full = stream(args.url, args.model, messages)
+    except urllib.error.HTTPError as e:
+        result_error(f"cerveau local : le serveur a répondu {e.code}")
+        return 1
+    except (urllib.error.URLError, OSError) as e:
+        reason = getattr(e, "reason", e)
+        result_error(f"cerveau local injoignable sur {args.url} ({reason})")
+        return 1
+    except BrokenPipeError:
+        # L'utilisateur a coupé la parole : la voix a fermé le tube. Ce n'est
+        # pas une panne, et surtout pas une erreur de session — sortir en
+        # silence laisse jarvis-sentences poser son marqueur .interrupted.
+        return 0
+
+    if not full.strip():
+        result_error("cerveau local : réponse vide")
+        return 1
+
+    if args.history:
+        hist = load_history(args.history, 0)
+        hist += [{"role": "user", "content": text},
+                 {"role": "assistant", "content": full}]
+        save_history(args.history, hist, KEEP)
+
+    if args.plain:
+        sys.stdout.write(full)
+        sys.stdout.flush()
+    else:
+        result_ok(full)
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit(130)

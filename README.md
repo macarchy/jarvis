@@ -118,7 +118,9 @@ The long version is [docs/privacy.md](docs/privacy.md).
 
 - **Your speech is transcribed locally.** Whisper runs on your CPU. Audio
   never leaves the machine and the recording is overwritten by the next one.
-- **Your transcript goes to Anthropic**, because the brain is Claude. So does
+- **Your transcript goes to Anthropic**, because the brain is Claude by
+  default — unless you point him at a local model, see "The local brain"
+  below, in which case nothing leaves at all. So does
   anything Claude reads while answering you — and that can include a
   screenshot or your clipboard, but **only when you ask for it in that
   exchange**, never on his own initiative, and every use is logged.
@@ -132,6 +134,75 @@ The long version is [docs/privacy.md](docs/privacy.md).
 You can turn off his autonomy entirely by editing `SOUL.md`: `rondes: non`
 stops the hourly inspection, `reves: non` stops the memory consolidation,
 `silence: 23-7` gives him hours where he does nothing unbidden.
+
+## Reflexes
+
+Some requests never needed a model. "What time is it" is answered by
+`date`, in two hundred milliseconds, exactly.
+
+`memory/REFLEXES.md` is a four-column tab-separated table — pattern,
+command, slot, spoken sentence — read before the brain. The pattern is a
+regular expression anchored on the whole transcript, exactly like
+`memory/NOISE.md`: that anchoring is what keeps "why is the sound so loud?"
+away from the volume command.
+
+It exists mostly for one reason. Offline, asked the time, the local model
+answered "it is 2:37 pm" at 11 pm, with total confidence, in Jarvis's exact
+spoken format. A plausible wrong value is worse than a refusal. What `date`
+or `/sys` can state exactly, the brain no longer gets to guess.
+
+```
+omarchy-jarvis reflexe? "quelle heure est-il"          # which row matches
+omarchy-jarvis reflexe? --run "quelle heure est-il"    # and what it would say
+```
+
+The file is yours: add, remove, fix. `omarchy-jarvis doctor` rejects a
+malformed table, and a destructive command is refused at load — the table
+does not go through `.claude/settings.json`, this is its only gate.
+
+## The local brain
+
+By default Jarvis thinks with Claude, which needs the network. He can also
+talk to any OpenAI-compatible server — llama-server, LM Studio, Ollama,
+LocalAI, vLLM — and so answer you on a plane.
+
+Three lines in `SOUL.md`, under "Réglages":
+
+```
+- cerveau: auto          # auto | nuage | local
+- cerveau-url: http://127.0.0.1:8099
+- cerveau-modele: Qwen3.5-4B
+```
+
+`cerveau-modele` carries two roles: it is the id sent to the server —
+llama-server ignores it, LM Studio and Ollama need it — and it is also what
+Jarvis says out loud when asked which brain he is thinking with. Put your
+model's real name in it.
+
+`auto` follows the cloud's health: Claude while it answers, the local model
+once it stops, and a retry towards the cloud every ten minutes
+(`JARVIS_BRAIN_RETRY`). The Control Center carries the same switch under
+"Âme", and says where your words are going right now.
+
+**What he loses offline.** The local brain has no tools at all: no Bash, no
+screen reading, no web search. So he can neither act on the machine nor read
+the time, the battery or the weather — and `memory/OFFLINE_PROMPT.md`
+explicitly forbids him to invent them, because without that instruction a 4B
+model answers "it is 2:37 pm" at 11 pm, with total confidence. What he keeps:
+talking, explaining, translating, telling a story, remembering the thread.
+
+**Running the server.** On this M2 MacBook under Asahi, llama.cpp built with
+the Vulkan backend (Honeykrisp driver) is about 1.7x faster than CPU at
+prefill and 1.3x at generation. With a 4B model at Q4_K_M the first spoken
+sentence lands in one to three seconds.
+
+```
+systemctl --user enable --now jarvis-brain.service
+```
+
+`install.sh` installs the unit but never enables it for you. `--reasoning off`
+is mandatory there: a thinking model streams its reasoning into
+`reasoning_content`, burns its token budget and never says a word.
 
 ## How it works
 
