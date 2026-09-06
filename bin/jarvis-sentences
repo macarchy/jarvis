@@ -20,15 +20,26 @@ Usage: jarvis-sentences [--quiet] <reply-file>
             rounds on 2026-09-01 were journaled, notified and worried about
             for having said, in effect, nothing.
 
-Two sidecars beside the reply file say what the session itself reported:
+Three sidecars beside the reply file say what the session itself reported:
   <reply-file>.error    the CLI reporting on itself (a usage limit, a lost
                         session, a connection error) — never a reply
   <reply-file>.status   `ok` or `error`, from the result event, so the FSM
                         can trust a successful answer whatever words it
                         contains instead of reading « rate limit » in a
                         digested article as an outage of its own brain
-Both are removed on start: a stale verdict from yesterday's failure must not
+  <reply-file>.denied   the tool description of the FIRST permission denial
+                        (a settings.json allowlist gap) — the trace records
+                        it too, but dreams read FAILURES.md, not the trace,
+                        so a missing allowlist row never taught them anything
+All are removed on start: a stale verdict from yesterday's failure must not
 be read as today's.
+
+Emotion tags: the brain writes "<<proud>>" inline in its spoken text. They
+never reach the voice — stripped like the markdown below — and never reach
+the reply file either. Instead each one prints on its own stdout line,
+right before the sentence line it rode in on, so bin/jarvis can hand it to
+the mascot without the brain having to spend a whole tool call on saying
+how it feels.
 
 The black box: every tool call the brain makes (and its outcome) is
 appended to memory/trace/YYYY-MM-DD.log — one compact line per event.
@@ -77,6 +88,13 @@ BOUNDARY = re.compile(r'[.!?…:]["»)\]]?[ \t]*\n'
 # astérisque », and a ~~ as « tilde tilde ». Those two stop here.
 VOICED_MARKUP = re.compile(r"\*+|~~")
 
+# An emotion tag the brain drops inline, e.g. "<<proud>>". Never spoken,
+# never written to the reply file — see the module docstring. Case-insensitive
+# because a tag opening a sentence is exactly where a model capitalizes, and
+# « <<Proud>> » unmatched is not a silent miss: it reaches piper, which reads
+# the angle brackets out loud.
+EMOTE_TAG = re.compile(r"<<([a-z]+)>>", re.I)
+
 # The CLI reporting on itself rather than answering — a usage limit.
 LIMIT = re.compile(r"(hit|reached) your .*limit|usage limit|rate limit", re.I)
 
@@ -88,7 +106,7 @@ status = None                   # ok | error, once the result event has said
 errored = False                 # the first report on the session wins
 tool_names = {}                 # tool_use_id -> "Bash: omarchy ..."
 
-for stale in (".error", ".status"):
+for stale in (".error", ".status", ".denied"):
     try:
         os.remove(out_path + stale)
     except OSError:
@@ -146,8 +164,17 @@ def separate():
 
 
 def emit(text):
-    text = " ".join(VOICED_MARKUP.sub("", text).split())
-    if text and not quiet:
+    tags = EMOTE_TAG.findall(text)
+    text = " ".join(VOICED_MARKUP.sub("", EMOTE_TAG.sub("", text)).split())
+    if quiet:
+        return
+    # The tag line comes FIRST, before the sentence it rode in on, so the
+    # mascot hears the emotion in the order the brain wrote it. Lowercased
+    # on the way out: the tag is matched case-insensitively above, and the
+    # whitelist on the other side of the pipe has one spelling.
+    for tag in tags:
+        print(f"<<{tag.lower()}>>", flush=True)
+    if text:
         print(text, flush=True)
 
 
@@ -232,6 +259,19 @@ def consume():
                     mark = "✗" if block.get("is_error") else "←"
                     trace(f"{mark} [{desc.split(':')[0]}] {squash(body)}")
         elif kind == "result":
+            # A denied tool is silent otherwise: the user hears « je n'ai pas
+            # pu » and the dreams — which read FAILURES.md, not the trace —
+            # never learn a missing allowlist row was the cause. The CLI
+            # publishes the refusals itself in the result event, so this
+            # reads them rather than hunting « permission » in the text of
+            # failed tools: an ordinary `Permission denied` from a directory
+            # the brain was allowed to read would otherwise be filed as a
+            # gap in the allowlist, and three such notes arm a dream that
+            # rewrites LEARNED.md. First refusal wins.
+            for d in (ev.get("permission_denials") or [])[:1]:
+                with open(out_path + ".denied", "w") as f:
+                    f.write(describe_tool({"name": d.get("tool_name"),
+                                           "input": d.get("tool_input")}))
             failed = ev.get("is_error") or ev.get("subtype", "") != "success"
             if failed:
                 # Whatever text came before it: a session that ends in error
@@ -264,7 +304,10 @@ finally:
         # quiet caller wants the report: the last block, or all of it when
         # the last block is empty (a session that ended on a tool call).
         with open(out_path, "w") as f:
-            f.write(" ".join(((turn or full) if quiet else full).split()))
+            # The bubble and the journal read this file: a literal
+            # "<<proud>>" showing up there is a bug, not an emote.
+            report = (turn or full) if quiet else full
+            f.write(" ".join(EMOTE_TAG.sub("", report).split()))
         if status:
             with open(out_path + ".status", "w") as f:
                 f.write(status)

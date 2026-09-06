@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# The desktop's media player, seen from outside: `playerctl status` says
+# whether something is playing, `pause`/`play` are the two verbs the
+# ducking in on_state_change needs. There is no player here by default —
+# FAKE_PLAYERCTL_PLAYING=1 is what answers `Playing`, the one shape that
+# makes on_state_change decide to pause at all.
+#
+# Every call is recorded to FAKE_PLAYERCTL_LOG, `status` included, so a
+# test can tell a pause from a resume without caring which verb won.
+printf '%s\n' "$*" >>"${FAKE_PLAYERCTL_LOG:-/dev/null}"
+if [[ ${1:-} == status ]]; then
+	if [[ ${FAKE_PLAYERCTL_PLAYING:-0} == 1 ]]; then
+		printf 'Playing\n'
+	else
+		printf 'Stopped\n'
+	fi
+fi
+exit 0
