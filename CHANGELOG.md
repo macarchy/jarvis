@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.7.0](https://github.com/macarchy/jarvis/compare/v1.6.0...v1.7.0) (2026-09-06)
+
+
+### Features
+
+* **voix:** l'émotion en balise, la musique qui se tait, le refus qui compte ([#12](https://github.com/macarchy/jarvis/issues/12)) ([3a585fc](https://github.com/macarchy/jarvis/commit/3a585fc595a73c68a680b02b866ac1b06b737970))
+
+
+### Bug Fixes
+
+* **cerveau:** rendre l'installation de llama-server autonome ([#9](https://github.com/macarchy/jarvis/issues/9)) ([666e4c8](https://github.com/macarchy/jarvis/commit/666e4c8c675125fbcac7ad7a6315e3205cf06813))
+
 ## [1.6.0](https://github.com/macarchy/jarvis/compare/v1.5.0...v1.6.0) (2026-09-05)
 
 
