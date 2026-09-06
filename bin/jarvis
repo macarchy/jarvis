@@ -543,6 +543,31 @@ on_state_change() {
 	# One truth about the quiet hours, and it is this one: the mascot used to
 	# hardcode its own 23-7 night and curled up asleep whatever the soul said.
 	printf '%s' "$(quiet_now && echo 1 || echo 0)" >"$STATE_DIR/quiet"
+	# Music used to just keep playing over him. This is the one funnel every
+	# transition crosses, so it is the one place that can pause on the way IN
+	# to `speaking` and resume on the way OUT — once per reply, not once per
+	# sentence (speak_sentences never leaves `speaking` between sentences).
+	# The marker is what makes it resume only what WE paused, never a track
+	# the user paused himself. `timeout` because playerctl is on the hot
+	# path and must never wedge a transition waiting on a dead player.
+	# Resumed on `idle` and nowhere else: `speaking` leaves for `followup`
+	# after every reply, and that is the window where the wake daemon has
+	# the microphone open for a rejoinder — restarting the music there puts
+	# it straight back into pw-record, and start-stops the player once per
+	# turn for a whole conversation. `idle` is the same terminal
+	# mascot_flush waits for, ten lines below.
+	# Synchronous on purpose: backgrounding it would let a short reply reach
+	# `idle` before the marker is written, and the resume below would then
+	# find nothing and leave the music off for good. A healthy playerctl
+	# answers in ten milliseconds; the half-second ceiling is for a wedged
+	# dbus, and it is the whole cost this edge can ever pay.
+	if [[ $1 == speaking ]]; then
+		[[ $(timeout 0.5 playerctl status 2>/dev/null) == Playing ]] &&
+			timeout 0.5 playerctl pause 2>/dev/null && : >"$RUN_DIR/music-paused"
+	elif [[ $1 == idle && -e $RUN_DIR/music-paused ]]; then
+		rm -f "$RUN_DIR/music-paused"
+		timeout 0.5 playerctl play 2>/dev/null
+	fi
 	[[ $1 == idle ]] && mascot_flush
 	return 0
 }
@@ -650,7 +675,9 @@ do_speak() {
 	# Same rule as jarvis-sentences: espeak reads asterisks and tildes aloud,
 	# and the non-streamed replies (fallback turn, dream summary, `say`)
 	# come from the same brain that writes « **gras** » despite the soul.
-	text=$(printf '%s' "$text" | sed 's/\*\{1,\}//g; s/~~//g')
+	# The <<name>> emote tag gets the same treatment: this path has no
+	# per-sentence timing to fire it on, so it is stripped, never spoken.
+	text=$(printf '%s' "$text" | sed 's/\*\{1,\}//g; s/~~//g; s/<<[A-Za-z]\{1,\}>>//g')
 	[[ -n $text ]] || return 0
 	mine || return 0
 	if ((QUIET)); then
@@ -671,6 +698,27 @@ do_speak() {
 	return 0
 }
 
+# A line the brain wrote as `<<proud>>` inline and jarvis-sentences gave a
+# line of its own. True when the line WAS a stage direction, so the caller
+# skips it: it is not a sentence, and speaking it — or growing the bubble
+# with it — is the bug this whole protocol exists to avoid.
+#
+# It is PARKED, not sent. Both surfaces draw the pipeline's own state over
+# any emotion while he works (the fish binds `mood !== idle` first, the
+# Touch Bar drops an emote outright unless it is idle), so an emotion fired
+# mid-reply is never seen — which is precisely why mascot_park exists. The
+# tag's win is not the timing, it is the cost: the brain says how it feels
+# in three words of its own answer instead of spending a whole tool call.
+# An unknown name is dropped rather than parked: a sheet nobody drew would
+# blank the fish for six seconds.
+emote_line() {
+	[[ $1 =~ ^\<\<([a-z]+)\>\>$ ]] || return 1
+	case ${BASH_REMATCH[1]} in
+	proud | curious | celebrate | worried) mascot_park emote "${BASH_REMATCH[1]}" ;;
+	esac
+	return 0
+}
+
 # Speak a stream: one sentence per stdin line, synthesized and played as
 # they arrive — the voice starts on sentence one while the brain still
 # writes the rest. The bubble grows sentence by sentence. A barge-in (the
@@ -681,6 +729,10 @@ speak_sentences() {
 		while IFS= read -r sentence; do
 			[[ -n ${sentence// /} ]] || continue
 			mine || return 0
+			# jarvis-sentences pulls an inline <<name>> out of the text and
+			# gives it its own line: still a stage direction here, not a
+			# sentence, or the bubble would show the raw tag.
+			if emote_line "$sentence"; then continue; fi
 			acc+="${acc:+ }$sentence"
 			mascot reply "$acc"
 			tried=$((tried + 1))
@@ -691,6 +743,11 @@ speak_sentences() {
 	while IFS= read -r sentence; do
 		[[ -n ${sentence// /} ]] || continue
 		mine || return 0
+		# Same stage direction, spoken path — and it must be consumed before
+		# the tried==0 check below, or a reply opening on a tag would take
+		# the tag for its first sentence and transition thinking->speaking
+		# on it.
+		if emote_line "$sentence"; then continue; fi
 		if ((tried == 0)); then
 			[[ $(state) == thinking ]] || break
 			transition speak || break
@@ -856,7 +913,7 @@ stream_brain() {
 	local text="$1" model="$2" route
 	local -a args cmd
 	cd "$JARVIS_DIR" || return 1
-	rm -f "$REPLY_TXT" "$REPLY_TXT.error" "$REPLY_TXT.interrupted"
+	rm -f "$REPLY_TXT" "$REPLY_TXT.error" "$REPLY_TXT.interrupted" "$REPLY_TXT.denied"
 	# La route se décide ICI, dans le parent. Un `ROUTE=` posé dans une
 	# substitution de processus ne remonte jamais, et conv_args plus bas
 	# comparerait alors contre une chaîne vide à chaque tour.
@@ -937,6 +994,10 @@ run_exchange() {
 	stream_brain "$text" "$model"
 	mine || return 0
 	reply=$(cat "$REPLY_TXT" 2>/dev/null)
+	# jarvis-sentences drops .denied beside the reply when the brain hit a
+	# permission refusal — worth a note even when it still answered, so the
+	# dreams can propose the missing allowlist row.
+	[[ -s $REPLY_TXT.denied ]] && note_failure "$text | refus de permission : $(cat "$REPLY_TXT.denied") | ajouter l'outil à l'allowlist"
 	if [[ -z $reply ]]; then
 		# The stream produced nothing. Either the brain told us why (a
 		# usage limit — no point retrying) or the remembered session is

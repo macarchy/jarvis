@@ -50,7 +50,7 @@ sandbox() {
 		FAKE_PLAY_LOG="$SB/play.log" FAKE_SHELL_LOG="$SB/shell.log" \
 		FAKE_TOUCHBAR_LOG="$SB/touchbar.log" \
 		FAKE_VOXTYPE_LOG="$SB/voxtype.log" FAKE_NOTIFY_LOG="$SB/notify.log" \
-		FAKE_PACTL_LOG="$SB/pactl.log"
+		FAKE_PACTL_LOG="$SB/pactl.log" FAKE_PLAYERCTL_LOG="$SB/playerctl.log"
 	# The soul lives in the repository, not in the sandbox — so a test that
 	# has not asked for one of its own must never inherit the doctored copy
 	# left exported by the previous test.
@@ -869,12 +869,63 @@ assert "les cinq phrases sont jouées" test "$(grep -c . "$FAKE_PLAY_LOG")" = 5
 assert "le rêve n'a rien dit" bash -c "! grep -q 'disque' '$FAKE_PIPER_LOG'"
 assert "l'échange finit chez lui" state_is idle
 
+# Le protocole de ducking (chantier « emote-inline-et-ducking ») : la
+# musique se tait le temps qu'il parle et repart derrière lui, pour ne
+# jamais lire par-dessus un morceau. FAKE_PLAYERCTL_PLAYING met le faux
+# lecteur en marche — sans lui, `status` répond Stopped et rien n'est coupé,
+# comme sur toutes les autres cases de la suite.
+t "musique : coupée pendant qu'il parle, reprise une fois fini"
+printf 'idle' >"$JARVIS_RUN/state"
+FAKE_PLAYERCTL_PLAYING=1 FAKE_PLAY_SLEEP=0.4 FAKE_CLAUDE_STREAM="$FIX/five.jsonl" "$JARVIS" ask "fais le point" &
+asker=$!
+assert "il parle" waitfor state_is speaking
+assert "la musique est coupée pendant qu'il parle" waitfor grep -qi pause "$FAKE_PLAYERCTL_LOG"
+wait "$asker" 2>/dev/null
+assert "état idle" state_is idle
+assert "la musique reprend une fois fini" grep -qiE 'play|resume|unpause' "$FAKE_PLAYERCTL_LOG"
+
 t "voix en panne : l'échec est noté, pas avalé"
 printf 'idle' >"$JARVIS_RUN/state"
 FAKE_PIPER_FAIL=1 FAKE_CLAUDE_STREAM="$FIX/five.jsonl" "$JARVIS" ask "fais le point"
 assert "il s'arrête à la première" test "$(grep -c . "$FAKE_PIPER_LOG")" = 1
 assert "échec noté en français" grep -q 'voix : synthèse impossible' "$JARVIS_MEMORY/FAILURES.md"
 assert "état idle" state_is idle
+
+# Un refus de permission (allowlist absente dans settings.json) n'est
+# jamais avalé : même un échange qui répond quand même laisse une trace
+# pour que les rêves proposent la rangée d'allowlist qui manque.
+t "refus de permission : la trace mène à un échec noté"
+printf 'idle' >"$JARVIS_RUN/state"
+# `permission_denials` est le champ que le CLI publie lui-même dans son
+# événement final — c'est LUI qu'on lit, et pas le mot « permission » dans le
+# corps d'un outil en échec : un `Permission denied` ordinaire, sur un
+# répertoire illisible, vient d'un outil parfaitement autorisé et ferait
+# noter un échec sous une réponse juste.
+cat >"$SB/denied.jsonl" <<'JSON'
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"curl --version"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","is_error":true,"content":"Permission denied"}]}}
+{"type":"stream_event","event":{"type":"content_block_start","content_block":{"type":"text"}}}
+{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Je n'ai pas pu joindre le réseau."}}}
+{"type":"result","subtype":"success","is_error":false,"permission_denials":[{"tool_name":"Bash","tool_use_id":"t1","tool_input":{"command":"curl --version"}}]}
+JSON
+FAKE_CLAUDE_STREAM="$SB/denied.jsonl" "$JARVIS" ask "montre-moi la version de curl"
+assert "un échec est noté" not no_failures
+assert "le refus nomme l'outil" grep -q "refus de permission : Bash: curl --version" "$JARVIS_MEMORY/FAILURES.md"
+
+# Le miroir, et c'est lui qui compte : un outil AUTORISÉ qui bute sur un
+# « Permission denied » du système ne doit rien laisser du tout. Trois notes
+# de ce genre suffisent à armer un rêve, qui réécrit LEARNED.md.
+t "un Permission denied ordinaire n'est pas un refus d'allowlist"
+printf 'idle' >"$JARVIS_RUN/state"
+cat >"$SB/oops.jsonl" <<'JSON'
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"grep -r motif /var/lib"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","is_error":true,"content":"grep: /var/lib/private: Permission denied"}]}}
+{"type":"stream_event","event":{"type":"content_block_start","content_block":{"type":"text"}}}
+{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Voilà ce que j'ai trouvé."}}}
+{"type":"result","subtype":"success","is_error":false,"permission_denials":[]}
+JSON
+FAKE_CLAUDE_STREAM="$SB/oops.jsonl" "$JARVIS" ask "cherche ce motif"
+assert "aucun échec noté" no_failures
 
 t "aparté : une ronde attend son tour et arrive quand même"
 # The sandbox starts busy on purpose: a mission report or a round finishing
@@ -904,6 +955,37 @@ printf 'idle' >"$JARVIS_RUN/state"
 FAKE_CLAUDE_REPLY=$'Deux\nlignes' "$JARVIS" ask --quiet "et alors"
 assert "la Touch Bar reçoit une seule ligne aplatie" \
 	grep -q '^macarchy.jarvis reply Deux lignes$' "$FAKE_TOUCHBAR_LOG"
+
+# Le protocole d'émotion en ligne : le cerveau largue "<<proud>>" au milieu
+# de sa réponse, jarvis-sentences le sort sur sa propre ligne juste avant
+# la phrase qui le portait, et speak_sentences doit jouer l'émotion sans
+# jamais la donner à la voix — c'est tout le point du fil (bin/jarvis
+# appelait `emote` en outil Bash avant, un tour de modèle entier, et
+# arrivait toujours après coup).
+t "émotion en ligne : jouée au bon moment, jamais prononcée"
+printf 'idle' >"$JARVIS_RUN/state"
+cat >"$SB/emote.jsonl" <<'JSON'
+{"type":"stream_event","event":{"type":"content_block_start","content_block":{"type":"text"}}}
+{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"C'est fait. <<Proud>> La limite est active."}}}
+{"type":"stream_event","event":{"type":"content_block_stop"}}
+{"type":"result","subtype":"success","is_error":false}
+JSON
+FAKE_CLAUDE_STREAM="$SB/emote.jsonl" "$JARVIS" ask "active la limite"
+assert "l'émotion atteint le poisson" grep -q 'macarchy.jarvis emote proud' "$FAKE_SHELL_LOG"
+assert "jamais donnée à la voix" not grep -q '<<' "$FAKE_PIPER_LOG"
+assert "jamais dans la réponse écrite" not grep -q '<<' "$JARVIS_RUN/reply.txt"
+assert "jamais dans la bulle" not grep -q '<<' "$FAKE_SHELL_LOG"
+# Et elle est PARKÉE, pas envoyée : les deux surfaces dessinent l'état du
+# pipeline par-dessus toute émotion tant qu'il travaille, donc une émotion
+# tirée pendant qu'il parle n'est jamais vue. Elle doit arriver au retour à
+# idle, derrière la réponse — jamais avant elle.
+emote_after_reply() {
+	local e r
+	e=$(grep -n 'macarchy.jarvis emote proud' "$FAKE_SHELL_LOG" | head -1 | cut -d: -f1)
+	r=$(grep -n 'macarchy.jarvis reply' "$FAKE_SHELL_LOG" | tail -1 | cut -d: -f1)
+	[[ -n $e && -n $r ]] && ((e > r))
+}
+assert "l'émotion arrive derrière la réponse, pas avant" emote_after_reply
 
 # ---- the gesture of aborting: chantier 3
 t "presser pendant la réflexion : trop tôt ne fait rien, à temps annule"
