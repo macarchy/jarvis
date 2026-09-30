@@ -1,3 +1,5 @@
+![jarvis banner](.github/banner.png)
+
 <div align="center">
 
 <img src="docs/media/fish.gif" alt="A pixel-art Babel fish cycling through the states idle, listening, thinking, speaking and cancel" width="340">
